@@ -8,7 +8,7 @@ if($LASTEXITCODE){throw 'Feature page build failed; package not updated.'}
 $stage=Join-Path $root ('work\release-'+[Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($stage)|Out-Null
 try{
-    $names=@('extension','tests','tools','showcase','AGENTS.md','README.md','LICENSE','PRIVACY.md','THIRD_PARTY_NOTICES.md','安装.cmd','修复本地程序.cmd','更新下载引擎.cmd','卸载本地程序.cmd','便携模式注册.cmd','取消便携注册.cmd','使用说明.md','功能介绍.html','打开功能介绍.cmd','更新介绍并打包.cmd')
+    $names=@('extension','tests','tools','showcase','AGENTS.md','README.md','LICENSE','PRIVACY.md','THIRD_PARTY_NOTICES.md','开始使用.cmd','使用说明.md','功能介绍.html')
     foreach($name in $names){Copy-Item -LiteralPath (Join-Path $root $name) -Destination $stage -Recurse -Force}
     $nativeStage=Join-Path $stage 'native';[IO.Directory]::CreateDirectory($nativeStage)|Out-Null
     Get-ChildItem -LiteralPath (Join-Path $root 'native') -File | Where-Object {$_.Extension -in @('.ps1','.cmd','.cs')} | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $nativeStage}

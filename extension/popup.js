@@ -5,7 +5,7 @@ async function refresh() {
   const count = (data.pending || []).length;
   $('hostInfo').textContent = result.ok ? `实际连接的本地程序：${result.version || '未知版本'} · ${result.storageFormat || '未知格式'}` : '本地程序尚未连接';
   $('status').textContent = count ? `${count} 条待保存，尚未全部写入文件` : result.ok ? '本地保存程序已连接' : '本地保存程序未连接';
-  $('error').textContent = result.ok ? (result.storageFormat !== 'json' ? '本地保存程序需要更新为仅 JSON 版本，请运行本项目的“安装.cmd”。' : (data.lastError || '')) : `请运行“安装.cmd”完成本地程序安装。${result.error || ''}`;
+  $('error').textContent = result.ok ? (result.storageFormat !== 'json' ? '本地保存程序需要更新为仅 JSON 版本，请运行本项目的“开始使用.cmd”。' : (data.lastError || '')) : `请运行“开始使用.cmd”完成本地程序安装。${result.error || ''}`;
   const isJsonPath = value => typeof value === 'string' && /\.json$/i.test(value);
   const savePath = [result.journalPath, result.path, ...(result.ok ? [] : [data.path])].find(isJsonPath);
   $('path').textContent = savePath || '尚未获取 JSON 保存路径';

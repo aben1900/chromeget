@@ -27,7 +27,7 @@ function Assert-BiliUrl([string]$url) {
 }
 function Get-VideoTools {
     $engine = Join-Path $PSScriptRoot 'bin\yt-dlp.exe'
-    if (-not (Test-Path -LiteralPath $engine)) { throw '缺少 yt-dlp，请运行安装.cmd 更新本地程序。' }
+    if (-not (Test-Path -LiteralPath $engine)) { throw '缺少 yt-dlp，请运行开始使用.cmd 更新本地程序。' }
     $ffmpeg = Join-Path $PSScriptRoot 'bin\ffmpeg.exe'
     if (-not (Test-Path -LiteralPath $ffmpeg)) {
         $command = Get-Command ffmpeg.exe -ErrorAction SilentlyContinue

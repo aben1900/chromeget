@@ -37,7 +37,7 @@ async function send(action, extra={}) {
   const wait=['video-folder','video-cookies'].includes(action)?300000:['video-info','video-hf-info'].includes(action)?110000:20000;
   try { result=await Promise.race([chrome.runtime.sendMessage({action,site:videoSite($('url').value) || 'bilibili',url:$('url').value.trim(),...extra}),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('本地程序响应超时。可重试；若刚启动下载，请重新打开界面查看任务状态。')),wait);})]); }
   finally { clearTimeout(timeout); }
-  if(!result?.ok)throw Error(result?.error || '本地程序未响应，请更新安装.cmd。');
+  if(!result?.ok)throw Error(result?.error || '本地程序未响应，请更新开始使用.cmd。');
   return result;
 }
 function controls() {

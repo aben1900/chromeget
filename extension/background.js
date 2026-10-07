@@ -37,7 +37,7 @@ async function flush() {
   while (pending.length) {
     try {
       const status = await native({action: 'status'});
-      if (status.storageFormat !== 'json') throw new Error(`实际连接的本地程序未声明 JSON 保存能力（版本：${status.version || '未知'}，路径：${status.hostPath || '未提供'}）。请运行本项目的“修复本地程序.cmd”。`);
+      if (status.storageFormat !== 'json') throw new Error(`实际连接的本地程序未声明 JSON 保存能力（版本：${status.version || '未知'}，路径：${status.hostPath || '未提供'}）。请运行本项目的“开始使用.cmd → 更新 / 修复”。`);
       const result = await native({action: 'save', record: pending[0]});
       pending.shift();
       await chrome.storage.local.set({pending, lastError: '', path: result.journalPath || result.path, lastSaved: new Date().toISOString()});
@@ -131,22 +131,22 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(message.action==='download-page-links')return downloadPageLinks(message.windowId);
       if(message.action.startsWith('video-sniff-'))return sniffAction(message);
       const host=await native({action:'status'});
-      if (!host.capabilities?.includes('video-api-2')) throw Error(`本地程序版本不匹配（${host.version || '未知旧版'}）。请运行本项目的“修复本地程序.cmd”，然后重新加载扩展。`);
-      if (!host.capabilities?.includes('video-multisite')) throw Error('请运行“修复本地程序.cmd”更新多平台视频功能。');
-      if(message.site==='toutiao' && !host.capabilities?.includes('video-toutiao')) throw Error('请运行“修复本地程序.cmd”更新头条视频下载功能。');
-      if (!host.capabilities?.includes('gallery')) throw Error('请运行“修复本地程序.cmd”更新图集下载功能。');
-      if(message.site==='youtube' && !host.capabilities?.includes('video-youtube')) throw Error('请运行修复本地程序.cmd 更新 YouTube 下载功能。');
-      if(['video-jobs','video-resume','video-delete'].includes(message.action) && !host.capabilities?.includes('video-tasks')) throw Error('本机下载程序版本较旧。请运行项目中的“修复本地程序.cmd”，然后在 chrome://extensions 重新加载扩展；只刷新扩展无法更新本地程序。');
-      if(['video-start','video-resume','video-delete'].includes(message.action) && !host.capabilities?.includes('task-reuse')) throw Error('请运行修复本地程序.cmd 更新任务复用和删除功能。');
-      if(message.action==='video-open-task' && !host.capabilities?.includes('task-directory')) throw Error('请运行修复本地程序.cmd 更新任务目录功能。');
+      if (!host.capabilities?.includes('video-api-2')) throw Error(`本地程序版本不匹配（${host.version || '未知旧版'}）。请运行本项目的“开始使用.cmd → 更新 / 修复”，然后重新加载扩展。`);
+      if (!host.capabilities?.includes('video-multisite')) throw Error('请运行“开始使用.cmd → 更新 / 修复”更新多平台视频功能。');
+      if(message.site==='toutiao' && !host.capabilities?.includes('video-toutiao')) throw Error('请运行“开始使用.cmd → 更新 / 修复”更新头条视频下载功能。');
+      if (!host.capabilities?.includes('gallery')) throw Error('请运行“开始使用.cmd → 更新 / 修复”更新图集下载功能。');
+      if(message.site==='youtube' && !host.capabilities?.includes('video-youtube')) throw Error('请运行开始使用.cmd → 更新 / 修复 更新 YouTube 下载功能。');
+      if(['video-jobs','video-resume','video-delete'].includes(message.action) && !host.capabilities?.includes('video-tasks')) throw Error('本机下载程序版本较旧。请运行项目中的“开始使用.cmd → 更新 / 修复”，然后在 chrome://extensions 重新加载扩展；只刷新扩展无法更新本地程序。');
+      if(['video-start','video-resume','video-delete'].includes(message.action) && !host.capabilities?.includes('task-reuse')) throw Error('请运行开始使用.cmd → 更新 / 修复 更新任务复用和删除功能。');
+      if(message.action==='video-open-task' && !host.capabilities?.includes('task-directory')) throw Error('请运行开始使用.cmd → 更新 / 修复 更新任务目录功能。');
       if(message.action==='video-gallery-start' && !host.capabilities?.includes('gallery-select')) throw Error('请更新本地程序以下载所选图片。');
-      if(['video-hf-info','video-file-start','video-file-probe','video-transfer-settings'].includes(message.action) && !host.capabilities?.includes('parallel-files')) throw Error('请运行修复本地程序.cmd 更新高速下载模块。');
-      if(message.genericFile && !host.capabilities?.includes('generic-files'))throw Error('请运行修复本地程序.cmd 更新普通文件下载功能。');
+      if(['video-hf-info','video-file-start','video-file-probe','video-transfer-settings'].includes(message.action) && !host.capabilities?.includes('parallel-files')) throw Error('请运行开始使用.cmd → 更新 / 修复 更新高速下载模块。');
+      if(message.genericFile && !host.capabilities?.includes('generic-files'))throw Error('请运行开始使用.cmd → 更新 / 修复 更新普通文件下载功能。');
       if(message.action==='video-pause' && !host.capabilities?.includes('task-progress'))throw Error('请更新本地程序以使用暂停功能。');
       if((message.action==='video-file-probe'||message.genericMedia||message.maxActive!==undefined) && !host.capabilities?.includes('download-suite'))throw Error('请更新本地程序以使用探测、队列或通用流媒体功能。');
       let cookieText;
       if (message.action === 'video-browser-cookies') {
-        if (!host.capabilities?.includes('browser-cookies')) throw Error('请运行“修复本地程序.cmd”更新本地程序，然后重试获取登录态。');
+        if (!host.capabilities?.includes('browser-cookies')) throw Error('请运行“开始使用.cmd → 更新 / 修复”更新本地程序，然后重试获取登录态。');
         cookieText = await currentBiliCookies(message.windowId, videoSite(message.url));
       }
       if(message.transferMode==='extreme'&&!host.capabilities?.includes('range64'))throw Error('请更新本地程序以使用原生 64 路下载。');
@@ -186,7 +186,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (['list', 'read', 'delete', 'choose-json', 'default-json'].includes(message.action)) {
     exclusive(async () => {
       const status = await native({action:'status'});
-      if (!status.capabilities?.includes('choose-json')) throw new Error('本地保存程序版本过旧。请运行本项目的安装.cmd 更新，再重新加载扩展。');
+      if (!status.capabilities?.includes('choose-json')) throw new Error('本地保存程序版本过旧。请运行本项目的开始使用.cmd 更新，再重新加载扩展。');
       if (message.action === 'choose-json' || message.action === 'default-json') {
         const choice = message.action === 'choose-json' ? await native({action:'choose-json'}) : {journalPath:status.journalPath};
         if (choice.cancelled) return choice;

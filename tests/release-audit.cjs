@@ -1,0 +1,9 @@
+const fs=require('fs'),path=require('path'),cp=require('child_process'),assert=require('assert/strict');
+const paths=cp.execFileSync('git',['ls-files','-z'],{encoding:'utf8'}).split('\0').filter(Boolean);const bad=[];
+for(const p of paths){if(/^(work|outputs|dist)\//.test(p)||/^native\/video-jobs\//.test(p)||/\.(exe|dll|zip|log)$/.test(p)||/^native\/(config|host|video-settings|portable-host|portable-registration)\.json$/.test(p))bad.push(p);const s=fs.readFileSync(p,'utf8');if(/(?:ghp_[A-Za-z0-9]{25,}|github_pat_[A-Za-z0-9_]{25,}|-----BEGIN (?:RSA |OPENSSH )?PRIVATE KEY-----)/.test(s))bad.push(p+' potential secret');}
+assert.deepEqual(bad,[]);const v=JSON.parse(fs.readFileSync('extension/manifest.json')).version;
+const zip=path.resolve(`dist/chromeget-v${v}-windows-x64-setup.zip`);
+const names=JSON.parse(cp.execFileSync('powershell.exe',['-NoProfile','-Command',`Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead('${zip}'); try { @($z.Entries | ForEach-Object FullName) | ConvertTo-Json -Compress } finally { $z.Dispose() }`],{encoding:'utf8'})).map(n=>n.replace(/\\/g,'/'));
+assert.ok(names.includes('extension/manifest.json'));assert.ok(names.includes('tools/engines.lock.json'));assert.ok(names.includes('native/bin/yt-dlp-plugins/jingcai/yt_dlp_plugins/extractor/xhs_gallery.py'));
+assert.deepEqual(names.filter(n=>/^(work|outputs|dist)\//.test(n)||/\.(exe|dll|log|zip)$/.test(n)||/^native\/(config|host|video-settings|portable-host|portable-registration)\.json$/.test(n)),[]);
+console.log(`PASS ${paths.length} source files and ${names.length} package entries: no runtime data, binaries, personal output directories or token patterns`);

@@ -1,0 +1,34 @@
+/* Shared sidebar hierarchy: page cards > setting groups > optional controls. */
+:root{--ui-border:#dfe7e2;--ui-muted:#6b7d73;--ui-green:#18705a}
+main{padding:12px 12px 20px}main.video-page{gap:12px}
+.video-page .video-card,.video-page .login-card{border-color:var(--ui-border);border-radius:12px;padding:14px;box-shadow:0 2px 5px #183d3403}
+.video-page .actions{display:flex;flex-wrap:nowrap;align-items:center;gap:8px}
+.video-page .actions>button{flex:1 1 0;width:auto;min-width:0;margin:0}
+.video-page button{min-height:36px;padding:7px 10px;transition:background .15s,border-color .15s}
+button:not(:disabled):hover{border-color:#7eab97;background:#edf5f0}
+.video-page #download:not(:disabled):hover,.easy-download #fileDownload:not(:disabled):hover,.easy-download #hfDownload:not(:disabled):hover{background:#125943}
+.video-page .section-heading,.section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.video-page .section-heading h2{align-self:auto;font-size:15px}.section-heading button{width:auto;flex:0 0 auto;min-height:30px;padding:5px 10px;font-size:12px}
+.video-page .login-card>summary{font-weight:600;min-height:24px;line-height:24px}.video-page .login-card[open]>summary{padding-bottom:12px;border-bottom:1px solid var(--ui-border)}
+.video-page .settings-stack{gap:0;padding-top:0}
+.video-page .settings-group{border:0;border-radius:0;background:transparent;margin:0;padding:16px 0;display:flex;flex-direction:column;gap:10px}
+.video-page .settings-group+.settings-group{border-top:1px solid var(--ui-border)}
+.video-page .settings-group:last-child{padding-bottom:0}
+.video-page .settings-group h3{margin:0;font-size:13px;line-height:1.5;color:#244f40;font-weight:650;display:flex;align-items:center;gap:8px}
+.video-page .settings-group h3:before{content:'';width:3px;height:13px;background:#76a892;border-radius:2px}
+.video-page .settings-group label{font-size:12px;font-weight:500;color:#53695d}
+.video-page .sub-setting,.video-page .download-settings{border:1px solid #e5ebe7;background:#f8faf8;border-radius:8px;padding:9px 11px}
+.video-page .sub-setting>summary,.video-page .download-settings>summary{font-size:12px;color:#455f50}
+.video-page .sub-setting[open]>.login-content,.video-page .download-settings[open]>.login-content{margin-top:8px;padding-top:10px;border-top:1px solid #e5ebe7;gap:9px}
+.video-page .field-action{display:flex;align-items:center;gap:8px;min-width:0}.video-page .field-action input{flex:1 1 0;min-width:0}.video-page .field-action button{flex:0 0 auto;white-space:nowrap;font-size:12px;padding:7px 10px;min-height:40px;background:#f0f6f2;border-color:#d6e3da;color:#216550}
+.video-page .advanced-fields{gap:10px}.video-page .primary-actions #download{flex:1.25}.video-page .primary-actions #openRecent{min-height:42px;font-size:12px}
+.video-page #audioOptions,.video-page #videoQuality{display:flex;flex-direction:column;gap:8px}
+.video-page #browserCookies{background:#edf5f0;border-color:#d5e4da;color:#216550}
+.video-page .login-content>button{align-self:flex-start;width:auto;min-width:110px}
+.video-page .hint{font-size:12px;line-height:1.65}.video-page summary:focus-visible{border-radius:4px}
+body:not(:has(.video-page)) .toolbar{flex-wrap:nowrap;gap:8px}body:not(:has(.video-page)) .equal-actions>button{flex:1;min-width:0}
+body:not(:has(.video-page)) .toolbar label{white-space:normal;flex-shrink:0}body:not(:has(.video-page)) .toolbar button{min-width:0}
+body:not(:has(.video-page)) main>details{background:#fff;border:1px solid var(--ui-border);padding:12px;border-radius:10px}
+body:not(:has(.video-page)) .secondary:not(:disabled):hover{background:#dae9df}
+@media(max-width:340px){main{padding:10px 8px 16px}.video-page .video-card,.video-page .login-card{padding:12px}.video-page .actions{gap:6px}.video-page .actions>button{font-size:12px;padding:7px 6px}.video-page summary span{font-size:11px}.video-page .field-action{gap:6px}}
+@media(prefers-reduced-motion:reduce){button{transition:none!important}}

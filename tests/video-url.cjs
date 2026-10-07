@@ -1,0 +1,32 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+const events=[], store={};let activeUrl='https://www.bilibili.com/video/BV1vL411G7N7/?p=2';
+const nodes={openVideoPanel:{addEventListener:(name,fn)=>{nodes.click=fn;}},error:{}};
+const context=vm.createContext({URL,Promise,document:{getElementById:id=>nodes[id]},window:{close:()=>events.push('close')},chrome:{windows:{getCurrent:async()=>({id:42})},tabs:{query:async options=>{assert.equal(options.windowId,42);assert.equal(options.active,true);events.push('query');return [{url:activeUrl}];}},storage:{session:{set:async value=>{Object.assign(store,value);events.push('store');}}},sidePanel:{open:async options=>{assert.equal(options.windowId,42);events.push('open');}}}});
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/video-url.js'),'utf8'),context);
+(async()=>{
+  assert.equal(await context.currentBiliVideo(42),activeUrl);
+  for(const [url,name] of [['https://www.bilibili.com/video/BV123','B站'],['https://xhslink.com/a/abc','小红书'],['https://www.toutiao.com/video/123','头条'],['https://youtu.be/abc','YouTube'],['https://youtube.com.evil.com/a','youtube.com.evil.com']])assert.equal(context.websiteName(url),name);
+  assert.equal(context.websiteName('chrome://extensions'),'');
+  for(const url of ['https://youtu.be/d2UVNJSX7oA?t=1','https://m.youtube.com/shorts/d2UVNJSX7oA','https://www.youtube.com/watch?v=d2UVNJSX7oA&list=abc']){assert.equal(context.supportedVideoUrl(url),'https://www.youtube.com/watch?v=d2UVNJSX7oA');assert.equal(context.videoSite(url),'youtube');}
+  assert.equal(context.supportedVideoUrl('https://youtube.com.evil.com/watch?v=d2UVNJSX7oA'),'');
+  assert.equal(context.supportedVideoUrl('https://youtube.com/playlist?list=abc'),'');
+  assert.equal(context.supportedVideoUrl('http://m.toutiao.com/i7505382061495176511/?foo=bar'),'https://www.toutiao.com/video/7505382061495176511/?foo=bar');
+  assert.equal(context.videoSite('https://www.toutiao.com/video/7505382061495176511/'),'toutiao');
+  for(const bad of ['https://www.toutiao.com.evil.com/video/123/','https://user@www.toutiao.com/video/123/','https://www.toutiao.com/article/123/'])assert.equal(context.supportedVideoUrl(bad),'');
+  for(const url of ['https://example.com/video/BV123','https://www.bilibili.com/','https://www.bilibili.com.evil.com/video/BV123','https://user@www.bilibili.com/video/BV123','https://www.bilibili.com:8443/video/BV123'])assert.equal(context.biliVideoUrl(url),'');
+  assert.ok(context.biliVideoUrl('https://www.bilibili.com/bangumi/play/ep123').endsWith('ep123'));
+  assert.equal(context.supportedVideoUrl('http://xhslink.com/a/Ab12'),'https://xhslink.com/a/Ab12');
+  assert.equal(context.supportedVideoUrl('https://www.xiaohongshu.com/user/profile/abc/def?xsec_token=a%2Bb&xsec_source=pc#x'),'https://www.xiaohongshu.com/explore/def?xsec_token=a%2Bb&xsec_source=pc');
+  assert.equal(context.videoSite('https://www.xiaohongshu.com/discovery/item/abc'),'xiaohongshu');
+  for(const bad of ['https://www.xiaohongshu.com.evil.com/explore/abc','https://xhslink.com/@evil','https://www.xiaohongshu.com/user/profile/abc'])assert.equal(context.supportedVideoUrl(bad),'');
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/panel-open.js'),'utf8'),context);
+  await new Promise(r=>setImmediate(r));events.length=0;
+  nodes.click();assert.equal(events[0],'open');
+  await new Promise(r=>setImmediate(r));
+  assert.equal(store['video-url:42'],activeUrl);assert.equal(events.at(-1),'close');
+  activeUrl=undefined;assert.equal(await context.currentBiliVideo(42),'');
+  console.log('PASS active-window URL extraction, part preservation, non-video rejection, side-panel gesture and URL delivery');
+})().catch(error=>{console.error(error);process.exitCode=1;});

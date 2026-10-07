@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>精彩摘录</title><link rel="stylesheet" href="popup.css"><link rel="stylesheet" href="embedded.css"><link rel="stylesheet" href="interface.css"></head>
+<body><header><span class="mark">摘</span><div><h1>精彩摘录</h1><p>把值得留下的话，留在本地。</p></div></header>
+<main><section><span class="label">保存状态</span><p id="status" role="status">正在检查并重试待保存记录…</p><p id="hostInfo" class="label"></p><p id="error"></p></section>
+<section><span class="label">保存文件（仅 JSON）</span><p id="path">正在读取…</p><span class="label">最近保存</span><p id="last">暂无记录</p></section>
+<button id="retry">重试待保存记录</button>
+
+<section id="library"><div class="toolbar section-heading"><h2>已保存内容（JSON）</h2><button id="reload" class="secondary">刷新</button></div>
+<div class="toolbar equal-actions"><button id="chooseJson" class="secondary">选择 JSON 文件</button><button id="defaultJson" class="secondary">当前保存目录</button></div>
+<p class="label">正在查看的数据文件</p><p id="jsonPath">正在读取…</p>
+<p id="listStatus" role="status">正在加载…</p>
+<div class="toolbar"><label><input id="selectAll" type="checkbox"> 全选本页</label><button id="delete" class="danger" disabled>删除选中（0）</button></div>
+<div id="confirmDelete" hidden><p id="confirmText"></p><div class="toolbar"><button id="cancelDelete" class="secondary">取消</button><button id="confirmButton" class="danger">确认删除</button></div></div>
+<p id="listError" role="alert"></p><div id="records"></div>
+<div class="toolbar pagination"><button id="previous" class="secondary" disabled>上一页</button><span id="pageInfo"></span><button id="next" class="secondary" disabled>下一页</button></div></section>
+<details><summary>第一次使用 / 更改位置</summary><p>先在 chrome://extensions 加载 extension 文件夹，再运行安装包中的“安装.cmd”。安装时可选择保存目录。更改目录只影响后续记录，旧文件会保留。</p><p>你的扩展 ID（安装时粘贴）：</p><input id="extensionId" readonly aria-label="扩展 ID"><p>选中文字后右键可按评论、评阅、内容或提示词保存（提示词会先确认标题）；右键链接可保存链接地址；网页空白处右键可保存当前网页地址。Chrome 地址栏不支持扩展右键菜单。</p></details>
+<footer>仅在本机保存 · 无需账号</footer></main><script src="popup.js"></script><script src="video-url.js"></script></body></html>

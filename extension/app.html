@@ -1,0 +1,8 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>精彩摘录</title><link rel="stylesheet" href="app.css"></head><body>
+<header><span class="brand">摘</span><div><h1>精彩摘录</h1><p>收藏内容，下载视频、图集与文件</p></div></header>
+<nav role="tablist" aria-label="功能"><button id="clipsTab" role="tab" aria-controls="clips" aria-selected="true">内容摘录</button><button id="videoTab" role="tab" aria-controls="video" aria-selected="false" tabindex="-1">视频 / 图集</button><button id="downloadTab" role="tab" aria-controls="download" aria-selected="false" tabindex="-1">文件下载</button></nav>
+<p id="appError" role="alert" hidden></p>
+<div id="clips" role="tabpanel" aria-labelledby="clipsTab"><iframe src="popup.html" title="内容摘录"></iframe></div>
+<div id="video" role="tabpanel" aria-labelledby="videoTab" hidden><iframe title="视频与图集下载"></iframe></div>
+<div id="download" role="tabpanel" aria-labelledby="downloadTab" hidden><iframe title="文件和模型下载"></iframe></div>
+<script src="video-url.js"></script><script src="app.js"></script></body></html>

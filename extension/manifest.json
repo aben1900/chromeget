@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "精彩摘录",
+  "description": "收藏内容，下载视频、图集与 Hugging Face 模型文件；支持后台任务、并行下载和续传。",
+  "version": "1.22.0",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "tabs",
+    "cookies",
+    "contextMenus",
+    "storage",
+    "nativeMessaging",
+    "sidePanel",
+    "webRequest",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.bilibili.com/*",
+    "https://*.xiaohongshu.com/*",
+    "https://*.xhslink.com/*",
+    "https://*.toutiao.com/*",
+    "https://*.youtube.com/*",
+    "https://*.youtu.be/*",
+    "https://*.x.com/*",
+    "https://*.twitter.com/*"
+  ],
+  "side_panel": {
+    "default_path": "app.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "精彩摘录 · 打开工作台"
+  },
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ]
+}

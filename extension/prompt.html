@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>保存为提示词 · 精彩摘录</title><link rel="stylesheet" href="prompt.css"></head>
+<body><main>
+<h1>保存为提示词</h1>
+<p class="hint">已从原文提炼标题，你可以修改后保存。</p>
+<form id="form">
+<label for="title">标题</label>
+<input id="title" maxlength="120" required autocomplete="off" disabled>
+<label for="preview">提示词原文</label>
+<textarea id="preview" readonly></textarea>
+<p id="error" role="alert"></p>
+<div class="actions"><button id="cancel" type="button">取消</button><button id="save" type="submit" disabled>确认保存</button></div>
+</form></main><script src="prompt.js"></script></body></html>

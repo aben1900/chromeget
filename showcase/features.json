@@ -1,0 +1,127 @@
+{
+  "brand": "精彩摘录",
+  "headline": "值得留下的，\n一处收好。",
+  "description": "从一句值得收藏的话，到一段视频、一组图片、一个大模型。内容摘录与下载，共用一个浏览器侧边栏。",
+  "products": [
+    {
+      "id": "clips",
+      "name": "内容摘录",
+      "subtitle": "让好内容，成为自己的资料库。",
+      "description": "选中文字，右键保存。整理评论、评阅、正文与提示词，原文和记录留在本机。",
+      "label": "本地 JSON · 不上传原文",
+      "icon": "bookmark"
+    },
+    {
+      "id": "downloads",
+      "name": "视频与文件下载",
+      "subtitle": "把需要的资源，稳稳存到本地。",
+      "description": "粘贴链接后自动识别，先预览文件名、大小和保存位置，再确认下载。视频、图集和模型文件会引导到对应的选择步骤。 Windows x64 的 GitHub Release 提供安装器，首次联网自动准备并校验引擎。",
+      "label": "后台任务 · 最多 64 路",
+      "icon": "download"
+    }
+  ],
+  "features": [
+    {
+      "group": "clips",
+      "icon": "cursor",
+      "title": "右键，即刻收藏",
+      "text": "选中文字后，保存为评论、评阅、内容或提示词；纯文本网址也可保存，或载入下载页。",
+      "tag": "随手保存"
+    },
+    {
+      "group": "clips",
+      "icon": "edit",
+      "title": "提示词有自己的标题",
+      "text": "本地规则提炼标题，弹窗中可修改或直接确认。完整原文一起保留，方便再次使用。",
+      "tag": "本地标题提炼"
+    },
+    {
+      "group": "clips",
+      "icon": "file",
+      "title": "只保存 JSON",
+      "text": "每次保存是一条独立记录，保留时间、类型和原文。可选择已有 JSON 查看，不依赖 TXT。",
+      "tag": "文件可备份"
+    },
+    {
+      "group": "clips",
+      "icon": "list",
+      "title": "在侧边栏查阅",
+      "text": "展开查看原文，按每次保存的记录删除。摘录、视频与文件下载，在同一个工作台切换。",
+      "tag": "统一工作台"
+    },
+    {
+      "group": "clips",
+      "icon": "refresh",
+      "title": "保存失败，可以重试",
+      "text": "失败记录保留在本地待保存队列；重试沿用原记录编号，避免同一次保存重复写入。",
+      "tag": "失败恢复"
+    },
+    {
+      "group": "clips",
+      "icon": "shield",
+      "title": "资料留在本机",
+      "text": "原文保存到自己选择的目录。提示词标题在本地提炼，不需要把内容发给外部 AI。",
+      "tag": "自行掌握数据"
+    },
+    {
+      "group": "downloads",
+      "icon": "bolt",
+      "title": "真正的 64 路并行",
+      "text": "极限档使用原生 Range 引擎，动态分配分块，最多 64 个真实连接；实际速度取决于源站和网络。",
+      "tag": "HTTP / HTTPS"
+    },
+    {
+      "group": "downloads",
+      "icon": "play",
+      "title": "视频，悬浮一键载入",
+      "text": "鼠标移到播放器显示下载入口。自动发现媒体地址，X 信息流按当前视频所在帖子定位。",
+      "tag": "浏览器媒体发现"
+    },
+    {
+      "group": "downloads",
+      "icon": "cube",
+      "title": "大模型也有清晰流程",
+      "text": "读取 Hugging Face 公开仓库，选择文件，固定版本下载。支持大文件计数、续传与 LFS 哈希校验。",
+      "tag": "Hugging Face"
+    },
+    {
+      "group": "downloads",
+      "icon": "music",
+      "title": "视频之外，也能只留声音",
+      "text": "选择实际可用画质，或仅下载音频。提供原始最佳、MP3、M4A、FLAC；图集也可只选需要的图片。",
+      "tag": "视频 / 音频 / 图集"
+    },
+    {
+      "group": "downloads",
+      "icon": "refresh",
+      "title": "暂停，从原位置继续",
+      "text": "每个任务独立暂停、继续或删除。关闭侧边栏、切换窗口，后台任务照常执行。",
+      "tag": "任务持续运行"
+    },
+    {
+      "group": "downloads",
+      "icon": "list",
+      "title": "下载多了，也有条理",
+      "text": "同组操作并排，设置分层展示。任务筛选即时显示加载状态，快速切换只展示最新结果；每个任务可独立暂停、继续或删除。",
+      "tag": "队列与校验"
+    }
+  ],
+  "platforms": [
+    "YouTube",
+    "X / Twitter",
+    "哔哩哔哩",
+    "小红书",
+    "头条",
+    "TikTok",
+    "Reddit",
+    "Vimeo",
+    "Twitch",
+    "Hugging Face"
+  ],
+  "limits": [
+    "画质和下载可用性取决于源站及账号权限；未逐站验证所有场景。",
+    "支持可获取密钥的普通 AES-128 HLS，不支持绕过 DRM。",
+    "Hugging Face 目前面向公开仓库，未接入私有及额外授权仓库。",
+    "64 路是并发上限，小文件会减少连接；合并需预留额外磁盘空间。"
+  ]
+}

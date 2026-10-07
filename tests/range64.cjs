@@ -1,0 +1,21 @@
+const fs=require('fs'),path=require('path'),http=require('http'),crypto=require('crypto'),assert=require('assert/strict'),{spawn}=require('child_process');
+const root=path.resolve('work/range64-'+Date.now()),jobs=path.join(root,'video-jobs');fs.mkdirSync(jobs,{recursive:true});fs.mkdirSync(path.join(root,'bin'));
+for(const n of ['video.ps1','video-worker.ps1','range-worker.ps1','range-engine.cs','transfer.ps1','transfer-probe.ps1','telemetry.ps1'])fs.copyFileSync('native/'+n,path.join(root,n));fs.copyFileSync('native/bin/aria2c.exe',path.join(root,'bin/aria2c.exe'));
+fs.writeFileSync(path.join(root,'video-settings.json'),JSON.stringify({directory:path.join(root,'out'),transferMode:'extreme',maxActive:1}));
+const data=crypto.randomBytes(64*1024*1024),hash=crypto.createHash('sha256').update(data).digest('hex');let active=0,peak=0,etag='"v1"',starts=[];
+const server=http.createServer((req,res)=>{const m=req.headers.range?.match(/bytes=(\d+)-(\d+)/);if(!m){res.writeHead(400);res.end();return;}let offset=+m[1],end=+m[2];starts.push(offset);active++;peak=Math.max(peak,active);res.writeHead(206,{'Content-Range':`bytes ${offset}-${end}/${data.length}`,'Content-Length':end-offset+1,'ETag':etag});
+const timer=setInterval(()=>{let next=Math.min(offset+16384,end+1);res.write(data.subarray(offset,next));offset=next;if(offset>end)res.end();},40);res.on('close',()=>{clearInterval(timer);active--;});});
+function run(args){return new Promise((resolve,reject)=>{const p=spawn('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass',...args],{windowsHide:true});let text='';p.stdout.on('data',b=>text+=b);p.stderr.on('data',b=>text+=b);p.on('close',c=>c?reject(Error(text)):resolve(text));p.on('error',reject);});}
+fs.writeFileSync(path.join(root,'call.ps1'),'\ufeff'+`param($MessageFile)\n$ErrorActionPreference='Stop'\n. (Join-Path $PSScriptRoot 'video.ps1')\nInvoke-VideoAction (Read-VideoJson $MessageFile)|ConvertTo-Json -Depth 8 -Compress`);
+async function call(m){const f=path.join(root,crypto.randomUUID()+'.request.json');fs.writeFileSync(f,JSON.stringify(m));return JSON.parse(await run(['-File',path.join(root,'call.ps1'),'-MessageFile',f]));}
+async function until(fn){const start=Date.now();while(Date.now()-start<120000){try{const r=fn();if(r)return r;}catch{}await new Promise(r=>setTimeout(r,200));}throw Error('Timeout in '+root);}
+function job(id){return JSON.parse(fs.readFileSync(path.join(jobs,id+'.json')));}
+(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const url=`http://127.0.0.1:${server.address().port}/file.bin`;
+const {id}=await call({action:'video-file-start',url,genericFile:true,filename:'parallel.bin',confirmed:true,checksum:hash});
+await until(()=>{const p=path.join(jobs,id+'.metrics.json');if(fs.existsSync(p)){const m=JSON.parse(fs.readFileSync(p));return m.connections>=32&&m.completed>4*1024*1024;}});
+await call({action:'video-pause',id});assert.equal((await call({action:'video-job',id})).state,'paused');assert.ok(fs.existsSync(job(id).expectedFiles[0]+'.jcparts/state.json'));
+const startIndex=starts.length;assert.equal((await call({action:'video-resume',id})).id,id);
+await until(()=>['completed','failed'].includes(job(id).state));assert.equal(job(id).state,'completed',job(id).error);assert.equal(crypto.createHash('sha256').update(fs.readFileSync(job(id).file)).digest('hex'),hash);assert.ok(peak>=32,`peak ${peak}`);assert.ok(starts.slice(startIndex).some(n=>n%1048576!==0),'resumed inside original parts');
+const changed=await call({action:'video-file-start',url,genericFile:true,filename:'changed.bin',confirmed:true});await until(()=>fs.existsSync(path.join(jobs,changed.id+'.metrics.json')));await call({action:'video-pause',id:changed.id});etag='"v2"';await call({action:'video-resume',id:changed.id});await until(()=>job(changed.id).state==='failed');assert.ok(/version changed|版本已变化/.test(job(changed.id).error));assert.equal(fs.existsSync(job(changed.id).expectedFiles[0]),false);
+console.log('PASS native range engine peak='+peak+', actual per-part telemetry, pause/same-ID byte-offset resume, SHA-256 and changed-source rejection');
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{server.closeAllConnections();server.close();});

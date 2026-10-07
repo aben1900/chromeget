@@ -1,0 +1,63 @@
+# chromeget · 精彩摘录
+
+一个 Windows Chrome 侧边栏扩展：收藏文字与提示词，下载视频、图集、文件和 Hugging Face 公开模型。
+
+**[下载最新 Release](https://github.com/aben1900/chromeget/releases/latest)** · [详细使用说明](使用说明.md) · [权限与隐私](PRIVACY.md)
+
+## 在另一台电脑安装
+
+需要 **Windows 10/11 x64、Chrome 116 或更新版**。不需要预装 Node.js、Python 或 FFmpeg。
+
+1. 在 Release 的 **Assets** 下载 `chromeget-v版本号-windows-x64-setup.zip`。不要选择 GitHub 自动生成的 Source code 压缩包。
+2. 解压到长期保留的位置，例如 `D:\Apps\chromeget`。不要在压缩包里直接运行。
+3. Chrome 地址栏输入 `chrome://extensions`，打开右上角“开发者模式”。
+4. 点击“加载已解压的扩展程序”，选择解压目录里的 **extension** 文件夹。
+5. 复制“精彩摘录”卡片显示的扩展 ID，双击根目录的 **安装.cmd**，粘贴 ID，并选择摘录保存位置。
+6. 首次安装会联网从上游官方发布地址下载固定版本的 Node.js、yt-dlp、aria2、FFmpeg，并验证 SHA-256。等待出现“安装完成”。网络中断可重新运行。
+7. 点击 Chrome 扩展菜单，把“精彩摘录”固定到工具栏；打开后检查本地程序已连接。
+
+安装包本身不包含第三方引擎二进制；首次安装需要访问 GitHub 和 nodejs.org。Chrome 扩展留在解压位置，本地程序安装到 `%LOCALAPPDATA%\JingcaiClipper`。**安装后不要删除或移动 extension 文件夹。** 每台电脑的扩展 ID 可能不同，请使用该电脑实际显示的 ID。
+
+这是开发者模式安装包，不是 Chrome 网上应用店 CRX。受组织策略管理的 Chrome 可能禁止加载未打包扩展。本版本不支持 macOS、Linux 或 Windows ARM64。
+
+## 能做什么
+
+- **内容摘录**：右键保存选中文字、网址、提示词；本地规则提炼标题，确认后保存。只使用 JSON，一次保存对应一条记录。
+- **视频 / 图集**：解析源站实际可用画质，可选音频格式或图集中的部分图片；支持手动使用本浏览器对应站点登录态。
+- **文件下载**：粘贴网址自动预览；Hugging Face 公开仓库列出文件供选择；支持 HTTP Range 并发、续传和可选 SHA-256 校验。
+- **任务管理**：独立暂停、继续、删除、打开目录；筛选即时显示加载状态。关闭侧栏不停止后台下载。
+- **网页辅助**：可选视频悬浮入口和当前标签页媒体捕获；是否能下载取决于网站、权限和资源格式。
+
+并发最高 64 路，不代表所有服务器都会更快；不支持绕过 DRM，无法保证所有站点、付费画质或私有模型可用。
+
+## 更新与卸载
+
+更新前暂停下载任务、关闭侧栏。用新包覆盖原解压目录（不要删除个人文件），运行 **修复本地程序.cmd**，再到 `chrome://extensions` 点击重新加载。安装脚本保留已有本地任务和设置；不要卸载 Chrome 扩展再装，以免丢失待保存记录。
+
+卸载：先确认待保存记录已落盘，在 Chrome 移除扩展，再运行 **卸载本地程序.cmd**。脚本只解除 Native Messaging 注册，保留程序、任务和个人文件；确认不再需要时再手动处理。
+
+## 常见问题
+
+- **Specified native messaging host not found**：先加载 extension，再运行安装.cmd，填写这台电脑的扩展 ID；不要使用他人的 ID。
+- **请更新本地程序 / 不支持的操作**：运行最新包中的修复本地程序.cmd，重新加载扩展，关闭旧侧栏后重新打开。
+- **引擎下载失败或校验失败**：检查是否能访问提示的官方域名，再重试。不要通过关闭校验来继续安装。
+- **只装了扩展却无法保存/下载**：还必须运行安装.cmd，本地程序负责文件写入和后台下载。
+
+## 开发与发布
+
+源代码和用户数据隔离。`native/bin` 的第三方引擎、Cookie、任务记录、输出文件和 `work` 不进入 Git。
+
+```powershell
+# 下载校验开发所需引擎
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/prepare-engines.ps1
+# 运行核心测试（需要 Windows PowerShell 5.1）
+native/bin/node.exe tests/test.cjs
+# 构建公开 Release 安装包和校验文件
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -PublicRelease
+```
+
+构建会同步 `功能介绍.html`。`tools/engines.lock.json` 固定下载地址和 SHA-256；变更引擎版本需重新验证安装与下载测试。新电脑安装流程在隔离目录测试，不代表每种 Windows/Chrome 策略组合都已验证。
+
+## 许可
+
+项目自身代码采用 MIT 许可，见 [LICENSE](LICENSE)。第三方引擎由安装器从各自上游下载，适用其自身许可，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

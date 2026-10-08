@@ -38,6 +38,7 @@ function summary(item){const {content,files,...rest}=item;return {...rest,previe
 function select(items,ids){if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||!ID.test(id)))throw Error('请选择 1–100 份有效资料');return [...new Set(ids)].map(id=>{const item=items.find(i=>i.id===id);if(!item)throw Error('资料已变化，请刷新后重试');return item;});}
 async function dispatch(message,ctx){if(!ctx?.directory||!ctx.root)throw Error('资料目录未配置');return locked(ctx.directory,async()=>{
  const backup=require('./library-backup.cjs');const recovery=backup.recover(ctx);if(message.action==='library-recover')return {ok:true,...recovery};
+ if(/^library-(backup|restore)-/.test(message.action))return backup.dispatch(message,ctx);
  const s=metadata(ctx.directory),{items,warnings,changed}=load(ctx,s),index=path.join(ctx.directory,'资料库索引.json');if(changed)atomic(index,s);
  const revision=crypto.createHash('sha256').update(JSON.stringify([items,s.tags,s.collections])).digest('hex').slice(0,24);
  if(message.action==='library-snapshot')return {ok:true,warnings:warnings.slice(0,50),snapshotted:message.id?!!s.downloads['download:'+message.id]:true};

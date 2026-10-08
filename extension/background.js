@@ -117,9 +117,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
-  const libraryActions=['library-query','library-read','library-update','library-taxonomy','library-duplicates','library-open','library-export-prepare','library-export-start','library-export-status','library-export-recent','library-export-open'];
+  const backupActions=['library-backup-create','library-backup-list','library-backup-open','library-restore-choose','library-restore-preview','library-restore-apply','library-restore-result'];
+  const libraryActions=[...backupActions,'library-query','library-read','library-update','library-taxonomy','library-duplicates','library-open','library-export-prepare','library-export-start','library-export-status','library-export-recent','library-export-open'];
   if(libraryActions.includes(message.action)&&sender.id===chrome.runtime.id&&sender.url?.split('?')[0]===chrome.runtime.getURL('library.html')){
-    (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('library-v1'))throw Error('资料库需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');return native(message);})().then(reply,e=>reply(Recovery.response(e)));return true;
+    const run=async()=>{const host=await native({action:'status'});const capability=backupActions.includes(message.action)?'library-backup-v1':'library-v1';if(!host.capabilities?.includes(capability))throw Error('此功能需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');if(message.action==='library-restore-apply'){const {pending=[]}=await chrome.storage.local.get('pending');if(pending.length)throw Error('请先在侧栏重试并保存待处理记录，再恢复备份。');}return native(message);};
+    (message.action==='library-restore-apply'?exclusive(run):run()).then(reply,e=>reply(Recovery.response(e)));return true;
   }
   if(['collect-load','collect-edit','collect-save','collect-state','collect-retry'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('collect.html')){
     exclusive(()=>collectionRequest(message)).then(reply,error=>reply(Recovery.response(error)));return true;

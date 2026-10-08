@@ -1,5 +1,18 @@
 ﻿. (Join-Path $PSScriptRoot 'journal-lock.ps1')
 function Invoke-LibraryAction($message,[string]$directory) {
+    if ($message.action -eq 'library-restore-choose') {
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog=New-Object System.Windows.Forms.OpenFileDialog
+        try {
+            $dialog.Title='选择精彩摘录备份文件'
+            $dialog.Filter='精彩摘录备份 (*.jingcai-backup.json)|*.jingcai-backup.json'
+            $dialog.InitialDirectory=$directory
+            $dialog.CheckFileExists=$true
+            $dialog.Multiselect=$false
+            if ($dialog.ShowDialog() -ne [Windows.Forms.DialogResult]::OK) {return @{ok=$true;cancelled=$true}}
+            $message=@{action='library-restore-register';selectedPath=$dialog.FileName}
+        } finally {$dialog.Dispose()}
+    }
     $journalLock=Enter-JournalLock $directory
     try {
     $node=Join-Path $PSScriptRoot 'bin\node.exe'

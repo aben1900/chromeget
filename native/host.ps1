@@ -43,11 +43,14 @@ try {
         if (-not [IO.File]::Exists($journal)) { throw '所选 JSON 文件不存在，请重新选择。' }
         $directory = [IO.Path]::GetDirectoryName($journal)
     }
-    if ($message.action -like 'video-*') {
+    if ($message.action -like 'library-*') {
+        . (Join-Path $PSScriptRoot 'library.ps1')
+        $response = Invoke-LibraryAction $message $directory
+    } elseif ($message.action -like 'video-*') {
         . (Join-Path $PSScriptRoot 'video.ps1')
         $response = Invoke-VideoAction $message
     } elseif ($message.action -eq 'status') {
-        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.24.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.25.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
     } elseif ($message.action -eq 'choose-json') {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -120,6 +123,15 @@ try {
         } elseif (-not ($records | Where-Object { $_.id -eq $r.id })) {
             $entry = [PSCustomObject]@{id=$r.id; time=$instant.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss zzz'); type=$r.type; content=$r.content}
             if ($r.type -eq '提示词') { $entry | Add-Member -NotePropertyName title -NotePropertyValue $r.title.Trim() }
+            foreach($field in @('sourceUrl','sourceTitle','author')) {
+                $value=[string]$r.$field
+                if($field -eq 'sourceUrl') {
+                    $uri=$null
+                    if(-not [Uri]::TryCreate($value,[UriKind]::Absolute,[ref]$uri) -or $uri.Scheme -notin @('http','https') -or $uri.UserInfo){$value=''}
+                    elseif($uri.Query){$builder=New-Object UriBuilder($uri);$builder.Query=(@($uri.Query.TrimStart('?').Split('&')|Where-Object{[Uri]::UnescapeDataString(($_ -split '=')[0]) -notmatch 'token|sign|auth|cookie|secret|key|credential|expires|policy'}) -join '&');$value=$builder.Uri.AbsoluteUri}
+                } elseif($value.Length -gt 500){$value=$value.Substring(0,500)}
+                if($value){$entry|Add-Member -NotePropertyName $field -NotePropertyValue $value}
+            }
             $records += $entry
             Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 5)
         }

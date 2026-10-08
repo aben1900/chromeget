@@ -1,0 +1,13 @@
+'use strict';
+// ZIP64, stored entries, streaming CRC and descriptors. Supports files larger than 4 GiB.
+const fs=require('fs');
+const table=Array.from({length:256},(_,i)=>{for(let k=0;k<8;k++)i=i&1?0xedb88320^(i>>>1):i>>>1;return i>>>0;});
+async function writeZip(output,entries){const fd=fs.openSync(output,'wx');let offset=0n;const central=[];const write=b=>{fs.writeSync(fd,b);offset+=BigInt(b.length);};try{
+ for(const entry of entries){const name=Buffer.from(entry.name);if(!name.length||name.length>65535||entry.name.startsWith('/')||entry.name.split('/').includes('..'))throw Error('导出文件名无效');const start=offset;const head=Buffer.alloc(30);head.writeUInt32LE(0x04034b50);head.writeUInt16LE(45,4);head.writeUInt16LE(0x808,6);head.writeUInt32LE(0xffffffff,18);head.writeUInt32LE(0xffffffff,22);head.writeUInt16LE(name.length,26);head.writeUInt16LE(20,28);const extra=Buffer.alloc(20);extra.writeUInt16LE(1);extra.writeUInt16LE(16,2);write(head);write(name);write(extra);
+  let crc=0xffffffff,size=0n;for await(const chunk of entry.stream()){const b=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);for(const byte of b)crc=table[(crc^byte)&255]^(crc>>>8);write(b);size+=BigInt(b.length);}crc=(crc^0xffffffff)>>>0;
+  const descriptor=Buffer.alloc(24);descriptor.writeUInt32LE(0x08074b50);descriptor.writeUInt32LE(crc,4);descriptor.writeBigUInt64LE(size,8);descriptor.writeBigUInt64LE(size,16);write(descriptor);
+  const c=Buffer.alloc(46);c.writeUInt32LE(0x02014b50);c.writeUInt16LE(45,4);c.writeUInt16LE(45,6);c.writeUInt16LE(0x808,8);c.writeUInt32LE(crc,16);c.writeUInt32LE(0xffffffff,20);c.writeUInt32LE(0xffffffff,24);c.writeUInt16LE(name.length,28);c.writeUInt16LE(28,30);c.writeUInt32LE(0xffffffff,42);const x=Buffer.alloc(28);x.writeUInt16LE(1);x.writeUInt16LE(24,2);x.writeBigUInt64LE(size,4);x.writeBigUInt64LE(size,12);x.writeBigUInt64LE(start,20);central.push(Buffer.concat([c,name,x]));
+ }
+ const start=offset;central.forEach(write);const length=offset-start,end=offset;const z=Buffer.alloc(56);z.writeUInt32LE(0x06064b50);z.writeBigUInt64LE(44n,4);z.writeUInt16LE(45,12);z.writeUInt16LE(45,14);z.writeBigUInt64LE(BigInt(entries.length),24);z.writeBigUInt64LE(BigInt(entries.length),32);z.writeBigUInt64LE(length,40);z.writeBigUInt64LE(start,48);write(z);const locator=Buffer.alloc(20);locator.writeUInt32LE(0x07064b50);locator.writeBigUInt64LE(end,8);locator.writeUInt32LE(1,16);write(locator);const e=Buffer.alloc(22);e.writeUInt32LE(0x06054b50);e.writeUInt16LE(65535,8);e.writeUInt16LE(65535,10);e.writeUInt32LE(0xffffffff,12);e.writeUInt32LE(0xffffffff,16);write(e);
+ }finally{fs.closeSync(fd);}}
+module.exports={writeZip};

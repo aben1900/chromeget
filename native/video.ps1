@@ -251,7 +251,15 @@ function Invoke-VideoActionCore($message) {
             if($state.state -notin @('queued','starting','running')){return @{ok=$true}}
             [IO.File]::WriteAllText(($jobPath+'.paused'),'paused')
             $job.state='paused';Write-VideoJson $jobPath $job
-        }else{[IO.File]::WriteAllText(($jobPath+'.deleted'),'deleted')}
+        }else{
+            if($job.state -eq 'completed' -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'library.ps1'))){
+                . (Join-Path $PSScriptRoot 'library.ps1')
+                $libraryConfig=Read-VideoJson (Join-Path $PSScriptRoot 'config.json')
+                $snapshot=Invoke-LibraryAction ([pscustomobject]@{action='library-snapshot';id=$message.id}) $libraryConfig.directory
+                if(-not $snapshot.ok -or -not $snapshot.snapshotted){throw '资料快照未完成，请打开资料库检查后再删除下载历史。'}
+            }
+            [IO.File]::WriteAllText(($jobPath+'.deleted'),'deleted')
+        }
 
         if($job.pid -and $job.started){
             $proc=Get-Process -Id $job.pid -ErrorAction SilentlyContinue
@@ -428,6 +436,7 @@ function Invoke-GalleryDownload($job,$jobPath,$logPath) {
             $files=@(@($previous.images)+$files|Group-Object index|ForEach-Object {$_.Group[-1]}|Sort-Object {[int]$_.index})
         }
         Write-VideoJson $manifest @{title=$job.title;source=$job.source;count=$files.Count;images=$files}
+        $job|Add-Member -NotePropertyName savedFiles -NotePropertyValue @($files|ForEach-Object{Join-Path $job.directory $_.file}) -Force
     } finally {$client.Dispose();$handler.Dispose()}
 }
 function Get-DownloadKey($job){

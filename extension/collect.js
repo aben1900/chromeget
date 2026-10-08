@@ -16,8 +16,8 @@
     el('saveCollect').disabled=busy||!Number.isInteger(windowId)||c.kind==='empty';
     el('downloadCollect').disabled=busy;el('collectHint').textContent=isUrl?'保存网址只收藏地址。下载内容会先打开对应预览，不会直接下载。':c.kind==='multi'?'也可以把这些网址作为文字保存。':'原文保留在本机；标题可在保存前修改。';
   }
-  function persist(){
-    saved=false;const token=++sequence,editEpoch=epoch,snapshot={text:el('collectInput').value,type:el('collectType').value,title:el('collectTitle').value};
+  function persist(source){
+    el('duplicatePanel').hidden=true;saved=false;const token=++sequence,editEpoch=epoch,snapshot={text:el('collectInput').value,type:el('collectType').value,title:el('collectTitle').value,...(source||{})};
     el('collectStatus').textContent='';el('collectError').textContent='';el('checkCollect').hidden=true;render();
     edits=edits.then(async()=>{if(editEpoch!==epoch)return;try{const r=await send('collect-edit',{...snapshot,id:draft?.id});if(editEpoch===epoch){draft=r.draft;editError=null;}}catch(e){if(editEpoch===epoch){editError=e;if(token===sequence)if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;}}});return edits;
   }
@@ -25,13 +25,15 @@
   function finish(){busy=false;if(replacement){const d=replacement;replacement=null;load(d);}render();}
   el('collectInput').addEventListener('input',()=>{if(el('collectType').value==='提示词')el('collectTitle').value=summarizePromptTitle(el('collectInput').value);persist();});
   el('collectType').addEventListener('change',()=>{if(el('collectType').value==='提示词'&&!el('collectTitle').value)el('collectTitle').value=summarizePromptTitle(el('collectInput').value);persist();});
-  el('collectTitle').addEventListener('input',persist);
-  function displayState(r){saved=r.state==='saved';el('collectStatus').textContent=saved?'已保存到本地，可在“内容摘录”查看。':r.state==='pending'?'内容已保留在待保存队列，修复连接后可重试。':'保存结果尚未确认，请检查状态。';el('collectError').textContent=r.error||'';el('checkCollect').hidden=saved;el('checkCollect').textContent=r.state==='pending'?'重试待保存记录':'检查保存状态';}
-  el('saveCollect').addEventListener('click',async()=>{
+  el('collectTitle').addEventListener('input',()=>persist());
+  function displayState(r){if(r.state==='duplicate'){el('duplicatePanel').hidden=false;el('existingRecord').href=chrome.runtime.getURL('library.html')+'?id='+encodeURIComponent(r.matches[0].id);el('collectStatus').textContent='尚未再次保存，请选择查看已有资料或仍然保存。';return;}el('duplicatePanel').hidden=true;saved=r.state==='saved';el('collectStatus').textContent=saved?'已保存到本地，可在“内容摘录”查看。':r.state==='pending'?'内容已保留在待保存队列，修复连接后可重试。':'保存结果尚未确认，请检查状态。';el('collectError').textContent=r.error||'';el('checkCollect').hidden=saved;el('checkCollect').textContent=r.state==='pending'?'重试待保存记录':'检查保存状态';}
+  async function save(allowDuplicate=false){
     if(busy||saved)return;busy=true;render();
-    try{await edits;if(editError)throw editError;if(!draft){await persist();if(editError)throw editError;}const r=await send('collect-save',{id:draft.id,revision:draft.revision});displayState(r);}
+    try{await edits;if(editError)throw editError;if(!draft){await persist();if(editError)throw editError;}const r=await send('collect-save',{id:draft.id,revision:draft.revision,allowDuplicate});displayState(r);}
     catch(e){if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;el('checkCollect').hidden=!draft;}finally{finish();}
-  });
+  }
+  el('saveCollect').addEventListener('click',()=>save(false));
+  el('saveDuplicate').addEventListener('click',()=>save(true));
   el('checkCollect').addEventListener('click',async()=>{if(busy||!draft)return;busy=true;el('checkCollect').disabled=true;render();try{await edits;let r=await send('collect-state',{id:draft.id});if(r.state==='pending'||r.state==='unknown')r=await send('collect-retry',{id:draft.id});displayState(r);}catch(e){if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;}finally{el('checkCollect').disabled=false;finish();}});
   async function route(batch=false){
     try{await edits;const c=Collect.classify(el('collectInput').value);if(batch){await chrome.storage.session.set({[`download-batch:${windowId}`]:c.text.split(/\r?\n/).map(s=>Collect.classify(s).url).filter(Boolean),[`app-view:${windowId}`]:'download'});return;}
@@ -39,7 +41,7 @@
     }catch(e){if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;}
   }
   el('downloadCollect').addEventListener('click',()=>route());el('batchCollect').addEventListener('click',()=>route(true));
-  el('useCurrentPage').addEventListener('click',async()=>{try{const [tab]=await chrome.tabs.query({active:true,windowId});if(!Collect.classify(tab?.url).url)throw Error('当前页面不能收集，请切换到普通网页');el('collectInput').value=tab.url;await persist();}catch(e){if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;}});
+  el('useCurrentPage').addEventListener('click',async()=>{try{const [tab]=await chrome.tabs.query({active:true,windowId});if(!Collect.classify(tab?.url).url)throw Error('当前页面不能收集，请切换到普通网页');el('collectInput').value=tab.url;await persist({sourceUrl:tab.url,sourceTitle:tab.title||''});}catch(e){if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;}});
   chrome.windows.getCurrent().then(async w=>{windowId=w.id;const token=sequence;const r=await send('collect-load');if(sequence===token)load(r.draft);chrome.storage.onChanged.addListener((changes,area)=>{const d=changes[`collect-draft:${windowId}`]?.newValue;if(area==='session'&&d?.sourceUrl&&d.id!==draft?.id){if(busy)replacement=d;else load(d);}});render();}).catch(e=>{if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;});
   render();
 })();

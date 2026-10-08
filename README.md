@@ -79,3 +79,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -PublicRel
 ## 许可
 
 项目自身代码采用 MIT 许可，见 [LICENSE](LICENSE)。第三方引擎由安装器从各自上游下载，适用其自身许可，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 资料库与导出（1.25.0）
+
+点击侧栏“打开资料库”可搜索默认摘录及已完成下载，按类型、来源、标签、集合整理。详情支持完整正文复制、提示词 {{变量名}} 填写与本地 Markdown / ZIP 导出。导出前确认清单，缺失文件可选择跳过；单次最多 100 份资料、10000 个文件。原始 JSON 不迁移，资料库索引.json 保存整理信息。更新时需同时修复本地程序并重新加载扩展。

@@ -11,7 +11,7 @@ try{
     $names=@('extension','tests','tools','showcase','AGENTS.md','README.md','LICENSE','PRIVACY.md','THIRD_PARTY_NOTICES.md','开始使用.cmd','使用说明.md','功能介绍.html')
     foreach($name in $names){Copy-Item -LiteralPath (Join-Path $root $name) -Destination $stage -Recurse -Force}
     $nativeStage=Join-Path $stage 'native';[IO.Directory]::CreateDirectory($nativeStage)|Out-Null
-    Get-ChildItem -LiteralPath (Join-Path $root 'native') -File | Where-Object {$_.Extension -in @('.ps1','.cmd','.cs')} | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $nativeStage}
+    Get-ChildItem -LiteralPath (Join-Path $root 'native') -File | Where-Object {$_.Extension -in @('.ps1','.cmd','.cs','.cjs')} | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $nativeStage}
     if($PublicRelease){
         $plugin=Join-Path $nativeStage 'bin\yt-dlp-plugins\jingcai\yt_dlp_plugins\extractor'
         [IO.Directory]::CreateDirectory($plugin)|Out-Null

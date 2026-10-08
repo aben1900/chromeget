@@ -39,7 +39,10 @@ async function flush() {
     try {
       const status = await native({action: 'status'});
       if (status.storageFormat !== 'json') throw new Error(`实际连接的本地程序未声明 JSON 保存能力（版本：${status.version || '未知'}，路径：${status.hostPath || '未提供'}）。请运行本项目的“开始使用.cmd → 更新 / 修复”。`);
+      let duplicate=false;
+      if(status.capabilities?.includes('library-v1')){try{const check=await native({action:'library-duplicates',content:pending[0].content,type:pending[0].type});duplicate=check.matches?.length>0;}catch{}}
       const result = await native({action: 'save', record: pending[0]});
+      if(duplicate)await chrome.storage.local.set({lastDuplicate:{id:'clip:'+pending[0].id,time:Date.now()}});
       const record=pending.shift();
       const {savedCollect={}}=await chrome.storage.local.get('savedCollect');
       savedCollect[record.id]=Date.now();
@@ -93,7 +96,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!kind) return;
   const content = info.menuItemId === 'link' ? chosenLink : info.menuItemId === 'page' ? (info.pageUrl || tab?.url) : info.selectionText;
   if (!content?.trim()) return;
-  const record = {id: crypto.randomUUID(), time: new Date().toISOString(), type: kind, content};
+  const record = {id: crypto.randomUUID(), time: new Date().toISOString(), type: kind, content,sourceUrl:tab?.url||info.pageUrl||'',sourceTitle:tab?.title||''};
   exclusive(async () => {
     if (info.menuItemId === 'prompt') {
       const key = `draft:${record.id}`;
@@ -114,6 +117,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  const libraryActions=['library-query','library-read','library-update','library-taxonomy','library-duplicates','library-open','library-export-prepare','library-export-start','library-export-status'];
+  if(libraryActions.includes(message.action)&&sender.id===chrome.runtime.id&&sender.url?.split('?')[0]===chrome.runtime.getURL('library.html')){
+    (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('library-v1'))throw Error('资料库需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');return native(message);})().then(reply,e=>reply(Recovery.response(e)));return true;
+  }
   if(['collect-load','collect-edit','collect-save','collect-state','collect-retry'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('collect.html')){
     exclusive(()=>collectionRequest(message)).then(reply,error=>reply(Recovery.response(error)));return true;
   }

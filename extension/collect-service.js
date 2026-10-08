@@ -15,6 +15,7 @@ async function collectionRequest(message){
     if(message.id&&draft&&message.id!==draft.id)throw Error('草稿已被其他操作更新，请重新打开收集页');
     if(!draft||draft.submissionState!=='editing')draft=newCollectDraft();
     draft={...draft,text:message.text,type:message.type,title:String(message.title||'').trim(),revision:draft.revision+1};
+    if(message.sourceUrl!==undefined){draft.sourceUrl=Collect.classify(message.sourceUrl).url||'';draft.sourceTitle=String(message.sourceTitle||'').slice(0,500);}
     await chrome.storage.session.set({[key]:draft});return {ok:true,draft};
   }
   if(!draft||draft.id!==message.id||(message.revision!==undefined&&draft.revision!==message.revision))throw Error('草稿已变化，请重新确认当前内容');
@@ -28,7 +29,7 @@ async function collectionRequest(message){
   if(message.action==='collect-retry'){
     const state=await saved();if(state.state==='saved'||state.state==='editing')return state;
     const choice=Collect.classify(draft.text);
-    const record={id:draft.id,time:draft.time,type:choice.kind==='url'?'网页地址':draft.type,content:choice.kind==='url'?choice.url:draft.text};
+    const record={id:draft.id,time:draft.time,type:choice.kind==='url'?'网页地址':draft.type,content:choice.kind==='url'?choice.url:draft.text,sourceUrl:draft.sourceUrl,sourceTitle:draft.sourceTitle};
     if(record.type==='提示词')record.title=draft.title;
     // Same immutable record ID is safe even if the original response was lost.
     await enqueueRecord(record);return saved();
@@ -37,8 +38,9 @@ async function collectionRequest(message){
   if(draft.submissionState!=='editing')return saved();
   const choice=Collect.classify(draft.text);if(choice.kind==='empty')throw Error('请先输入要保存的内容');
   if(draft.type==='提示词'&&(!draft.title||draft.title.length>120||/[\r\n]/.test(draft.title)))throw Error('提示词标题需要 1–120 字的单行文字');
+  if(message.allowDuplicate!==true){let host;try{host=await native({action:'status'});}catch(e){if(e.code!=='HOST_UNAVAILABLE')throw e;}if(host?.capabilities?.includes('library-v1')){const check=await native({action:'library-duplicates',content:choice.kind==='url'?choice.url:draft.text,type:choice.kind==='url'?'网页地址':draft.type});if(check.matches?.length)return {ok:true,state:'duplicate',matches:check.matches};}}
   draft.submissionState='submitting';await chrome.storage.session.set({[key]:draft});
-  const record={id:draft.id,time:draft.time,type:choice.kind==='url'?'网页地址':draft.type,content:choice.kind==='url'?choice.url:draft.text};
+  const record={id:draft.id,time:draft.time,type:choice.kind==='url'?'网页地址':draft.type,content:choice.kind==='url'?choice.url:draft.text,sourceUrl:draft.sourceUrl,sourceTitle:draft.sourceTitle};
   if(record.type==='提示词')record.title=draft.title;
   await enqueueRecord(record);return saved();
 }

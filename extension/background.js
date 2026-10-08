@@ -117,7 +117,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
-  const libraryActions=['library-query','library-read','library-update','library-taxonomy','library-duplicates','library-open','library-export-prepare','library-export-start','library-export-status'];
+  const libraryActions=['library-query','library-read','library-update','library-taxonomy','library-duplicates','library-open','library-export-prepare','library-export-start','library-export-status','library-export-recent','library-export-open'];
   if(libraryActions.includes(message.action)&&sender.id===chrome.runtime.id&&sender.url?.split('?')[0]===chrome.runtime.getURL('library.html')){
     (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('library-v1'))throw Error('资料库需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');return native(message);})().then(reply,e=>reply(Recovery.response(e)));return true;
   }

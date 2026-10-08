@@ -111,7 +111,7 @@ $installButton.Add_Click({
 })
 $repairButton.Add_Click({Start-ManagedOperation '更新 / 修复' ('& '+(Quote-PS (Join-Path $root 'native\repair.ps1')))})
 $main.Controls.Add((New-Label '③ 在扩展中验证连接' 30))
-$main.Controls.Add((New-Label '本机检查不代表 Chrome 已连接。打开扩展侧栏，点击“重新检测”。' 40))
+$main.Controls.Add((New-Label '本窗口更新本地程序。随后打开 chrome://extensions，点击“精彩摘录”卡片蓝色开关左边的圆形箭头 ⟳，再打开侧栏点击“重新检测”。' 65))
 $row=New-Row;$diagnose=New-Button '检查本机环境' 160;$integrity=New-Button '完整校验引擎' 160;$row.Controls.AddRange(@($diagnose,$integrity));$main.Controls.Add($row)
 $diagnosticBox=New-Object Windows.Forms.TextBox;$diagnosticBox.Multiline=$true;$diagnosticBox.ReadOnly=$true;$diagnosticBox.Width=630;$diagnosticBox.Height=175;$diagnosticBox.ScrollBars='Vertical';$diagnosticBox.Text='尚未检查。安装或修复后会自动检查本机环境。';$main.Controls.Add($diagnosticBox)
 $diagnose.Add_Click({Start-Diagnostics})

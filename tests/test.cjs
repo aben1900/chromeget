@@ -9,6 +9,7 @@ const temp = path.resolve('work/tests/run-' + Date.now());
 fs.mkdirSync(temp, {recursive:true});
 fs.copyFileSync(path.join(root,'native/host.ps1'),path.join(temp,'host.ps1'));
 fs.copyFileSync(path.join(root,'native/recovery.ps1'),path.join(temp,'recovery.ps1'));
+fs.copyFileSync(path.join(root,'native/journal-lock.ps1'),path.join(temp,'journal-lock.ps1'));
 fs.copyFileSync(path.join(root,'native/host.cmd'),path.join(temp,'host.cmd'));
 fs.writeFileSync(path.join(temp,'config.json'),JSON.stringify({directory:temp}));
 function native(message, launcher=false) {

@@ -77,12 +77,14 @@ try {
         if ($ids.Count -lt 1 -or $ids.Count -gt 100) { throw '每次请选择 1–100 条记录。' }
         foreach ($id in $ids) { if ($id -isnot [string] -or $id -notmatch '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$') { throw '记录编号无效。' } }
       }
-        $sha = [Security.Cryptography.SHA256]::Create()
-        try { $hash = [BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($directory.ToLowerInvariant()))).Replace('-', '') }
-        finally { $sha.Dispose() }
-        $mutex = New-Object Threading.Mutex($false, ('Local\JingcaiClipper_' + $hash))
-        try { $locked = $mutex.WaitOne(30000) } catch [Threading.AbandonedMutexException] { $locked = $true }
-        if (-not $locked) { throw '文件忙，请稍后重试。' }
+        . (Join-Path $PSScriptRoot 'journal-lock.ps1')
+        $mutex = Enter-JournalLock $directory
+        $locked = $true
+        if ([IO.File]::Exists((Join-Path $directory '.jingcai-restore-transaction.json'))) {
+            . (Join-Path $PSScriptRoot 'library.ps1')
+            $recovered = Invoke-LibraryAction @{action='library-recover'} $directory
+            if (-not $recovered.ok) { throw $recovered.error }
+        }
         [IO.Directory]::CreateDirectory($directory) | Out-Null
         $records = @()
         if ([IO.File]::Exists($journal)) {
@@ -119,7 +121,7 @@ try {
         if ($message.action -eq 'delete') {
           $beforeCount = $records.Count
           $records = @($records | Where-Object { $_.id -notin $ids })
-          Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 5)
+          Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 25)
         } elseif (-not ($records | Where-Object { $_.id -eq $r.id })) {
             $entry = [PSCustomObject]@{id=$r.id; time=$instant.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss zzz'); type=$r.type; content=$r.content}
             if ($r.type -eq '提示词') { $entry | Add-Member -NotePropertyName title -NotePropertyValue $r.title.Trim() }
@@ -133,7 +135,7 @@ try {
                 if($value){$entry|Add-Member -NotePropertyName $field -NotePropertyValue $value}
             }
             $records += $entry
-            Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 5)
+            Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 25)
         }
         $response = @{ok = $true; path = $journal; journalPath=$journal}
         if ($message.action -eq 'delete') { $response.deleted = $beforeCount - $records.Count }

@@ -1,4 +1,7 @@
-﻿function Invoke-LibraryAction($message,[string]$directory) {
+﻿. (Join-Path $PSScriptRoot 'journal-lock.ps1')
+function Invoke-LibraryAction($message,[string]$directory) {
+    $journalLock=Enter-JournalLock $directory
+    try {
     $node=Join-Path $PSScriptRoot 'bin\node.exe'
     if(-not(Test-Path -LiteralPath $node)){$node=(Get-Command node.exe -ErrorAction Stop).Source}
     $info=New-Object Diagnostics.ProcessStartInfo
@@ -19,4 +22,5 @@
         if($process.ExitCode -ne 0){throw '资料库程序未能完成操作，请更新 / 修复。'}
         return ($output.Result|ConvertFrom-Json)
     } finally {$process.Dispose()}
+    } finally {Exit-JournalLock $journalLock}
 }

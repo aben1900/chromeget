@@ -3,20 +3,22 @@
     [string]$CacheDirectory
 )
 $ErrorActionPreference='Stop'
-function Get-SetupHash([string]$Path){
-    $stream=[IO.File]::OpenRead($Path);$sha=[Security.Cryptography.SHA256]::Create()
-    try{return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','')}finally{$stream.Dispose();$sha.Dispose()}
-}
 
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 $ProgressPreference='SilentlyContinue'
+. (Join-Path $PSScriptRoot 'setup-download.ps1')
 $lock=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'engines.lock.json') -Raw | ConvertFrom-Json
 $BinDirectory=[IO.Path]::GetFullPath($BinDirectory)
 [IO.Directory]::CreateDirectory($BinDirectory)|Out-Null
 $stage=Join-Path $BinDirectory ('.setup-'+[Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($stage)|Out-Null
 try {
+    $index=0
     foreach($engine in $lock.engines){
+        Assert-SetupNotCancelled
+        $index++
+        $label='['+$index+'/'+$lock.engines.Count+'] '+$engine.id+' '+$engine.version
+        Write-SetupProgress ($label+' · 检查已安装文件')
         $receiptPath=Join-Path $BinDirectory ($engine.id+'-installed.json')
         $ready=$false
         if(Test-Path -LiteralPath $receiptPath){
@@ -30,27 +32,30 @@ try {
                 }
             }catch{$ready=$false}
         }
-        if($ready){Write-Host ($engine.id+' already verified.');continue}
+        if($ready){Write-SetupProgress ($label+' · 已校验，无需下载') 100;continue}
         $archive=Join-Path $stage $engine.archive
+        $persistentCache=Join-Path (Join-Path $env:LOCALAPPDATA 'JingcaiClipper\setup-cache') ($engine.sha256+'-'+$engine.archive)
         $cached=if($CacheDirectory){Join-Path $CacheDirectory $engine.archive}else{$null}
+        if(-not $CacheDirectory){
+            $candidates=@($persistentCache)
+            if($engine.kind -eq 'exe'){$candidates+=@((Join-Path $BinDirectory $engine.archive),(Join-Path (Split-Path $PSScriptRoot -Parent) ('native\bin\'+$engine.archive)))}
+            $cached=$candidates | Where-Object {(Test-Path -LiteralPath $_ -PathType Leaf) -and (Get-SetupHash $_) -eq $engine.sha256} | Select-Object -First 1
+        }
         if($cached -and (Test-Path -LiteralPath $cached)){
+            Write-SetupProgress ($label+' · 复用本地文件，校验 SHA-256')
             Copy-Item -LiteralPath $cached -Destination $archive
         }else{
-            Write-Host ('Downloading '+$engine.id+' '+$engine.version+' from '+([uri]$engine.url).Host+' ...')
-            for($attempt=1;$attempt -le 3;$attempt++){
-                try{
-                    $aria=Join-Path $BinDirectory 'aria2c.exe'
-                    if($engine.id -eq 'ffmpeg' -and (Test-Path -LiteralPath $aria)){
-                        & $aria ('--dir='+$stage) ('--out='+$engine.archive) '--continue=true' '--allow-overwrite=true' '--auto-file-renaming=false' '--split=16' '--max-connection-per-server=16' '--min-split-size=4M' '--max-tries=3' '--connect-timeout=30' '--timeout=60' '--summary-interval=15' '--enable-color=false' '--console-log-level=warn' $engine.url
-                        if($LASTEXITCODE -ne 0){throw ('Download exited with code '+$LASTEXITCODE)}
-                    }else{Invoke-WebRequest -UseBasicParsing -Uri $engine.url -OutFile $archive -TimeoutSec 1800}
-                    break
-                }
-                catch{if($attempt -eq 3){throw};Write-Host ('Retry '+$attempt+' / 3');Start-Sleep -Seconds 2}
-            }
+            Receive-VerifiedSetupFile $engine $archive $label
         }
+        Write-SetupProgress ($label+' · 下载阶段结束，正在校验 SHA-256')
         if((Get-SetupHash $archive) -ne $engine.sha256){throw ('SHA256 mismatch: '+$engine.id+'. Installation stopped; no unverified executable was run.')}
+        Assert-SetupNotCancelled
+        if(-not $CacheDirectory){
+            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($persistentCache))|Out-Null
+            Copy-Item -LiteralPath $archive -Destination $persistentCache -Force
+        }
         $unpacked=Join-Path $stage $engine.id
+        Write-SetupProgress ($label+' · 校验通过，正在解压 / 安装')
         if($engine.kind -eq 'zip'){Expand-Archive -LiteralPath $archive -DestinationPath $unpacked}
         $installed=@()
         foreach($file in $engine.files){
@@ -63,8 +68,9 @@ try {
             $installed+=@{name=$file.target;sha256=$hash}
         }
         @{id=$engine.id;version=$engine.version;url=$engine.url;archiveSha256=$engine.sha256;files=$installed} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
-        Write-Host ($engine.id+' installed and verified.')
+        Write-SetupProgress ($label+' · 安装并校验完成') 100
     }
+    Assert-SetupNotCancelled
 }finally{
     $resolved=[IO.Path]::GetFullPath($stage)
     if(-not $resolved.StartsWith($BinDirectory.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($resolved) -notmatch '^\.setup-[a-f0-9]{32}$'){throw 'Unsafe cleanup target'}

@@ -38,14 +38,23 @@ function Start-ManagedOperation([string]$title,[string]$command){
     $info.Arguments='-NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand '+$encoded
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
     $info.StandardOutputEncoding=New-Object Text.UTF8Encoding($false);$info.StandardErrorEncoding=New-Object Text.UTF8Encoding($false)
+    $cancelPath=Join-Path ([IO.Path]::GetTempPath()) ('jingcai-setup-cancel-'+[Guid]::NewGuid().ToString('N'))
+    $info.EnvironmentVariables['JINGCAI_SETUP_CANCEL_FILE']=$cancelPath
     try{
         $p=New-Object Diagnostics.Process;$p.StartInfo=$info;[void]$p.Start()
-        $script:job=@{process=$p;stdout=$p.StandardOutput.ReadLineAsync();stderr=$p.StandardError.ReadLineAsync();title=$title;outDone=$false;errDone=$false}
+        $script:job=@{process=$p;stdout=$p.StandardOutput.ReadLineAsync();stderr=$p.StandardError.ReadLineAsync();title=$title;outDone=$false;errDone=$false;cancelPath=$cancelPath;cancelRequested=$false}
+        $cancelButton.Enabled=($command -match 'install.ps1|repair.ps1|portable.ps1|SETUP_CANCEL_TEST');$cancelButton.Visible=$true
         $timer.Start()
     }catch{
-        $progress.Visible=$false;$script:actionButtons|ForEach-Object {$_.Enabled=$true};$idInput.ReadOnly=$false;$folderInput.ReadOnly=$false
+        $progress.Visible=$false;$cancelButton.Visible=$false;$script:actionButtons|ForEach-Object {$_.Enabled=$true};$idInput.ReadOnly=$false;$folderInput.ReadOnly=$false
         Read-Installation;$stateLabel.Text='启动失败，可重试';$logBox.Text=$_.Exception.Message
     }
+}
+function Request-SetupCancellation{
+    if(-not $script:job -or -not $cancelButton.Enabled){return}
+    [IO.File]::WriteAllText($script:job.cancelPath,'cancel')
+    $script:job.cancelRequested=$true;$cancelButton.Enabled=$false
+    $stateLabel.Text='正在取消，等待连接返回或当前写入完成；不会停止已有下载任务。'
 }
 function Update-ManagedOperation{
     if(-not $script:job){return}
@@ -57,15 +66,24 @@ function Update-ManagedOperation{
         while(-not $j[$done] -and $j[$stream].IsCompleted -and $lines -lt 80){
             $line=$j[$stream].Result
             if($null -eq $line){$j[$done]=$true;break}
+            if($line -match '^JINGCAI_PROGRESS\|(-?\d+)\|(.*)$'){
+                $percent=[int]$Matches[1];$message=$Matches[2]
+                if($percent -ge 0){$progress.Style='Continuous';$progress.Value=[Math]::Min(100,$percent)}else{$progress.Style='Marquee'}
+                if(-not $j.cancelRequested){$stateLabel.Text=$message}
+                $script:lastSetupProgress=$percent
+                $line=$message
+            }
             if($logBox.TextLength -gt 60000){$logBox.Text=$logBox.Text.Substring($logBox.TextLength-30000)}
             $logBox.AppendText($line+[Environment]::NewLine);$j[$stream]=$reader.ReadLineAsync();$lines++
         }
     }
     if($j.process.HasExited -and $j.outDone -and $j.errDone){
-        $code=$j.process.ExitCode;$title=$j.title;$j.process.Dispose();$script:job=$null;$timer.Stop();$progress.Visible=$false
+        $code=$j.process.ExitCode;$title=$j.title;$cancelled=$j.cancelRequested;$j.process.Dispose();$script:job=$null;$timer.Stop();$progress.Visible=$false;$cancelButton.Visible=$false
+        if(Test-Path -LiteralPath $j.cancelPath){Remove-Item -LiteralPath $j.cancelPath -Force}
         $script:actionButtons|ForEach-Object {$_.Enabled=$true};$idInput.ReadOnly=$false;$folderInput.ReadOnly=$false
         Read-Installation
-        $stateLabel.Text=if($code -eq 0){$title+'完成。请在 Chrome 重新加载扩展，再打开侧栏。'}else{$title+'未完成，请查看下方日志；修正后可以重试。'}
+        $stateLabel.Text=if($code -eq 0){$title+'完成。请在 Chrome 重新加载扩展，再打开侧栏。'}elseif($cancelled){'已取消，可关闭窗口或重新更新 / 修复。'}else{$title+'未完成，请查看下方日志；修正后可以重试。'}
+        if($script:closeAfterOperation){$form.Close()}
     }
 }
 $form=New-Object Windows.Forms.Form;$form.Text='精彩摘录 · 安装与管理';$form.Size=New-Object Drawing.Size(780,800);$form.MinimumSize=New-Object Drawing.Size(720,620);$form.Height=[Math]::Min(800,[Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height-40);$form.StartPosition='CenterScreen';$form.Font=New-Object Drawing.Font('Microsoft YaHei UI',10);$form.BackColor=[Drawing.ColorTranslator]::FromHtml('#F3F6F4');$form.AutoScaleMode='Dpi'
@@ -91,7 +109,7 @@ $main.Controls.Add((New-Label '摘录保存目录（下载目录在扩展内单�
 $row=New-Row;$folderInput=New-Object Windows.Forms.TextBox;$folderInput.Width=485;$folderInput.Margin='0,4,10,0';$browse=New-Button '选择目录' 135;$row.Controls.AddRange(@($folderInput,$browse));$main.Controls.Add($row)
 $browse.Add_Click({$dialog=New-Object Windows.Forms.FolderBrowserDialog;$dialog.Description='选择摘录 JSON 保存位置';if(Test-Path -LiteralPath $folderInput.Text){$dialog.SelectedPath=$folderInput.Text};if($dialog.ShowDialog($form) -eq 'OK'){$folderInput.Text=$dialog.SelectedPath};$dialog.Dispose()})
 $row=New-Row;$installButton=New-Button '安装并连接 Chrome' 210;$installButton.BackColor=[Drawing.ColorTranslator]::FromHtml('#18705A');$installButton.ForeColor=[Drawing.Color]::White;$repairButton=New-Button '更新 / 修复' 150;$row.Controls.AddRange(@($installButton,$repairButton));$main.Controls.Add($row)
-$main.Controls.Add((New-Label '首次安装会联网下载引擎。更新前请暂停下载任务；无需卸载 Chrome 扩展。' 38))
+$main.Controls.Add((New-Label '首次准备 Node.js、yt-dlp、aria2 和 FFmpeg；已校验文件会复用。进度条显示当前文件，更新前请暂停下载任务。' 48))
 $installButton.Add_Click({
     $id=$idInput.Text.Trim();$dir=$folderInput.Text.Trim().Trim('"')
     if($id -cnotmatch '^[a-p]{32}$'){[Windows.Forms.MessageBox]::Show('请粘贴 Chrome 中显示的 32 位扩展 ID。','检查扩展 ID')|Out-Null;return}
@@ -103,6 +121,7 @@ $help=New-Page '使用说明'
 $help.Controls.Add((New-Label '安装好以后，日常使用只需点击 Chrome 工具栏里的“精彩摘录”。' 45))
 $help.Controls.Add((New-Label '• 内容摘录：选中文字或网址 → 右键保存。\n• 视频 / 图集：载入网页 → 获取内容 → 选择画质或图片 → 下载。\n• 文件下载：粘贴链接 → 预览内容 → 确认下载。'.Replace('\n',[Environment]::NewLine) 110))
 $help.Controls.Add((New-Label '关闭侧栏不影响后台下载。请保留已加载的 extension 文件夹。' 40))
+$help.Controls.Add((New-Label '安装下载遵循 HTTP 代理环境变量或 Windows 系统代理；Clash TUN / 分流也会影响连接。百分比为当前文件进度；连接、校验、解压或未知大小时显示等待动画。' 75))
 $row=New-Row;$intro=New-Button '查看功能介绍' 160;$release=New-Button '获取最新版本' 160;$row.Controls.AddRange(@($intro,$release));$help.Controls.Add($row)
 $intro.Add_Click({[Diagnostics.Process]::Start((Join-Path $root '功能介绍.html'))|Out-Null})
 $release.Add_Click({[Diagnostics.Process]::Start('https://github.com/aben1900/chromeget/releases/latest')|Out-Null})
@@ -121,24 +140,33 @@ $unportable.Add_Click({Start-ManagedOperation '退出便携模式' ('& '+(Quote-
 $advanced.Controls.Add((New-Label '解除连接后，扩展无法保存或下载，重新安装即可恢复。' 35))
 $uninstall=New-Button '解除本地连接（卸载）' 230;$uninstall.ForeColor=[Drawing.ColorTranslator]::FromHtml('#A43C30');$advanced.Controls.Add($uninstall)
 $uninstall.Add_Click({if([Windows.Forms.MessageBox]::Show('确定解除本地连接？个人文件和下载任务会保留；Chrome 扩展需要自行移除。','解除连接','YesNo','Warning') -eq 'Yes'){Start-ManagedOperation '解除连接' ('& '+(Quote-PS (Join-Path $root 'native\uninstall.ps1')))}})
-$progress=New-Object Windows.Forms.ProgressBar;$progress.Dock='Fill';$progress.Visible=$false;$layout.Controls.Add($progress,0,2)
+$progressRow=New-Object Windows.Forms.TableLayoutPanel;$progressRow.Dock='Fill';$progressRow.ColumnCount=2;$progressRow.RowCount=1
+[void]$progressRow.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle('Percent',100)));[void]$progressRow.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle('Absolute',110)))
+$progress=New-Object Windows.Forms.ProgressBar;$progress.Dock='Fill';$progress.Visible=$false;$progressRow.Controls.Add($progress,0,0)
+$cancelButton=New-Button '取消操作' 100;$cancelButton.Dock='Fill';$cancelButton.Margin='4,0,0,0';$cancelButton.Visible=$false;$cancelButton.Add_Click({Request-SetupCancellation});$progressRow.Controls.Add($cancelButton,1,0)
+$layout.RowStyles[2].Height=34;$layout.Controls.Add($progressRow,0,2)
 $logBox=New-Object Windows.Forms.TextBox;$logBox.Multiline=$true;$logBox.ReadOnly=$true;$logBox.ScrollBars='Vertical';$logBox.Dock='Fill';$logBox.BackColor=[Drawing.Color]::White;$logBox.Font=New-Object Drawing.Font('Consolas',9);$layout.Controls.Add($logBox,0,3)
 $stateLabel=New-Label '' 46;$stateLabel.Dock='Fill';$layout.Controls.Add($stateLabel,0,4)
 $script:actionButtons=@($installButton,$repairButton,$browse,$engineButton,$portable,$unportable,$uninstall)
 $timer=New-Object Windows.Forms.Timer;$timer.Interval=150;$timer.Add_Tick({Update-ManagedOperation})
-$form.Add_FormClosing({param($sender,$eventArgs);if($script:job){$eventArgs.Cancel=$true;[Windows.Forms.MessageBox]::Show('操作仍在进行，请等待完成后关闭，以免安装不完整。','请稍候')|Out-Null}})
+$form.Add_FormClosing({param($sender,$eventArgs);if($script:job){$eventArgs.Cancel=$true;if($cancelButton.Enabled){if([Windows.Forms.MessageBox]::Show('是否取消安装准备并关闭？已有下载任务不会停止；正在写入的步骤完成后退出。','取消并关闭','YesNo','Question') -eq 'Yes'){$script:closeAfterOperation=$true;Request-SetupCancellation}}else{$script:closeAfterOperation=$true;$stateLabel.Text='已安排完成当前操作后自动关闭。'}}})
 if($SelfTest){
     $installRoot=Join-Path $root 'work\gui-empty-install';Read-Installation
     if($tabs.TabPages.Count -ne 3 -or $repairButton.Enabled){throw 'Initial UI state failed'}
     if((Quote-PS "D:\a'b") -ne "'D:\a''b'"){throw 'Argument quoting failed'}
-    Start-ManagedOperation '测试' "Write-Output 'GUI smoke test'; exit 0"
+    Start-ManagedOperation '测试' "Write-Output 'GUI smoke test'; Write-Output 'JINGCAI_PROGRESS|42|node 42% 1.2 MiB/s'; exit 0"
     $deadline=[DateTime]::UtcNow.AddSeconds(15)
     while($script:job -and [DateTime]::UtcNow -lt $deadline){Update-ManagedOperation;Start-Sleep -Milliseconds 100}
-    if($script:job -or $logBox.Text -notmatch 'GUI smoke test' -or $logBox.Text -match 'CLIXML' -or -not $installButton.Enabled){throw 'Asynchronous operation test failed'}
+    if($script:job -or $logBox.Text -notmatch 'GUI smoke test' -or $logBox.Text -match 'CLIXML|JINGCAI_PROGRESS' -or $script:lastSetupProgress -ne 42 -or -not $installButton.Enabled){throw 'Asynchronous operation test failed'}
     Start-ManagedOperation '失败测试' "Write-Output 'Expected failure'; exit 7"
     $deadline=[DateTime]::UtcNow.AddSeconds(15)
     while($script:job -and [DateTime]::UtcNow -lt $deadline){Update-ManagedOperation;Start-Sleep -Milliseconds 100}
     if($script:job -or $stateLabel.Text -notmatch '未完成' -or -not $installButton.Enabled){throw 'Failure recovery test failed'}
+    Start-ManagedOperation '取消测试' "# SETUP_CANCEL_TEST`nwhile (-not (Test-Path -LiteralPath `$env:JINGCAI_SETUP_CANCEL_FILE)) { Start-Sleep -Milliseconds 100 }; exit 2"
+    $flag=$script:job.cancelPath;Request-SetupCancellation
+    $deadline=[DateTime]::UtcNow.AddSeconds(15)
+    while($script:job -and [DateTime]::UtcNow -lt $deadline){Update-ManagedOperation;Start-Sleep -Milliseconds 100}
+    if($script:job -or $stateLabel.Text -notmatch '已取消' -or (Test-Path -LiteralPath $flag) -or -not $installButton.Enabled){throw 'Cooperative cancellation failed'}
     $logBox.Text='准备就绪。安装进度和日志将在这里显示。';Read-Installation
     if($SnapshotPath){$form.Show();[Windows.Forms.Application]::DoEvents();$bitmap=New-Object Drawing.Bitmap($form.Width,$form.Height);$form.DrawToBitmap($bitmap,(New-Object Drawing.Rectangle(0,0,$form.Width,$form.Height)));$bitmap.Save($SnapshotPath);$bitmap.Dispose();$form.Hide()}
     $form.Dispose();Write-Output 'PASS GUI: three tabs, argument quoting, asynchronous output, completion and controls restored; no installation or registry changes.';exit

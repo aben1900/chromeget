@@ -142,7 +142,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(message.action==='video-gallery-start' && !host.capabilities?.includes('gallery-select')) throw Error('请更新本地程序以下载所选图片。');
       if(['video-hf-info','video-file-start','video-file-probe','video-transfer-settings'].includes(message.action) && !host.capabilities?.includes('parallel-files')) throw Error('请运行开始使用.cmd → 更新 / 修复 更新高速下载模块。');
       if(message.genericFile && !host.capabilities?.includes('generic-files'))throw Error('请运行开始使用.cmd → 更新 / 修复 更新普通文件下载功能。');
-      if(message.action==='video-pause' && !host.capabilities?.includes('task-progress'))throw Error('请更新本地程序以使用暂停功能。');
+      if(message.action==='video-pause' && !host.capabilities?.includes('task-progress'))throw Error(`当前连接的本地程序未声明暂停能力（版本：${host.version || '未知'}；路径：${host.hostPath || '未提供'}）。请运行“开始使用.cmd → 更新 / 修复”，然后在 chrome://extensions 重新加载精彩摘录并重新打开侧边栏。更新扩展本身不会更新本地程序。`);
       if((message.action==='video-file-probe'||message.genericMedia||message.maxActive!==undefined) && !host.capabilities?.includes('download-suite'))throw Error('请更新本地程序以使用探测、队列或通用流媒体功能。');
       let cookieText;
       if (message.action === 'video-browser-cookies') {

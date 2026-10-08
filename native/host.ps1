@@ -50,7 +50,7 @@ try {
         . (Join-Path $PSScriptRoot 'video.ps1')
         $response = Invoke-VideoAction $message
     } elseif ($message.action -eq 'status') {
-        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.25.1'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.26.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
     } elseif ($message.action -eq 'choose-json') {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = New-Object System.Windows.Forms.OpenFileDialog

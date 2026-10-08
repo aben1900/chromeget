@@ -22,7 +22,7 @@ try{
         $version=(Get-Content -LiteralPath (Join-Path $root 'extension\manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json).version
         $dist=Join-Path $root 'dist';[IO.Directory]::CreateDirectory($dist)|Out-Null
         $zip=Join-Path $dist ('chromeget-v'+$version+'-windows-x64-setup.zip')
-        $forbidden=Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object {$_.Extension -in @('.exe','.dll','.log','.zip') -or $_.Name -match '^(config|host|video-settings|portable-host|portable-registration)\.json$'}
+        $forbidden=Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object {$_.Extension -in @('.exe','.dll','.log','.zip') -or $_.Name -match '(jingcai-backup|jingcai-restore|^selection-|^preview-|^receipt-)' -or $_.Name -match '^(config|host|video-settings|portable-host|portable-registration)\.json$'}
         if($forbidden){throw 'Unexpected private/runtime file in public package'}
     }
     Compress-Archive -LiteralPath @((Get-ChildItem -LiteralPath $stage).FullName) -DestinationPath $zip -Force

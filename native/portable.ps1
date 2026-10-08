@@ -4,7 +4,7 @@ $manifestPath=Join-Path $PSScriptRoot 'portable-host.json'
 $backupPath=Join-Path $PSScriptRoot 'portable-registration.json'
 $registryPath='Software\Google\Chrome\NativeMessagingHosts\cn.jingcai.clipper'
 if($Check){
-    foreach($name in @('library.ps1','library.cjs','library-export.cjs','library-zip.cjs','diagnostics.ps1','recovery.ps1','host.cmd','host.ps1','video.ps1','range-engine.cs','bin\aria2c.exe','bin\yt-dlp.exe','bin\ffmpeg.exe','bin\ffprobe.exe','bin\node.exe')){
+    foreach($name in @('journal-lock.ps1','library-backup.cjs','library-backup-model.cjs','library.ps1','library.cjs','library-export.cjs','library-zip.cjs','diagnostics.ps1','recovery.ps1','host.cmd','host.ps1','video.ps1','range-engine.cs','bin\aria2c.exe','bin\yt-dlp.exe','bin\ffmpeg.exe','bin\ffprobe.exe','bin\node.exe')){
         if(-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))){throw ('Missing portable dependency: '+$name)}
     }
     Write-Output 'Portable dependencies present. Registration has not been changed.';exit

@@ -1,9 +1,9 @@
 'use strict';
 const crypto=require('node:crypto'),path=require('node:path');
-const MAX_BYTES=104857600,UUID=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i,DOWNLOAD=/^download:[a-f0-9]{32}$/;
+const MAX_BYTES=104857600,UUID=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/,DOWNLOAD=/^download:[a-f0-9]{32}$/;
 const plain=v=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.getPrototypeOf(v)===Object.prototype;
 function check(ok,message){if(!ok)throw Error(message);}
-function tree(v,depth=0){check(depth<=20,'备份对象不能超过 20 层');if(v===null||typeof v==='string'||typeof v==='boolean')return;if(typeof v==='number'){check(Number.isFinite(v),'数值无效');return;}check(Array.isArray(v)||plain(v),'备份字段类型无效');for(const k of Object.keys(v)){check(!['__proto__','constructor','prototype'].includes(k),'备份包含危险属性');tree(v[k],depth+1);}}
+function tree(v,depth=0){check(depth<=20,'备份对象不能超过 20 层');if(v===null||typeof v==='string'||typeof v==='boolean')return;if(typeof v==='number'){check(Number.isFinite(v),'数值无效');return;}check(Array.isArray(v)||plain(v),'备份字段类型无效');const keys=Object.keys(v);if(!Array.isArray(v)){check(keys.every(k=>k.length>0),'备份字段名称不能为空');check(new Set(keys.map(k=>k.toLowerCase())).size===keys.length,'备份字段包含仅大小写不同的重名，无法兼容本地读取');}for(const k of keys){check(!['__proto__','constructor','prototype'].includes(k),'备份包含危险属性');tree(v[k],depth+1);}}
 function canonical(v){if(Array.isArray(v))return '['+v.map(canonical).join(',')+']';if(plain(v))return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}';return JSON.stringify(v);}
 const hash=v=>crypto.createHash('sha256').update(v).digest('hex');
 function url(v,id){if(v===undefined||v==='')return;let u;try{u=new URL(v);}catch{}check(typeof v==='string'&&u&&['http:','https:'].includes(u.protocol)&&!u.username&&!u.password,'记录 '+id+' 来源地址无效');}

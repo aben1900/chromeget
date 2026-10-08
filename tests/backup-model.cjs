@@ -22,3 +22,6 @@ const other=structuredClone(d);other.origin='b'.repeat(64);other.index.downloads
 d.index.downloads[download].files[0].path='C:\\secret.txt';assert.throws(()=>validateSnapshot(d),/路径/);
 console.log('PASS backup model roundtrip, merge, limits, integrity, hostile input and download origin conflicts');
 const imported=mergeSnapshots(empty(),other).snapshot;assert.equal(imported.index.downloads[download].backupOrigin,other.origin,'retain original download provenance');assert.equal(mergeSnapshots(imported,other).counts.downloadConflicts,0,'repeat restore keeps same provenance');
+const upper=empty();upper.records=[{...r,id:'ABCDEF12-ABCD-1234-1234-ABCDEF123456'}];assert.throws(()=>validateSnapshot(upper),/编号|字段/);
+const caseKeys=empty();caseKeys.records=[{...r,extra:{A:1,a:2}}];assert.throws(()=>validateSnapshot(caseKeys),/大小写/);
+const emptyKey=empty();emptyKey.records=[{...r,extra:{'':1}}];assert.throws(()=>validateSnapshot(emptyKey),/空/);

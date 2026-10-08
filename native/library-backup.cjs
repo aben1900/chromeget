@@ -20,6 +20,7 @@ function recover(ctx){const p=noLinks(path.join(ctx.directory,MARKER));if(!fs.ex
  fs.unlinkSync(p);return {recovered:true};
 }
 function commitPair(ctx,id,before,next,result,hooks={}){recover(ctx);if(fingerprint(readPair(ctx))!==fingerprint(before))throw Error('资料已变化，请重新预览');model.validateSnapshot(next);statePath(ctx,'receipt',id);const after={journal:JSON.stringify(next.records,null,2),index:JSON.stringify(next.index,null,2)},p=path.join(ctx.directory,MARKER);const transaction={version:1,origin:origin(ctx),id,phase:'pending',before,after,beforeHash:fingerprint(before),afterHash:fingerprint(after),result};let committed=false;
+ for(const value of Object.values(after))if(Buffer.byteLength(value,'utf8')>model.MAX_BYTES)throw Error('合并后的资料文件超过 100 MiB，请减少资料后重新预览');if(Buffer.byteLength(JSON.stringify(transaction),'utf8')>model.MAX_BYTES*4)throw Error('恢复事务超过安全读取上限，资料未改动');
  try{json(p,transaction);hooks.afterPending?.();writeRaw(path.join(ctx.directory,FILES.journal),after.journal);hooks.afterJournal?.();writeRaw(path.join(ctx.directory,FILES.index),after.index);hooks.afterIndex?.();transaction.phase='committed';json(p,transaction);committed=true;hooks.afterCommitted?.();json(statePath(ctx,'receipt',id),result);hooks.afterReceipt?.();hooks.beforeCleanup?.();fs.unlinkSync(p);return result;}catch(e){if(!committed)recover(ctx);throw e;}
 }
 module.exports={readPair,snapshotPair,recover,commitPair,writeRaw,json,origin,fingerprint,statePath,receipt};

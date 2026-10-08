@@ -2,6 +2,15 @@
 <header><a class="brand" href="library.html">摘 <span>精彩摘录</span></a><span class="local">保存在你的电脑</span></header>
 <main><div class="heading"><div><p class="eyebrow">收好，也找得到</p><h1>我的资料库</h1><p class="muted">摘录、视频、图片与文件，在这里整理和复用。</p></div><button id="refresh">刷新资料</button></div>
 <details id="recentExports" class="organize"><summary>最近导出（最多 10 项）</summary><button id="refreshExports">刷新导出状态</button><p id="recentExportHint" role="status"></p><div id="recentExportList"></div></details>
+<details id="backupPanel" class="organize"><summary>备份与恢复</summary>
+<p>备份摘录、来源、标签、集合与下载资料索引，<strong>不包含实际下载文件</strong>。仅恢复本扩展的专用备份，最多 100 MiB、100000 条摘录。</p>
+<p class="muted">备份包含私人原文和路径，请勿公开上传。建议复制到另一磁盘；同一磁盘上的备份不能抵御磁盘损坏。</p>
+<div class="row"><button id="backupCreate">创建本地备份</button><button id="restoreChoose">选择备份文件</button></div>
+<p id="backupStatus" role="status" aria-live="polite"></p><button id="restoreCheck" hidden>核对恢复结果</button>
+<section id="restorePreview" hidden><h2>确认恢复范围</h2><p id="restoreTarget"></p><p id="restoreStats"></p><p>相同内容跳过；同编号冲突保留当前内容。标签与集合合并。下载仅恢复元信息和原路径，文件缺失时不会重新下载。</p><details><summary>查看冲突摘要（最多 50 项）</summary><ul id="restoreConflicts"></ul></details><p class="muted">确认后先自动备份当前资料，再合并恢复。预览 15 分钟有效；期间资料有变化须重新预览。</p></section>
+<button id="restoreApply" disabled>确认合并恢复</button>
+<details id="backupHistory"><summary>已有本地备份</summary><button id="backupRefresh">刷新备份列表</button><p id="backupListStatus" role="status"></p><div id="backupList"></div><div class="pagination"><button id="backupPrevious" disabled>上一页</button><span id="backupPage"></span><button id="backupNext" disabled>下一页</button></div></details>
+</details>
 <form id="searchForm" class="filters"><label class="search">搜索资料<input id="query" type="search" placeholder="正文、标题、作者或文件名" maxlength="300"></label><button type="submit">搜索</button><label>类型<select id="type"><option value="">全部类型</option></select></label><label>来源<select id="source"><option value="">全部来源</option></select></label><label>标签<select id="tag"><option value="">全部标签</option></select></label><label>集合<select id="collection"><option value="">全部集合</option></select></label></form>
 <p id="error" role="alert"></p><p id="status" role="status" aria-live="polite">正在读取本地资料…</p><p id="warnings" class="muted"></p>
 <details class="organize"><summary>管理标签与集合</summary><form id="taxonomyForm" class="row"><label>分类<select id="taxonomyKind"><option value="tags">标签</option><option value="collections">集合</option></select></label><label>名称<input id="taxonomyName" maxlength="60" required placeholder="例如：研究资料"></label><label>操作<select id="taxonomyOperation"><option value="create">新建</option><option value="rename">重命名</option><option value="delete">删除分类</option></select></label><label>新名称<input id="taxonomyNew" maxlength="60" placeholder="重命名时填写"></label><button>应用</button></form><p class="muted">删除分类只移除整理关联，原始资料和文件保留。</p></details>
@@ -13,4 +22,4 @@
 <section id="editPanel" class="panel" hidden><h2>整理资料</h2><p id="editCount"></p><fieldset><legend>标签（替换所选资料的标签）</legend><div id="editTags" class="checks"></div></fieldset><fieldset><legend>集合（替换所选资料的集合）</legend><div id="editCollections" class="checks"></div></fieldset><label id="authorField">作者<input id="editAuthor" maxlength="120" placeholder="未知时可留空"></label><div class="row"><button id="saveEdit">保存整理</button><button id="cancelEdit" class="quiet">取消</button></div></section>
 <section id="exportPanel" class="panel" hidden><h2>导出资料</h2><p>每次最多 100 份资料、10000 个文件。导出到本机资料目录的“导出”文件夹。</p><label>格式<select id="exportFormat"><option value="md">Markdown 文档</option><option value="zip">项目资料包 ZIP</option></select></label><label><input id="includeFiles" type="checkbox" checked>ZIP 包含所选资料的本地文件</label><div class="row"><button id="prepareExport">准备导出预览</button><button id="cancelExport" class="quiet">关闭</button></div><p id="exportPreview" role="status"></p><label id="skipMissingLabel" hidden><input id="skipMissing" type="checkbox">跳过缺失文件，并写入导出清单</label><button id="startExport" hidden>确认导出</button><p id="exportStatus" role="status" aria-live="polite"></p></section>
 <footer>搜索覆盖文字和文件元信息；不解析图片文字、视频语音或文件正文。外部 JSON 仍在侧栏“内容摘录”查看。</footer></main>
-<script src="library-model.js"></script><script src="library.js"></script></body></html>
+<script src="library-model.js"></script><script src="library.js"></script><script src="library-backup.js"></script></body></html>

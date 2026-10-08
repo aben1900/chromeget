@@ -21,3 +21,4 @@ const download='download:'+'b'.repeat(32);const d=empty();d.index.downloads[down
 const other=structuredClone(d);other.origin='b'.repeat(64);other.index.downloads[download].directory='D:\\data';other.index.downloads[download].files[0].path='D:\\data\\a.txt';assert.equal(mergeSnapshots(d,other).counts.downloadConflicts,1);
 d.index.downloads[download].files[0].path='C:\\secret.txt';assert.throws(()=>validateSnapshot(d),/路径/);
 console.log('PASS backup model roundtrip, merge, limits, integrity, hostile input and download origin conflicts');
+const imported=mergeSnapshots(empty(),other).snapshot;assert.equal(imported.index.downloads[download].backupOrigin,other.origin,'retain original download provenance');assert.equal(mergeSnapshots(imported,other).counts.downloadConflicts,0,'repeat restore keeps same provenance');

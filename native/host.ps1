@@ -1,5 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+. (Join-Path $PSScriptRoot 'recovery.ps1')
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $inputStream = [Console]::OpenStandardInput()
 $outputStream = [Console]::OpenStandardOutput()
@@ -27,6 +28,10 @@ try {
     $length = [BitConverter]::ToUInt32((Read-Exact 4), 0)
     if ($length -lt 2 -or $length -gt 1048576) { throw '单条记录不能超过 1 MB。' }
     $message = $utf8.GetString((Read-Exact ([int]$length))) | ConvertFrom-Json
+    if ($message.action -eq 'diagnostics') {
+        . (Join-Path $PSScriptRoot 'diagnostics.ps1')
+        $response=Get-SetupDiagnostics -HostRoot $PSScriptRoot -ExpectedExtensionId $message.extensionId -FullIntegrity:($message.fullIntegrity -eq $true)
+    } else {
     $config = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'config.json'), $utf8) | ConvertFrom-Json
     $directory = [IO.Path]::GetFullPath($config.directory)
     $journal = Join-Path $directory '摘录数据.json'
@@ -42,7 +47,7 @@ try {
         . (Join-Path $PSScriptRoot 'video.ps1')
         $response = Invoke-VideoAction $message
     } elseif ($message.action -eq 'status') {
-        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.20.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.24.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
     } elseif ($message.action -eq 'choose-json') {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -122,8 +127,9 @@ try {
         if ($message.action -eq 'delete') { $response.deleted = $beforeCount - $records.Count }
       }
     } else { throw "本地程序 1.19.0 不支持操作：$($message.action)。请重新加载扩展。" }
+    }
 } catch {
-    $response = @{ok = $false; error = $_.Exception.Message}
+    $response = New-RecoveryError -Message $_.Exception.Message -Code $_.Exception.Data['code']
 } finally {
     if ($locked) { $mutex.ReleaseMutex() }
     if ($mutex) { $mutex.Dispose() }

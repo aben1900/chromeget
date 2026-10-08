@@ -1,5 +1,5 @@
 const HOST = 'cn.jingcai.clipper';
-importScripts('prompt-title.js', 'browser-cookies.js', 'video-url.js', 'sniffer.js', 'page-links.js', 'hover-control.js');
+importScripts('recovery.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'sniffer.js', 'page-links.js', 'hover-control.js');
 const kinds = {comment: '评论', review: '评阅', content: '内容', prompt: '提示词', link: '网页地址', page: '网页地址'};
 let serial = Promise.resolve();
 function exclusive(fn) {
@@ -10,8 +10,8 @@ function exclusive(fn) {
 function native(message) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendNativeMessage(HOST, message, response => {
-      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-      if (!response?.ok) return reject(new Error(response?.error || '本地保存程序没有返回结果'));
+      if (chrome.runtime.lastError) return reject(Recovery.toError({error:chrome.runtime.lastError.message,code:'HOST_UNAVAILABLE'}));
+      if (!response?.ok) return reject(Recovery.toError(response || {error:'本地保存程序没有返回结果'}));
       resolve(response);
     });
   });
@@ -109,6 +109,19 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if(message.action==='check-connection' && sender.id===chrome.runtime.id && ['app.html','collect.html'].some(p=>sender.url===chrome.runtime.getURL(p))){
+    (async()=>{
+      let timer;const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Recovery.toError({code:'HOST_UNAVAILABLE',error:'连接检查超时，请重试'})),12000);});
+      try{
+        const host=await Promise.race([native({action:'status'}),deadline]);
+        if(!host.capabilities?.includes('setup-diagnostics'))return {ok:true,connected:true,hostVersion:host.version,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},{id:'version',state:'fail',message:'旧版程序不支持自检，请运行开始使用.cmd → 更新 / 修复'}]};
+        try{
+          const report=await Promise.race([native({action:'diagnostics',extensionId:chrome.runtime.id}),deadline]);
+          return {...report,connected:true,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},...(report.checks||[]).filter(c=>c.id!=='browser')]};
+        }catch(e){return {ok:true,connected:true,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},{id:'diagnostics',state:'fail',message:'本机检查未完成，请在管理中心检查'}]};}
+      }catch(e){return {...Recovery.response(e),connected:false,checks:[{id:'browser',state:'fail',message:'Chrome 尚未连接本地程序'}]};}finally{clearTimeout(timer);}
+    })().then(reply,e=>reply(Recovery.response(e)));return true;
+  }
   if(message.action==='page-video-download' && sender.id===chrome.runtime.id && Number.isInteger(sender.tab?.windowId) && sender.frameId===0 && webpageUrl(sender.url)){
     const requestedPage=supportedVideoUrl(message.pageUrl);
     const originName=websiteName(sender.url),targetName=websiteName(requestedPage);
@@ -154,7 +167,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       const result=await native({action:message.action,url:message.url,height:message.height,mediaMode:message.mediaMode,audioFormat:message.audioFormat,id:message.id,directory:message.directory,site:message.site,cookieText,draftId:message.draftId,confirmed:message.confirmed,selectedIndexes:message.selectedIndexes,title:message.title,statusFilter:message.statusFilter,offset:message.offset,transferMode:message.transferMode,genericFile:message.genericFile,filename:message.filename,checksum:message.checksum,genericMedia:message.genericMedia,referer:message.referer,maxActive:message.maxActive,autoClassify:message.autoClassify,adaptive:message.adaptive});
       if(['video-start','video-gallery-start','video-file-start','video-resume'].includes(message.action)) await chrome.storage.local.set({lastVideoJob:result.id,lastVideoSelection:{url:message.url,height:message.height}});
       return {...result,hostVersion:host.version,hostPath:host.hostPath};
-    })().then(reply,error=>reply({ok:false,error:`${message.action}：${error.message}`}));
+    })().then(reply,error=>reply(Recovery.response(error)));
     return true;
   }
   if (sender.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL('prompt.html?draft='))) {

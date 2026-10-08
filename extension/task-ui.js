@@ -51,7 +51,7 @@ function setupTaskBatch(items,send,poll){
 function renderTaskCard(task,send,poll){
   const m=taskMetrics(task),card=taskNode('article','download-task monitor-card');
   const heading=taskNode('div','monitor-heading'),check=document.createElement('input');check.type='checkbox';check.className='task-selection';check.checked=selectedTasks.has(task.id);check.setAttribute('aria-label','选择任务 '+(task.title||task.id));check.addEventListener('change',()=>{check.checked?selectedTasks.add(task.id):selectedTasks.delete(task.id);refreshTaskSelection();});
-  heading.append(check,taskNode('p','monitor-title',task.title||task.source||'下载任务'));card.append(heading);
+  heading.append(check,taskNode('p','monitor-title',task.title||(typeof Recovery!=='undefined'?Recovery.redact(task.source):task.source)||'下载任务'));card.append(heading);
   const state=({queued:'排队中',starting:'准备中',running:'下载中 / 处理中',paused:'已暂停',failed:'已中断',completed:'已完成'})[task.state]||task.state;
   const topline=taskNode('div','monitor-topline');topline.append(taskNode('span','state-chip '+task.state,state),taskNode('strong','monitor-percent',m.percent===null?'准备连接':m.percent.toFixed(1)+'%'));card.append(topline);
   const track=taskNode('div','monitor-track'),fill=taskNode('span');track.setAttribute('role','progressbar');track.setAttribute('aria-label','下载进度');track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');if(m.percent!==null)track.setAttribute('aria-valuenow',String(m.percent));else track.classList.add('indeterminate');fill.style.width=(m.percent??25)+'%';track.append(fill);card.append(track);
@@ -87,8 +87,8 @@ function renderTaskCard(task,send,poll){
   const rate=taskNode('span');rate.append(document.createTextNode('总速度 '),taskNode('strong','',m.speed===undefined?'—':formatBytes(m.speed)+'/s'));
   const remaining=taskNode('span');remaining.append(document.createTextNode('剩余 '),taskNode('strong','',task.state==='completed'?'已完成':formatEta(m.eta)));footer.append(rate,remaining);panel.append(footer);segments.append(panel);
   const logs=taskNode('details','task-log-details');logs.open=expandedLogs.has(task.id);logs.addEventListener('toggle',()=>{logs.open?expandedLogs.add(task.id):expandedLogs.delete(task.id);});
-  logs.append(taskNode('summary','','原始下载日志'),taskNode('pre','monitor-log',task.progress||'暂无日志'));segments.append(logs);card.append(segments);
-  if(task.error)card.append(taskNode('p','task-error',task.error));
+  logs.append(taskNode('summary','','原始下载日志'),taskNode('pre','monitor-log',typeof Recovery!=='undefined'?Recovery.redact(task.progress||'暂无日志'):task.progress||'暂无日志'));segments.append(logs);card.append(segments);
+  if(task.error){const problem=taskNode('div','task-error');if(typeof renderTaskRecovery==='function')renderTaskRecovery(problem,task,send,poll);else problem.textContent=typeof Recovery!=='undefined'?Recovery.redact(task.error):task.error;card.append(problem);}
   const actions=taskNode('div','task-actions');
   for(const [label,action,shown] of [['暂停','video-pause',taskCanPause(task)],['继续','video-resume',taskCanResume(task)],['打开目录','video-open-task',true],['删除','video-delete',true]]){
     if(!shown)continue;const b=taskNode('button','',label);b.disabled=pendingTaskActions.has(task.id);b.dataset.action=action;
@@ -97,7 +97,7 @@ function renderTaskCard(task,send,poll){
       if(pendingTaskActions.has(task.id))return;
       pendingTaskActions.add(task.id);actions.querySelectorAll('button').forEach(n=>n.disabled=true);refreshTaskSelection();
       const error=document.getElementById('tasksError');error.textContent='';
-      try{await send(action,{id:task.id});}catch(e){error.textContent=e.message;}
+      try{await send(action,{id:task.id});}catch(e){if(typeof Recovery!=='undefined')Recovery.setError(error,e);else error.textContent=e.message;}
       finally{pendingTaskActions.delete(task.id);const message=error.textContent;await poll();if(message)error.textContent=message;actions.querySelectorAll('button').forEach(n=>n.disabled=false);refreshTaskSelection();}
     });actions.append(b);
   }

@@ -1,0 +1,26 @@
+const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),{randomUUID}=require('crypto');
+assert.ok(fs.existsSync('extension/collect-model.js'),'collection model must exist');
+const C=require('../extension/collect-model.js');
+assert.equal(C.classify('www.example.com/a?x=1').url,'https://www.example.com/a?x=1');
+assert.equal(C.classify('正文 https://example.com').kind,'text');
+assert.equal(C.classify('https://a.test\nhttps://b.test').kind,'multi');
+assert.notEqual(C.classify('javascript:alert(1)').kind,'url');
+assert.equal(C.classify('  ').kind,'empty');
+let handler,click,offline=false,local={},session={},saves=[],menus=[];
+const noop=()=>{},root='chrome-extension://test/';
+const chrome={runtime:{id:'test',getURL:p=>root+p,onMessage:{addListener:f=>handler=f},onInstalled:{addListener:noop},onStartup:{addListener:noop},sendNativeMessage(h,m,cb){if(offline){chrome.runtime.lastError={message:'offline'};cb();chrome.runtime.lastError=null;return;}if(m.action==='save')saves.push(m.record);cb({ok:true,path:'test.json',storageFormat:'json'});}},windows:{onRemoved:{addListener:noop}},action:{onClicked:{addListener:noop},setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{},setTitle:async()=>{}},contextMenus:{onClicked:{addListener:f=>click=f}},sidePanel:{open:async()=>{}},storage:{local:{get:async()=>structuredClone(local),set:async d=>Object.assign(local,structuredClone(d))},session:{get:async k=>k===null?structuredClone(session):{[k]:structuredClone(session[k])},set:async d=>Object.assign(session,structuredClone(d)),remove:async k=>delete session[k]}}};
+const c=vm.createContext({chrome,crypto:{randomUUID},console,URL,setTimeout,clearTimeout});c.importScripts=(...files)=>files.forEach(f=>vm.runInContext(fs.readFileSync('extension/'+f,'utf8'),c));vm.runInContext(fs.readFileSync('extension/background.js','utf8'),c);
+const request=(action,extra={})=>new Promise((resolve,reject)=>{if(handler({action,windowId:1,...extra},{id:'test',url:root+'collect.html'},resolve)!==true)reject(Error('collection handler missing'));});
+(async()=>{
+ let r=await request('collect-edit',{text:'第一条',type:'内容',title:''});assert.equal(r.ok,true);const d=r.draft;
+ const send={id:d.id,revision:d.revision};await Promise.all([request('collect-save',send),request('collect-save',send)]);assert.equal(saves.length,1);assert.equal((await request('collect-state',send)).state,'saved');
+ r=await request('collect-edit',{text:'第二条',type:'内容',title:''});assert.notEqual(r.draft.id,d.id);offline=true;
+ const next={id:r.draft.id,revision:r.draft.revision};r=await request('collect-save',next);assert.equal(r.state,'pending');assert.equal(local.pending.length,1);
+ await request('collect-save',next);assert.equal(local.pending.length,1);offline=false;await request('collect-retry',next);assert.equal(saves.length,2);assert.equal(saves[1].id,next.id);
+ const interrupted=await request('collect-edit',{text:'中断的提交',type:'内容'});session['collect-draft:1'].submissionState='submitting';
+ const recovered=await request('collect-retry',{id:interrupted.draft.id});assert.equal(recovered.state,'saved','interrupted enqueue must recover same ID');assert.equal(saves[2].id,interrupted.draft.id);
+ const second=await request('collect-edit',{windowId:2,text:'另一个窗口',type:'内容'});assert.notEqual(second.draft.id,next.id);assert.equal(session['collect-draft:1'].text,'中断的提交');
+ assert.equal((await request('collect-save',{id:'stale',revision:1})).ok,false);
+ assert.equal(handler({action:'collect-save',windowId:1},{id:'test',url:'https://evil.test'},noop),undefined);
+ console.log('PASS collection classification, window isolation, duplicate saves, stable retry ID, stale draft and sender guards');
+})().catch(e=>{console.error(e);process.exitCode=1;});

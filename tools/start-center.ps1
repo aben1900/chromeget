@@ -15,14 +15,14 @@ function Open-Path([string]$path){if(Test-Path -LiteralPath $path){[Diagnostics.
 function Read-Installation{
     $script:installed=$false
     try{
-        $manifest=Get-Content -LiteralPath (Join-Path $installRoot 'host.json') -Raw | ConvertFrom-Json
-        $config=Get-Content -LiteralPath (Join-Path $installRoot 'config.json') -Raw | ConvertFrom-Json
+        $manifest=Get-Content -LiteralPath (Join-Path $installRoot 'host.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        $config=Get-Content -LiteralPath (Join-Path $installRoot 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
         $script:installed=$true
         if(-not $idInput.Text){$idInput.Text=([string]$manifest.allowed_origins[0] -replace '^chrome-extension://|/$','')}
         if(-not $folderInput.Text){$folderInput.Text=$config.directory}
     }catch{}
     if(-not $folderInput.Text){$folderInput.Text=Join-Path ([Environment]::GetFolderPath('MyDocuments')) '精彩摘录'}
-    if($script:installed){$installButton.Text='应用设置 / 重新安装';$stateLabel.Text='检测到本地安装 · 更新版本或连接异常时，点击“更新 / 修复”。'}else{$installButton.Text='安装并连接 Chrome';$stateLabel.Text='尚未检测到标准安装 · 按下面两步完成设置。'}
+    if($script:installed){$installButton.Text='应用设置 / 重新安装';$stateLabel.Text='检测到本地安装 · 更新版本或连接异常时，点击“更新 / 修复”。'}else{$installButton.Text='安装并连接 Chrome';$stateLabel.Text='尚未检测到标准安装 · 按下面三步完成设置。'}
     $repairButton.Enabled=$script:installed;$engineButton.Enabled=$script:installed
 }
 function Start-ManagedOperation([string]$title,[string]$command){

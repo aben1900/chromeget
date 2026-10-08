@@ -13,7 +13,7 @@ try {
     $InstallDirectory=[IO.Path]::GetFullPath($InstallDirectory)
     $manifestPath=Join-Path $InstallDirectory 'host.json'
     $configPath=Join-Path $InstallDirectory 'config.json'
-    $oldManifest=if(Test-Path -LiteralPath $manifestPath){Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json}else{$null}
+    $oldManifest=if(Test-Path -LiteralPath $manifestPath){Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json}else{$null}
     if(-not $ExtensionId){
         $previous=if($oldManifest){[string]$oldManifest.allowed_origins[0] -replace '^chrome-extension://|/$',''}else{''}
         $ExtensionId=(Read-Host "粘贴扩展 ID（回车保留：$previous）").Trim()
@@ -21,7 +21,7 @@ try {
     }
     if($ExtensionId -cnotmatch '^[a-p]{32}$'){throw '扩展 ID 格式不正确，请复制本台电脑 Chrome 中显示的 32 位 ID。'}
     if(-not $Directory){
-        $default=if(Test-Path -LiteralPath $configPath){(Get-Content -LiteralPath $configPath -Raw|ConvertFrom-Json).directory}else{Join-Path ([Environment]::GetFolderPath('MyDocuments')) '精彩摘录'}
+        $default=if(Test-Path -LiteralPath $configPath){(Get-Content -LiteralPath $configPath -Raw -Encoding UTF8|ConvertFrom-Json).directory}else{Join-Path ([Environment]::GetFolderPath('MyDocuments')) '精彩摘录'}
         $Directory=(Read-Host "摘录保存目录（回车使用 $default）").Trim().Trim('"')
         if(-not $Directory){$Directory=$default}
     }

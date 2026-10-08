@@ -30,7 +30,7 @@ try {
     $message = $utf8.GetString((Read-Exact ([int]$length))) | ConvertFrom-Json
     if ($message.action -eq 'diagnostics') {
         . (Join-Path $PSScriptRoot 'diagnostics.ps1')
-        $response=Get-SetupDiagnostics -HostRoot $PSScriptRoot -ExpectedExtensionId $message.extensionId -FullIntegrity:($message.fullIntegrity -eq $true)
+        $response=Get-SetupDiagnostics -HostRoot $PSScriptRoot -ExpectedExtensionId $message.extensionId -FullIntegrity:($message.fullIntegrity -eq $true) -ConnectedHost
     } else {
     $config = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'config.json'), $utf8) | ConvertFrom-Json
     $directory = [IO.Path]::GetFullPath($config.directory)

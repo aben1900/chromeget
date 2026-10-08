@@ -7,8 +7,8 @@
     const code=Object.hasOwn(messages,value?.code)?value.code:rules.find(([,rule])=>rule.test(raw))?.[0]||'UNKNOWN';
     return {code,message:messages[code],retryable:['NETWORK_TEMPORARY','DIRECTORY_UNAVAILABLE','DISK_FULL'].includes(code),details:redact(value?.details||raw)};
   }
-  function toError(value){const e=new Error(value?.error||value?.message||'操作未完成');Object.assign(e,normalize(value));return e;}
-  function response(value){const e=normalize(value);return {ok:false,error:e.message,...e};}
+  function toError(value){const e=new Error(redact(value?.error||value?.message||'操作未完成'));const n=normalize(value);e.code=n.code;e.retryable=n.retryable;e.details=n.details;return e;}
+  function response(value){const e=normalize(value);return {ok:false,error:redact(value?.error||value?.message||e.message),...e};}
   function actionsFor(error,c={}){
     const {code}=normalize(error);
     if(code==='SUBMISSION_UNKNOWN')return c.hasTask?['view-tasks']:c.hasPending?['check-save']:[];
@@ -21,7 +21,24 @@
     if(c.canResume&&!['TLS_INVALID','CHECKSUM_MISMATCH'].includes(code))return ['resume'];
     return c.hasPending?['check-save']:[];
   }
-  const api={normalize,redact,toError,response,actionsFor};
+  function render(container,error,{retention='',actions=[]}={}){
+    const n=normalize(error),card=document.createElement('section');card.className='recovery-card';card.setAttribute('role','status');
+    const title=document.createElement('h3');title.textContent=n.message;card.append(title);
+    if(retention){const p=document.createElement('p');p.textContent=retention;card.append(p);}
+    for(const action of actions){const b=document.createElement('button');b.type='button';b.textContent=action.label;let running=false;
+      b.addEventListener('click',async()=>{if(running)return;running=true;b.disabled=true;try{await action.run();}catch(e){feedback.textContent=normalize(e).details||'操作未完成，请重试';}finally{running=false;b.disabled=false;}});card.append(b);
+    }
+    const feedback=document.createElement('p');feedback.setAttribute('aria-live','polite');card.append(feedback);
+    if(n.details){const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');summary.textContent='查看原因';pre.textContent=n.details;details.append(summary,pre);card.append(details);}
+    container.replaceChildren(card);return card;
+  }
+  function setError(node,error){if(!node)return;node.recoveryError=error;node.recoveryText=redact(error?.error||error?.message||String(error));node.textContent=node.recoveryText;}
+  function bind(node,options){
+    if(!node)return;const target=document.createElement('div');node.after(target);node.style.display='none';
+    const update=()=>{const text=node.textContent.trim();if(!text){target.replaceChildren();node.recoveryError=null;return;}const error=node.recoveryError&&node.recoveryText===text?node.recoveryError:text;render(target,error,options(error));};
+    new MutationObserver(update).observe(node,{childList:true,characterData:true,subtree:true});update();
+  }
+  const api={normalize,redact,toError,response,actionsFor,render,bind,setError};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   root.Recovery=api;
 })(globalThis);

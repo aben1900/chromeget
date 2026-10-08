@@ -1,5 +1,5 @@
 const HOST = 'cn.jingcai.clipper';
-importScripts('recovery.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'sniffer.js', 'page-links.js', 'hover-control.js');
+importScripts('recovery.js', 'collect-model.js', 'collect-service.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'sniffer.js', 'page-links.js', 'hover-control.js');
 const kinds = {comment: '评论', review: '评阅', content: '内容', prompt: '提示词', link: '网页地址', page: '网页地址'};
 let serial = Promise.resolve();
 function exclusive(fn) {
@@ -18,6 +18,7 @@ function native(message) {
 }
 async function menus() {
   await chrome.contextMenus.removeAll();
+  chrome.contextMenus.create({id:'collect',title:'精彩摘录 · 收集并预览',contexts:['selection','link','page']});
   for (const [id, title] of [['comment','保存为评论'], ['review','保存为评阅'], ['content','保存为内容'], ['prompt','保存为提示词']]) {
     chrome.contextMenus.create({id, title: `精彩摘录 · ${title}`, contexts: ['selection']});
   }
@@ -39,8 +40,11 @@ async function flush() {
       const status = await native({action: 'status'});
       if (status.storageFormat !== 'json') throw new Error(`实际连接的本地程序未声明 JSON 保存能力（版本：${status.version || '未知'}，路径：${status.hostPath || '未提供'}）。请运行本项目的“开始使用.cmd → 更新 / 修复”。`);
       const result = await native({action: 'save', record: pending[0]});
-      pending.shift();
-      await chrome.storage.local.set({pending, lastError: '', path: result.journalPath || result.path, lastSaved: new Date().toISOString()});
+      const record=pending.shift();
+      const {savedCollect={}}=await chrome.storage.local.get('savedCollect');
+      savedCollect[record.id]=Date.now();
+      const receipts=Object.fromEntries(Object.entries(savedCollect).sort((a,b)=>b[1]-a[1]).slice(0,200));
+      await chrome.storage.local.set({pending,savedCollect:receipts,lastError:'',path:result.journalPath||result.path,lastSaved:new Date().toISOString()});
     } catch (error) {
       await chrome.storage.local.set({lastError: error.message});
       break;
@@ -61,6 +65,10 @@ function contextLinkUrl(info){
   return value;
 }
 chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if(info.menuItemId==='collect'&&Number.isInteger(tab?.windowId)){
+    chrome.sidePanel.open({windowId:tab.windowId}).catch(console.error);
+    exclusive(async()=>{await chrome.storage.session.set({[`collect-draft:${tab.windowId}`]:newCollectDraft(info.selectionText||info.linkUrl||info.pageUrl||tab.url||'',tab),[`app-view:${tab.windowId}`]:'collect'});}).catch(console.error);return;
+  }
   const linkAction=['download-link','link'].includes(info.menuItemId);
   const chosenLink=linkAction?contextLinkUrl(info):'';
   if(linkAction&&!chosenLink){
@@ -99,26 +107,32 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       }
       return;
     }
-    const {pending = []} = await chrome.storage.local.get('pending');
-    pending.push(record);
-    await chrome.storage.local.set({pending});
-    await flush();
+    await enqueueRecord(record);
   }).catch(async error => {
     await chrome.action.setBadgeText({text: '!'});
     await chrome.action.setTitle({title: `摘录失败：${error.message}`});
   });
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if(['collect-load','collect-edit','collect-save','collect-state','collect-retry'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('collect.html')){
+    exclusive(()=>collectionRequest(message)).then(reply,error=>reply(Recovery.response(error)));return true;
+  }
   if(message.action==='check-connection' && sender.id===chrome.runtime.id && ['app.html','collect.html'].some(p=>sender.url===chrome.runtime.getURL(p))){
     (async()=>{
       let timer;const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Recovery.toError({code:'HOST_UNAVAILABLE',error:'连接检查超时，请重试'})),12000);});
       try{
-        const host=await Promise.race([native({action:'status'}),deadline]);
-        if(!host.capabilities?.includes('setup-diagnostics'))return {ok:true,connected:true,hostVersion:host.version,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},{id:'version',state:'fail',message:'旧版程序不支持自检，请运行开始使用.cmd → 更新 / 修复'}]};
         try{
           const report=await Promise.race([native({action:'diagnostics',extensionId:chrome.runtime.id}),deadline]);
+          if(!Array.isArray(report.checks))throw Error('unsupported action');
           return {...report,connected:true,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},...(report.checks||[]).filter(c=>c.id!=='browser')]};
-        }catch(e){return {ok:true,connected:true,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},{id:'diagnostics',state:'fail',message:'本机检查未完成，请在管理中心检查'}]};}
+        }catch(e){
+          if(e.code==='HOST_UNAVAILABLE')throw e;
+          if(/不支持操作|unsupported action|unknown action/i.test(e.message)){
+            const host=await Promise.race([native({action:'status'}),deadline]);
+            return {ok:true,connected:true,hostVersion:host.version,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},{id:'version',state:'fail',message:'旧版程序不支持自检，请运行开始使用.cmd → 更新 / 修复'}]};
+          }
+          return {ok:true,connected:true,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},{id:'diagnostics',state:'fail',message:'本机检查未完成，请在管理中心检查或修复配置'}]};
+        }
       }catch(e){return {...Recovery.response(e),connected:false,checks:[{id:'browser',state:'fail',message:'Chrome 尚未连接本地程序'}]};}finally{clearTimeout(timer);}
     })().then(reply,e=>reply(Recovery.response(e)));return true;
   }

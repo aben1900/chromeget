@@ -19,7 +19,7 @@ try{
     }else{Copy-Item -LiteralPath (Join-Path $root 'native\bin') -Destination $nativeStage -Recurse}
     $zip=Join-Path $root '精彩摘录-Chrome插件-Windows.zip'
     if($PublicRelease){
-        $version=(Get-Content -LiteralPath (Join-Path $root 'extension\manifest.json') -Raw|ConvertFrom-Json).version
+        $version=(Get-Content -LiteralPath (Join-Path $root 'extension\manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json).version
         $dist=Join-Path $root 'dist';[IO.Directory]::CreateDirectory($dist)|Out-Null
         $zip=Join-Path $dist ('chromeget-v'+$version+'-windows-x64-setup.zip')
         $forbidden=Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object {$_.Extension -in @('.exe','.dll','.log','.zip') -or $_.Name -match '^(config|host|video-settings|portable-host|portable-registration)\.json$'}

@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),crypto=require('crypto'),assert=require('assert/strict'),{spawn}=require('child_process');
 const root=path.resolve('work/engine-'+Date.now()),jobs=path.join(root,'video-jobs'),media=path.join(root,'media');fs.mkdirSync(media,{recursive:true});fs.mkdirSync(jobs,{recursive:true});fs.mkdirSync(path.join(root,'bin'));
-for(const f of ['video.ps1','video-worker.ps1','transfer.ps1','transfer-probe.ps1','telemetry.ps1'])fs.copyFileSync('native/'+f,path.join(root,f));
+for(const f of ['recovery.ps1','video.ps1','video-worker.ps1','transfer.ps1','transfer-probe.ps1','telemetry.ps1'])fs.copyFileSync('native/'+f,path.join(root,f));
 const engineBin=path.resolve(process.env.NATIVE_TEST_BIN||'native/bin');
 for(const f of fs.readdirSync(engineBin).filter(n=>/\.(exe|dll)$/.test(n)))fs.copyFileSync(path.join(engineBin,f),path.join(root,'bin',f));
 fs.writeFileSync(path.join(root,'video-settings.json'),JSON.stringify({directory:path.join(root,'downloads'),maxActive:1,autoClassify:true,transferMode:'fast'}));

@@ -13,7 +13,7 @@ if($Unregister){
     $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($registryPath,$true)
     if($key){try{
         if([string]$key.GetValue('') -ne $manifestPath){throw 'Chrome is using another installation; its registration was preserved.'}
-        $old=if(Test-Path -LiteralPath $backupPath){Get-Content -LiteralPath $backupPath -Raw|ConvertFrom-Json}else{$null}
+        $old=if(Test-Path -LiteralPath $backupPath){Get-Content -LiteralPath $backupPath -Raw -Encoding UTF8|ConvertFrom-Json}else{$null}
         if($old.path -and (Test-Path -LiteralPath $old.path)){$key.SetValue('',$old.path)}else{$key.DeleteValue('',$false)}
     }finally{$key.Dispose()}}
     if(Test-Path -LiteralPath $backupPath){Remove-Item -LiteralPath $backupPath}

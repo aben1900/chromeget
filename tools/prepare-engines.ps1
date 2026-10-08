@@ -10,7 +10,7 @@ function Get-SetupHash([string]$Path){
 
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 $ProgressPreference='SilentlyContinue'
-$lock=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'engines.lock.json') -Raw | ConvertFrom-Json
+$lock=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'engines.lock.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $BinDirectory=[IO.Path]::GetFullPath($BinDirectory)
 [IO.Directory]::CreateDirectory($BinDirectory)|Out-Null
 $stage=Join-Path $BinDirectory ('.setup-'+[Guid]::NewGuid().ToString('N'))
@@ -21,7 +21,7 @@ try {
         $ready=$false
         if(Test-Path -LiteralPath $receiptPath){
             try{
-                $receipt=Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+                $receipt=Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
                 $ready=($receipt.archiveSha256 -eq $engine.sha256 -and @($receipt.files).Count -eq @($engine.files).Count)
                 foreach($file in $engine.files){
                     $entry=@($receipt.files | Where-Object name -eq $file.target)

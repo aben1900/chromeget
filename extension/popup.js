@@ -23,11 +23,11 @@ $('retry').addEventListener('click', async () => {
   catch(error) {
     const {pending = []} = await chrome.storage.local.get('pending');
     $('status').textContent = pending.length ? `${pending.length} 条待保存，尚未全部写入文件` : '待保存队列已清空';
-    $('error').textContent = error.message;
+    if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;
   }
   finally { $('retry').disabled = false; }
 });
-refresh().catch(error => { $('status').textContent = '检查失败'; $('error').textContent = error.message; });
+refresh().catch(error => { $('status').textContent = '检查失败'; if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message; });
 
 let records = [], offset = 0, total = 0, busy = false, journalPath;
 const selected = new Set();
@@ -80,7 +80,7 @@ function render() {
         loaded = result.nextOffset;
         more.hidden = loaded >= result.total;
         more.textContent = '继续显示内容';
-      } catch (error) { $('listError').textContent = error.message; }
+      } catch (error) { if(typeof Recovery!=='undefined')Recovery.setError($('listError'),error);else $('listError').textContent=error.message; }
       finally { loading = false; more.disabled = false; }
     }
     more.addEventListener('click', loadContent);
@@ -101,7 +101,7 @@ async function loadRecords(newOffset = offset) {
     }
     records = result.records; total = result.total; offset = newOffset; selected.clear(); render();
     journalPath = result.journalPath; $('jsonPath').textContent = journalPath;
-  } catch (error) { $('listError').textContent = error.message; $('listStatus').textContent = '读取失败，可点击刷新重试'; }
+  } catch (error) { if(typeof Recovery!=='undefined')Recovery.setError($('listError'),error);else $('listError').textContent=error.message; $('listStatus').textContent = '读取失败，可点击刷新重试'; }
   finally { busy = false; controls(); }
 }
 $('selectAll').addEventListener('change', () => {
@@ -120,7 +120,7 @@ $('confirmButton').addEventListener('click', async () => {
     await request('delete', {ids: [...selected], journalPath});
     await loadRecords();
     await refresh();
-  } catch (error) { $('listError').textContent = error.message; }
+  } catch (error) { if(typeof Recovery!=='undefined')Recovery.setError($('listError'),error);else $('listError').textContent=error.message; }
   finally { busy = false; controls(); }
 });
 $('reload').addEventListener('click', () => loadRecords());
@@ -135,7 +135,7 @@ async function chooseJson(action) {
     journalPath = result.journalPath; $('jsonPath').textContent = journalPath;
     records = result.records; total = result.total; offset = 0; selected.clear();
     $('confirmDelete').hidden = true; render();
-  } catch (error) { $('listError').textContent = error.message; }
+  } catch (error) { if(typeof Recovery!=='undefined')Recovery.setError($('listError'),error);else $('listError').textContent=error.message; }
   finally { busy = false; controls(); }
 }
 $('chooseJson').addEventListener('click', () => chooseJson('choose-json'));

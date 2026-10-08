@@ -3,3 +3,5 @@
 header{gap:10px;padding:14px 14px 10px;flex-shrink:0}.brand{width:42px;height:44px;padding:0;display:grid;place-items:center;border-radius:11px;font-size:24px;flex-shrink:0}h1{font-size:18px;line-height:1.4}header p{font-size:11px;margin-top:2px}nav{padding:0 12px 12px;gap:6px;flex-shrink:0}nav button{padding:9px 8px;min-height:38px;font-size:13px}
 
 #connectionPanel{margin:0 12px 10px;padding:10px 12px;border:1px solid #d5e4dc;border-radius:10px;background:#f4f8f5;font-size:12px;color:#31483c}#connectionPanel summary{cursor:pointer;font-weight:600}#connectionPanel ul,#connectionPanel ol{padding-left:18px;line-height:1.7}#connectionPanel li[data-state="fail"]{color:#9b3a20}.connection-id{display:flex;gap:8px}.connection-id input{min-width:0;flex:1}#connectionPanel button{padding:6px 10px;border:1px solid #b9cec2;border-radius:6px;background:white;cursor:pointer}#connectionPanel p{line-height:1.6}
+
+nav button{font-size:12px;padding:8px 4px;white-space:nowrap}#connectionPanel{flex-shrink:0;max-height:45vh;overflow:auto}

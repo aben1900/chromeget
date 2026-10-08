@@ -65,7 +65,6 @@ async function settings() {
   const data=await send('video-status');$('directory').textContent=data.directory;
   $('directoryInput').value=data.directory;
   $('galleryDestination').textContent='保存至：'+data.directory+'（自动新建图集文件夹）';
-  $('backend').textContent=`扩展 ${chrome.runtime.getManifest().version} · 本地程序 ${data.hostVersion || data.version}`;
   $('cookieStatus').textContent=!videoSite($('url').value)?'通用解析不读取浏览器登录态':data.cookies?'已启用当前平台的本机登录态':'未使用 Cookie';
 }
 $('url').addEventListener('input',()=>{if(parsedUrl!==$('url').value.trim())$('title').textContent='';controls();$('cookieStatus').textContent='登录态按平台分别保存，解析时自动使用';});

@@ -13,7 +13,7 @@ try {
     $InstallDirectory=[IO.Path]::GetFullPath($InstallDirectory)
     $manifestPath=Join-Path $InstallDirectory 'host.json'
     $configPath=Join-Path $InstallDirectory 'config.json'
-    $oldManifest=if(Test-Path -LiteralPath $manifestPath){Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json}else{$null}
+    $oldManifest=if(Test-Path -LiteralPath $manifestPath){Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json}else{$null}
     if(-not $ExtensionId){
         $previous=if($oldManifest){[string]$oldManifest.allowed_origins[0] -replace '^chrome-extension://|/$',''}else{''}
         $ExtensionId=(Read-Host "粘贴扩展 ID（回车保留：$previous）").Trim()
@@ -21,7 +21,7 @@ try {
     }
     if($ExtensionId -cnotmatch '^[a-p]{32}$'){throw '扩展 ID 格式不正确，请复制本台电脑 Chrome 中显示的 32 位 ID。'}
     if(-not $Directory){
-        $default=if(Test-Path -LiteralPath $configPath){(Get-Content -LiteralPath $configPath -Raw|ConvertFrom-Json).directory}else{Join-Path ([Environment]::GetFolderPath('MyDocuments')) '精彩摘录'}
+        $default=if(Test-Path -LiteralPath $configPath){(Get-Content -LiteralPath $configPath -Raw -Encoding UTF8|ConvertFrom-Json).directory}else{Join-Path ([Environment]::GetFolderPath('MyDocuments')) '精彩摘录'}
         $Directory=(Read-Host "摘录保存目录（回车使用 $default）").Trim().Trim('"')
         if(-not $Directory){$Directory=$default}
     }
@@ -33,12 +33,13 @@ try {
     [IO.Directory]::CreateDirectory($InstallDirectory)|Out-Null
     Write-Host '正在准备引擎。首次安装需要联网，请等待；网络中断可重新运行。'
     & (Join-Path (Split-Path $PSScriptRoot -Parent) 'tools\prepare-engines.ps1') -BinDirectory (Join-Path $InstallDirectory 'bin') -CacheDirectory $EngineCache
-    foreach($name in @('host.ps1','host.cmd','video.ps1','video-worker.ps1','transfer.ps1','telemetry.ps1','transfer-probe.ps1','queue-watch.ps1','range-worker.ps1','range-engine.cs')){
+    foreach($name in @('ai-config-model.cjs','ai-model-discovery.cjs','ai-model-registry.cjs','ai-model-import.cjs','ai-model-import.ps1','ai-provider.cjs','ai-transport.cjs','ai-ccswitch.cjs','ai-runner.cjs','ai-config.ps1','ai.ps1','library-ai.cjs','journal-lock.ps1','library-backup.cjs','library-backup-model.cjs','library.ps1','library.cjs','library-export.cjs','library-zip.cjs','diagnostics.ps1','recovery.ps1','host.ps1','host.cmd','video.ps1','video-worker.ps1','transfer.ps1','telemetry.ps1','transfer-probe.ps1','queue-watch.ps1','range-worker.ps1','range-engine.cs')){
         $source=Join-Path $PSScriptRoot $name;$destination=Join-Path $InstallDirectory $name
         if($source -eq $destination){continue}
         Copy-Item -LiteralPath $source -Destination $destination -Force
         if((Get-SetupHash $source) -ne (Get-SetupHash $destination)){throw "复制校验失败：$name"}
     }
+    Copy-Item -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'tools\engines.lock.json') -Destination (Join-Path $InstallDirectory 'engines.lock.json') -Force
     $plugins=Join-Path $PSScriptRoot 'bin\yt-dlp-plugins'
     if((Test-Path -LiteralPath $plugins) -and $PSScriptRoot -ne $InstallDirectory){Copy-Item -LiteralPath $plugins -Destination (Join-Path $InstallDirectory 'bin') -Recurse -Force}
     $utf8=New-Object Text.UTF8Encoding($false)

@@ -1,8 +1,11 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>精彩摘录</title><link rel="stylesheet" href="app.css"></head><body>
-<header><span class="brand">摘</span><div><h1>精彩摘录</h1><p>收藏内容，下载视频、图集与文件</p></div></header>
-<nav role="tablist" aria-label="功能"><button id="clipsTab" role="tab" aria-controls="clips" aria-selected="true">内容摘录</button><button id="videoTab" role="tab" aria-controls="video" aria-selected="false" tabindex="-1">视频 / 图集</button><button id="downloadTab" role="tab" aria-controls="download" aria-selected="false" tabindex="-1">文件下载</button></nav>
+<header><span class="brand">摘</span><div class="heading-content"><div class="title-row"><h1>精彩摘录</h1><small id="headerVersions" aria-label="版本信息"><span id="extensionVersion"></span><span id="nativeVersion">本地程序 检查中</span></small></div><p>收藏内容，下载视频、图集与文件</p></div></header>
+<details id="connectionPanel"><summary id="connectionSummary">检查本地连接</summary><ul id="connectionChecks" aria-live="polite"></ul><button id="checkConnection">重新检测</button><ol><li>运行安装包中的“开始使用.cmd”。</li><li>在 Chrome 扩展页加载 extension 文件夹。</li><li>复制下方 ID，在管理中心安装或更新 / 修复。</li><li>更新后打开 chrome://extensions，找到“精彩摘录”，点击卡片右下角、蓝色开关左边的圆形箭头 ⟳；再从工具栏打开侧栏，点击“重新检测”。</li></ol><label for="connectionId">本扩展 ID</label><div class="connection-id"><input id="connectionId" readonly><button id="copyConnectionId">复制</button></div><p id="copyHint" role="status"></p><p>“更新 / 修复”更新本地程序；圆形箭头 ⟳ 重新读取扩展文件，不会下载新版。两部分都更新时，按上述顺序各操作一次。</p><p>Chrome 的“Service Worker（无效）”通常表示后台休眠，不代表安装失败；以这里的实际连接检测为准。</p><p>完整校验引擎、目录与注册修复，请使用图形管理中心。</p></details>
+<nav role="tablist" aria-label="功能"><button id="collectTab" role="tab" aria-controls="collect" aria-selected="false" tabindex="-1">收集</button><button id="clipsTab" role="tab" aria-controls="clips" aria-selected="true">内容摘录</button><button id="videoTab" role="tab" aria-controls="video" aria-selected="false" tabindex="-1">视频 / 图集</button><button id="downloadTab" role="tab" aria-controls="download" aria-selected="false" tabindex="-1">文件下载</button></nav>
+<p class="library-entry"><a href="library.html" target="_blank" rel="noopener">打开资料库 ↗</a><span id="duplicateNotice"></span></p>
 <p id="appError" role="alert" hidden></p>
+<div id="collect" role="tabpanel" aria-labelledby="collectTab" hidden><iframe title="统一收集"></iframe></div>
 <div id="clips" role="tabpanel" aria-labelledby="clipsTab"><iframe src="popup.html" title="内容摘录"></iframe></div>
 <div id="video" role="tabpanel" aria-labelledby="videoTab" hidden><iframe title="视频与图集下载"></iframe></div>
 <div id="download" role="tabpanel" aria-labelledby="downloadTab" hidden><iframe title="文件和模型下载"></iframe></div>
-<script src="video-url.js"></script><script src="app.js"></script></body></html>
+<script src="video-url.js"></script><script src="app.js"></script><script src="connection.js"></script><script src="library-entry.js"></script></body></html>

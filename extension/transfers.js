@@ -2,7 +2,7 @@ const bytes=n=>{if(!n)return '大小待确定';const u=['B','KB','MB','GB','TB']
 let fileDraft=null, fileChecks=[],fileDraftRevision=0;
 async function transferTask(button, work){
   button.disabled=true;$('transferError').textContent='';
-  try{await work();}catch(e){$('transferError').textContent=e.message;}finally{button.disabled=false;if(button.id==='hfDownload'&&typeof updateFileSelection==='function')updateFileSelection();}
+  try{await work();}catch(e){if(typeof Recovery!=='undefined')Recovery.setError($('transferError'),e);else $('transferError').textContent=e.message;}finally{button.disabled=false;if(button.id==='hfDownload'&&typeof updateFileSelection==='function')updateFileSelection();}
 }
 $('transferMode').addEventListener('change',()=>transferTask($('transferMode'),async()=>{
   await send('video-transfer-settings',{transferMode:$('transferMode').value});$('transferStatus').textContent='已保存，对新建任务生效。';

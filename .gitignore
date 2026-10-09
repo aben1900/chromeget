@@ -4,6 +4,7 @@
 /dist/
 /*.zip
 /native/video-jobs/
+/native/ai-jobs/
 /native/*.json
 /native/*.log
 /native/*.txt

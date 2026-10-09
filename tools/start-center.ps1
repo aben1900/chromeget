@@ -15,14 +15,14 @@ function Open-Path([string]$path){if(Test-Path -LiteralPath $path){[Diagnostics.
 function Read-Installation{
     $script:installed=$false
     try{
-        $manifest=Get-Content -LiteralPath (Join-Path $installRoot 'host.json') -Raw | ConvertFrom-Json
-        $config=Get-Content -LiteralPath (Join-Path $installRoot 'config.json') -Raw | ConvertFrom-Json
+        $manifest=Get-Content -LiteralPath (Join-Path $installRoot 'host.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        $config=Get-Content -LiteralPath (Join-Path $installRoot 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
         $script:installed=$true
         if(-not $idInput.Text){$idInput.Text=([string]$manifest.allowed_origins[0] -replace '^chrome-extension://|/$','')}
         if(-not $folderInput.Text){$folderInput.Text=$config.directory}
     }catch{}
     if(-not $folderInput.Text){$folderInput.Text=Join-Path ([Environment]::GetFolderPath('MyDocuments')) '精彩摘录'}
-    if($script:installed){$installButton.Text='应用设置 / 重新安装';$stateLabel.Text='检测到本地安装 · 更新版本或连接异常时，点击“更新 / 修复”。'}else{$installButton.Text='安装并连接 Chrome';$stateLabel.Text='尚未检测到标准安装 · 按下面两步完成设置。'}
+    if($script:installed){$installButton.Text='应用设置 / 重新安装';$stateLabel.Text='检测到本地安装 · 更新版本或连接异常时，点击“更新 / 修复”。'}else{$installButton.Text='安装并连接 Chrome';$stateLabel.Text='尚未检测到标准安装 · 按下面三步完成设置。'}
     $repairButton.Enabled=$script:installed;$engineButton.Enabled=$script:installed
 }
 function Start-ManagedOperation([string]$title,[string]$command){
@@ -56,6 +56,13 @@ function Request-SetupCancellation{
     $script:job.cancelRequested=$true;$cancelButton.Enabled=$false
     $stateLabel.Text='正在取消，等待连接返回或当前写入完成；不会停止已有下载任务。'
 }
+function Start-Diagnostics([bool]$full=$false){
+    $command='. '+(Quote-PS (Join-Path $root 'native\diagnostics.ps1'))+'; Get-SetupDiagnostics -HostRoot '+(Quote-PS $installRoot)+' -ExpectedExtensionId '+(Quote-PS $idInput.Text.Trim())
+    if($full){$command+=' -FullIntegrity'}
+    $command+=' | ConvertTo-Json -Depth 6 -Compress'
+    $diagnosticBox.Text='正在检查本机环境…'
+    Start-ManagedOperation '本机自检' $command
+}
 function Update-ManagedOperation{
     if(-not $script:job){return}
     $j=$script:job
@@ -74,6 +81,9 @@ function Update-ManagedOperation{
                 $line=$message
             }
             if($logBox.TextLength -gt 60000){$logBox.Text=$logBox.Text.Substring($logBox.TextLength-30000)}
+            if($j.title -eq '本机自检' -and $line.StartsWith('{')){
+                try{$diagnostic=ConvertFrom-Json $line;$diagnosticBox.Text=(@($diagnostic.checks|ForEach-Object{$(switch($_.state){'pass'{'✓'};'fail'{'!'};default{'○'}})+' '+$_.message}) -join [Environment]::NewLine)}catch{$diagnosticBox.Text='检查结果无法读取，请重试。'}
+            }
             $logBox.AppendText($line+[Environment]::NewLine);$j[$stream]=$reader.ReadLineAsync();$lines++
         }
     }
@@ -82,8 +92,9 @@ function Update-ManagedOperation{
         if(Test-Path -LiteralPath $j.cancelPath){Remove-Item -LiteralPath $j.cancelPath -Force}
         $script:actionButtons|ForEach-Object {$_.Enabled=$true};$idInput.ReadOnly=$false;$folderInput.ReadOnly=$false
         Read-Installation
-        $stateLabel.Text=if($code -eq 0){$title+'完成。请在 Chrome 重新加载扩展，再打开侧栏。'}elseif($cancelled){'已取消，可关闭窗口或重新更新 / 修复。'}else{$title+'未完成，请查看下方日志；修正后可以重试。'}
+        $stateLabel.Text=if($code -eq 0){$title+'完成。请在 Chrome 重新加载扩展，再点击“重新检测”验证连接。'}elseif($cancelled){'已取消，可关闭窗口或重新更新 / 修复。'}else{$title+'未完成，请查看下方日志；修正后可以重试。'}
         if($script:closeAfterOperation){$form.Close()}
+        elseif(-not $SelfTest -and $code -eq 0 -and $title -in @('安装','更新 / 修复')){Start-Diagnostics}
     }
 }
 $form=New-Object Windows.Forms.Form;$form.Text='精彩摘录 · 安装与管理';$form.Size=New-Object Drawing.Size(780,800);$form.MinimumSize=New-Object Drawing.Size(720,620);$form.Height=[Math]::Min(800,[Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height-40);$form.StartPosition='CenterScreen';$form.Font=New-Object Drawing.Font('Microsoft YaHei UI',10);$form.BackColor=[Drawing.ColorTranslator]::FromHtml('#F3F6F4');$form.AutoScaleMode='Dpi'
@@ -117,6 +128,12 @@ $installButton.Add_Click({
     Start-ManagedOperation '安装' ('& '+(Quote-PS (Join-Path $root 'native\install.ps1'))+' -ExtensionId '+(Quote-PS $id)+' -Directory '+(Quote-PS $dir))
 })
 $repairButton.Add_Click({Start-ManagedOperation '更新 / 修复' ('& '+(Quote-PS (Join-Path $root 'native\repair.ps1')))})
+$main.Controls.Add((New-Label '③ 在扩展中验证连接' 30))
+$main.Controls.Add((New-Label '本窗口更新本地程序。随后打开 chrome://extensions，点击“精彩摘录”卡片蓝色开关左边的圆形箭头 ⟳，再打开侧栏点击“重新检测”。' 65))
+$row=New-Row;$diagnose=New-Button '检查本机环境' 160;$integrity=New-Button '完整校验引擎' 160;$row.Controls.AddRange(@($diagnose,$integrity));$main.Controls.Add($row)
+$diagnosticBox=New-Object Windows.Forms.TextBox;$diagnosticBox.Multiline=$true;$diagnosticBox.ReadOnly=$true;$diagnosticBox.Width=630;$diagnosticBox.Height=175;$diagnosticBox.ScrollBars='Vertical';$diagnosticBox.Text='尚未检查。安装或修复后会自动检查本机环境。';$main.Controls.Add($diagnosticBox)
+$diagnose.Add_Click({Start-Diagnostics})
+$integrity.Add_Click({Start-Diagnostics $true})
 $help=New-Page '使用说明'
 $help.Controls.Add((New-Label '安装好以后，日常使用只需点击 Chrome 工具栏里的“精彩摘录”。' 45))
 $help.Controls.Add((New-Label '• 内容摘录：选中文字或网址 → 右键保存。\n• 视频 / 图集：载入网页 → 获取内容 → 选择画质或图片 → 下载。\n• 文件下载：粘贴链接 → 预览内容 → 确认下载。'.Replace('\n',[Environment]::NewLine) 110))
@@ -147,7 +164,7 @@ $cancelButton=New-Button '取消操作' 100;$cancelButton.Dock='Fill';$cancelBut
 $layout.RowStyles[2].Height=34;$layout.Controls.Add($progressRow,0,2)
 $logBox=New-Object Windows.Forms.TextBox;$logBox.Multiline=$true;$logBox.ReadOnly=$true;$logBox.ScrollBars='Vertical';$logBox.Dock='Fill';$logBox.BackColor=[Drawing.Color]::White;$logBox.Font=New-Object Drawing.Font('Consolas',9);$layout.Controls.Add($logBox,0,3)
 $stateLabel=New-Label '' 46;$stateLabel.Dock='Fill';$layout.Controls.Add($stateLabel,0,4)
-$script:actionButtons=@($installButton,$repairButton,$browse,$engineButton,$portable,$unportable,$uninstall)
+$script:actionButtons=@($installButton,$repairButton,$browse,$engineButton,$portable,$unportable,$uninstall,$diagnose,$integrity)
 $timer=New-Object Windows.Forms.Timer;$timer.Interval=150;$timer.Add_Tick({Update-ManagedOperation})
 $form.Add_FormClosing({param($sender,$eventArgs);if($script:job){$eventArgs.Cancel=$true;if($cancelButton.Enabled){if([Windows.Forms.MessageBox]::Show('是否取消安装准备并关闭？已有下载任务不会停止；正在写入的步骤完成后退出。','取消并关闭','YesNo','Question') -eq 'Yes'){$script:closeAfterOperation=$true;Request-SetupCancellation}}else{$script:closeAfterOperation=$true;$stateLabel.Text='已安排完成当前操作后自动关闭。'}}})
 if($SelfTest){

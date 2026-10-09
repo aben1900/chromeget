@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id);
 let timer,downloadWindowId,recognitionTimer,recognitionId=0,prepared=null,probeBusy=false,submitBusy=false,directoryReady=false,queuedUrl='';
 async function send(action,extra={}){
   let timeout;const wait=action==='video-folder'?300000:action==='video-hf-info'?110000:action==='video-file-probe'?25000:25000;
-  try{const r=await Promise.race([chrome.runtime.sendMessage({action,...extra}),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('等待本地程序超时，请重试。已提交的下载可在下方任务中查看。')),wait);})]);if(!r?.ok)throw Error(r?.error||'本地程序未响应');return r;}finally{clearTimeout(timeout);}
+  try{const r=await Promise.race([chrome.runtime.sendMessage({action,...extra}),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('等待本地程序超时，请重试。已提交的下载可在下方任务中查看。')),wait);})]);if(!r?.ok)throw (typeof Recovery!=='undefined'?Recovery.toError(r):Error(r?.error||'本地程序未响应'));return r;}finally{clearTimeout(timeout);}
 }
 function inputUrl(){let v=$('fileUrl').value.trim();if(/^www\./i.test(v))v='https://'+v;return /\s/.test(v)?'':webpageUrl(v);}
 function safeName(value){let name=String(value||'').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').replace(/[ .]+$/,'').slice(0,140);if(/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name))name='_'+name;return name;}
@@ -38,7 +38,7 @@ async function recognizeLink(){
     const r=await send('video-file-probe',{url});if(id!==recognitionId)return;
     const html=/^text\/html/i.test(r.contentType||'')&&!/\.html?$/i.test(uri.pathname);
     prepared={url,kind:html?'webpage':'file',name:safeName(r.filename)||suggestedName(url),meta:(r.sizeKnown?bytes(r.size):'大小由下载时确定')+' · '+(r.host||uri.hostname),hint:html?'这是网页，不是文件直链。可以尝试解析视频，或打开该网页后点击“从本页找文件”。':r.rangeSupported?'可暂停，稍后继续下载。':'服务器不支持续传，中断后可能需要重新下载。'};
-  }catch(e){if(id!==recognitionId)return;prepared={url,kind:'file',name:suggestedName(url),meta:uri.hostname+' · 暂时无法读取大小',hint:'未能读取文件信息，可在更多选项中重试识别。确认这是文件链接后，也可直接尝试下载。',unverified:true};$('transferError').textContent=e.message;}
+  }catch(e){if(id!==recognitionId)return;prepared={url,kind:'file',name:suggestedName(url),meta:uri.hostname+' · 暂时无法读取大小',hint:'未能读取文件信息，可在更多选项中重试识别。确认这是文件链接后，也可直接尝试下载。',unverified:true};if(typeof Recovery!=='undefined')Recovery.setError($('transferError'),e);else $('transferError').textContent=e.message;}
   finally{if(id===recognitionId){probeBusy=false;displayPrepared();}}
 }
 function onModelLoaded(data){if(prepared?.kind==='model'&&prepared.url===$('hfUrl').value){prepared.name=data.title;prepared.meta=data.files.length+' 个文件 · '+bytes(data.totalBytes);displayPrepared();}}
@@ -50,6 +50,10 @@ function initializeDownloadPage(){if(downloadPageInitialized)return;downloadPage
 chrome.windows.getCurrent().then(async w=>{
   downloadWindowId=w.id;const key=`download-link:${w.id}`;let changed=false;
   chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes[key]){changed=true;loadLink(changes[key].newValue.url);}});
+  const batchKey=`download-batch:${w.id}`;
+  function loadBatch(urls){if(!Array.isArray(urls))return;$('batchUrls').value=urls.join('\n');$('batchSection').open=true;$('batchSection').scrollIntoView({block:'start'});}
+  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes[batchKey])loadBatch(changes[batchKey].newValue);});
+  loadBatch((await chrome.storage.session.get(batchKey))[batchKey]);
   const data=(await chrome.storage.session.get(key))[key];if(data&&!changed)loadLink(data.url);
 }).catch(e=>$('transferError').textContent=e.message);
 }
@@ -65,7 +69,7 @@ $('fileDownload').addEventListener('click',async()=>{
     if(!directoryReady)throw Error('请先选择保存文件夹。');
     await send('video-file-start',{url:choice.url,filename:$('fileName').value.trim()||(choice.name==='下载文件'?'':choice.name),genericFile:true,checksum:$('fileChecksum').value.trim(),confirmed:true});
     queuedUrl=choice.url;$('transferStatus').textContent='已加入下载。可以在下方查看进度、暂停或继续。';await poll();focusTaskList();
-  }catch(e){$('transferError').textContent=e.message;}finally{submitBusy=false;refreshDownloadButton();}
+  }catch(e){if(typeof Recovery!=='undefined')Recovery.setError($('transferError'),e);else $('transferError').textContent=e.message;}finally{submitBusy=false;refreshDownloadButton();}
 });
 $('currentLink').addEventListener('click',()=>transferTask($('currentLink'),async()=>{const url=await currentWebpage(downloadWindowId);if(!url)throw Error('请先切换到需要下载内容的网页。');loadLink(url);}));
 $('pageLinks').addEventListener('click',()=>{
@@ -81,13 +85,13 @@ $('pageLinks').addEventListener('click',()=>{
 for(const [id,action] of [['folder','video-folder'],['saveFolder','video-set-folder']])$(id).addEventListener('click',()=>transferTask($(id),async()=>{
   const r=await send(action,{directory:$('directoryInput').value});if(!r.cancelled){updateDirectory(r.directory);$('transferStatus').textContent='保存位置已更改。';}
 }));
-send('video-status').then(r=>{updateDirectory(r.directory);$('destinationHint').textContent=r.autoClassify?'已开启自动分类，将保存到对应类型的子文件夹。':'';}).catch(e=>{$('directoryDisplay').textContent='未连接本地程序';$('transferError').textContent=e.message;});
+send('video-status').then(r=>{updateDirectory(r.directory);$('destinationHint').textContent=r.autoClassify?'已开启自动分类，将保存到对应类型的子文件夹。':'';}).catch(e=>{$('directoryDisplay').textContent='未连接本地程序';if(typeof Recovery!=='undefined')Recovery.setError($('transferError'),e);else $('transferError').textContent=e.message;});
 $('probeFile').addEventListener('click',recognizeLink);
 
 $('batchAdd').addEventListener('click',()=>transferTask($('batchAdd'),async()=>{
  const urls=[...new Set($('batchUrls').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];
  if(!urls.length||urls.length>30)throw Error('请填写 1–30 条链接，每行一条。');
- let added=0;const failures=[];
+ let added=0;const failures=[],failedUrls=[],uncertain=[];$('batchUrls').readOnly=true;
  for(const raw of urls){
   try{
    const url=webpageUrl(raw);if(!url)throw Error('不是 HTTP/HTTPS 链接');const u=new URL(url);
@@ -95,8 +99,14 @@ $('batchAdd').addEventListener('click',()=>transferTask($('batchAdd'),async()=>{
    if(supportedVideoUrl(url)||/\.(m3u8|mpd)(?:$|[?#])/i.test(url))await send('video-start',{url,height:0,genericMedia:!videoSite(url),title:websiteName(url)+' 视频'});
    else await send('video-file-start',{url,genericFile:true,confirmed:true});
    added++;
-  }catch(e){failures.push(raw+'：'+e.message);}
+   }catch(e){
+    const reason=typeof Recovery!=='undefined'?Recovery.normalize(e):{code:'UNKNOWN',details:e.message};
+    if(reason.code==='SUBMISSION_UNKNOWN')uncertain.push(raw);else failedUrls.push(raw);
+    failures.push((typeof Recovery!=='undefined'?Recovery.redact(raw):new URL(raw).origin)+'：'+reason.details);
+  }
   $('batchResult').textContent=`已加入 ${added}/${urls.length} 条`;
  }
- $('batchResult').textContent=`已加入 ${added} 条`+(failures.length?'；未加入 '+failures.length+' 条：\n'+failures.join('\n'):'');await poll();if(typeof focusTaskList==='function')focusTaskList();
+ $('batchUrls').value=failedUrls.join('\n');$('batchUrls').readOnly=false;
+ if(Number.isInteger(downloadWindowId))await chrome.storage.session.set({[`download-batch:${downloadWindowId}`]:failedUrls});
+ $('batchResult').textContent=`已加入 ${added} 条`+(uncertain.length?'；'+uncertain.length+' 条结果待核对，请先查看任务列表，勿重复提交。':'')+(failures.length?'；未加入 '+failures.length+' 条：\n'+failures.join('\n'):'');await poll();if(typeof focusTaskList==='function')focusTaskList();
 }));

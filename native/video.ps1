@@ -234,7 +234,7 @@ function Invoke-VideoActionCore($message) {
         $previous.PSObject.Properties.Remove('pid');$previous.PSObject.Properties.Remove('started')
         $previous.PSObject.Properties.Remove('childPid');$previous.PSObject.Properties.Remove('childStarted')
         if(-not $previous.createdAt){$previous|Add-Member -NotePropertyName createdAt -NotePropertyValue (Get-Item -LiteralPath (Join-Path $jobs ($message.id+'.json'))).CreationTimeUtc.ToString('o') -Force}
-        $previous.state='starting';$previous.error='';$previous.file=''
+        $previous.state='starting';$previous.error=''; foreach($key in @('code','retryable','details')){$previous.PSObject.Properties.Remove($key)};$previous.file=''
         $id=$message.id;$jobPath=Join-Path $jobs ($id+'.json')
         if(Test-Path -LiteralPath ($jobPath+'.paused')){Remove-Item -LiteralPath ($jobPath+'.paused')}
         Write-VideoJson $jobPath $previous
@@ -251,7 +251,15 @@ function Invoke-VideoActionCore($message) {
             if($state.state -notin @('queued','starting','running')){return @{ok=$true}}
             [IO.File]::WriteAllText(($jobPath+'.paused'),'paused')
             $job.state='paused';Write-VideoJson $jobPath $job
-        }else{[IO.File]::WriteAllText(($jobPath+'.deleted'),'deleted')}
+        }else{
+            if($job.state -eq 'completed' -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'library.ps1'))){
+                . (Join-Path $PSScriptRoot 'library.ps1')
+                $libraryConfig=Read-VideoJson (Join-Path $PSScriptRoot 'config.json')
+                $snapshot=Invoke-LibraryAction ([pscustomobject]@{action='library-snapshot';id=$message.id}) $libraryConfig.directory
+                if(-not $snapshot.ok -or -not $snapshot.snapshotted){throw '资料快照未完成，请打开资料库检查后再删除下载历史。'}
+            }
+            [IO.File]::WriteAllText(($jobPath+'.deleted'),'deleted')
+        }
 
         if($job.pid -and $job.started){
             $proc=Get-Process -Id $job.pid -ErrorAction SilentlyContinue
@@ -288,7 +296,7 @@ function Invoke-VideoActionCore($message) {
         $createdAt=if($job.createdAt){([DateTime]$job.createdAt).ToUniversalTime().ToString('o')}else{(Get-Item -LiteralPath $jobPath).CreationTimeUtc.ToString('o')}
         $source=if($job.source){$job.source}elseif($job.arguments){@($job.arguments)[-1]}else{''}
         $metrics=$null;$metricsPath=Join-Path $jobs ($message.id+'.metrics.json');if(Test-Path -LiteralPath $metricsPath){try{$metrics=Read-VideoJson $metricsPath}catch{}}
-        return @{ok=$true; metrics=$metrics;phase=$job.phase;probeSummary=@{total=@($job.probes).Count;success=@($job.probes|Where-Object{$_.ok}).Count;ranges=@($job.probes|Where-Object{$_.ok -and $_.rangeSupported}).Count};recoveryNote=$job.recoveryNote;validation=$job.validation;canPause=($job.state -in @('queued','starting','running')); state=$job.state; error=$job.error; progress=$progress; directory=$job.directory; file=$job.file; siteName=$job.siteName; createdAt=$createdAt; title=$job.title; source=$source; height=$job.height; canResume=($job.state -eq 'paused' -or ($job.state -eq 'failed' -and $job.kind -ne 'gallery' -and ($job.arguments -contains '--continue' -or $job.arguments -contains '--continue=true')))}
+        return @{ok=$true; metrics=$metrics;phase=$job.phase;probeSummary=@{total=@($job.probes).Count;success=@($job.probes|Where-Object{$_.ok}).Count;ranges=@($job.probes|Where-Object{$_.ok -and $_.rangeSupported}).Count};recoveryNote=$job.recoveryNote;validation=$job.validation;canPause=($job.state -in @('queued','starting','running')); state=$job.state; error=$job.error; code=$job.code; retryable=$job.retryable; details=$job.details; progress=$progress; directory=$job.directory; file=$job.file; siteName=$job.siteName; createdAt=$createdAt; title=$job.title; source=$source; height=$job.height; canResume=($job.state -eq 'paused' -or ($job.state -eq 'failed' -and $job.kind -ne 'gallery' -and ($job.arguments -contains '--continue' -or $job.arguments -contains '--continue=true')))}
     }
     $tools = Get-VideoTools
     $url = if($genericMedia){Assert-MediaPageUrl $message.url}else{Assert-VideoUrl $message.url}
@@ -428,6 +436,7 @@ function Invoke-GalleryDownload($job,$jobPath,$logPath) {
             $files=@(@($previous.images)+$files|Group-Object index|ForEach-Object {$_.Group[-1]}|Sort-Object {[int]$_.index})
         }
         Write-VideoJson $manifest @{title=$job.title;source=$job.source;count=$files.Count;images=$files}
+        $job|Add-Member -NotePropertyName savedFiles -NotePropertyValue @($files|ForEach-Object{Join-Path $job.directory $_.file}) -Force
     } finally {$client.Dispose();$handler.Dispose()}
 }
 function Get-DownloadKey($job){

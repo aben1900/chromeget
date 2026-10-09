@@ -18,7 +18,7 @@ chrome.windows.getCurrent().then(async current => {
     const activeUrl = await currentBiliVideo(current.id);
     if (!received && !$('url').value) useVideoUrl(activeUrl);
   }
-}).catch(error => { $('error').textContent=error.message; });
+}).catch(error => { if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message; });
 $('extractUrl').addEventListener('click', async () => {
   $('extractUrl').disabled=true;
   try {
@@ -28,7 +28,7 @@ $('extractUrl').addEventListener('click', async () => {
     useVideoUrl(url); $('error').textContent='';
     $('status').textContent='已提取 '+websiteName(url)+' 的网址';
     await chrome.storage.session.set({[`video-url:${current.id}`]:url});
-  } catch(error) { $('error').textContent=error.message; }
+  } catch(error) { if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message; }
   finally { controls(); }
 });
 async function send(action, extra={}) {
@@ -37,7 +37,7 @@ async function send(action, extra={}) {
   const wait=['video-folder','video-cookies'].includes(action)?300000:['video-info','video-hf-info'].includes(action)?110000:20000;
   try { result=await Promise.race([chrome.runtime.sendMessage({action,site:videoSite($('url').value) || 'bilibili',url:$('url').value.trim(),...extra}),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('本地程序响应超时。可重试；若刚启动下载，请重新打开界面查看任务状态。')),wait);})]); }
   finally { clearTimeout(timeout); }
-  if(!result?.ok)throw Error(result?.error || '本地程序未响应，请更新开始使用.cmd。');
+  if(!result?.ok)throw (typeof Recovery!=='undefined'?Recovery.toError(result):Error(result?.error || '本地程序未响应，请更新开始使用.cmd。'));
   return result;
 }
 function controls() {
@@ -65,7 +65,6 @@ async function settings() {
   const data=await send('video-status');$('directory').textContent=data.directory;
   $('directoryInput').value=data.directory;
   $('galleryDestination').textContent='保存至：'+data.directory+'（自动新建图集文件夹）';
-  $('backend').textContent=`扩展 ${chrome.runtime.getManifest().version} · 本地程序 ${data.hostVersion || data.version}`;
   $('cookieStatus').textContent=!videoSite($('url').value)?'通用解析不读取浏览器登录态':data.cookies?'已启用当前平台的本机登录态':'未使用 Cookie';
 }
 $('url').addEventListener('input',()=>{if(parsedUrl!==$('url').value.trim())$('title').textContent='';controls();$('cookieStatus').textContent='登录态按平台分别保存，解析时自动使用';});
@@ -76,7 +75,7 @@ $('openRecent').addEventListener('click',async()=>{
   try {
     const result=await send('video-open-recent');
     $('locationStatus').textContent=result.selected?'已打开目录并选中最近下载的视频':'视频文件已移动或删除，已打开原目录';
-  } catch(error) { $('locationStatus').textContent=error.message; }
+  } catch(error) { if(typeof Recovery!=='undefined')Recovery.setError($('locationStatus'),error);else $('locationStatus').textContent=error.message; }
   finally { $('openRecent').disabled=false; }
 });
 async function inspectVideo() {
@@ -102,7 +101,7 @@ async function inspectVideo() {
     }
     $('height').replaceChildren(...data.heights.map(h=>{const o=document.createElement('option');o.value=h;o.textContent=h===0?'最佳可用画质（含原始视频）':h+'p';return o;}));
     $('height').disabled=false;$('status').textContent='请选择分辨率后下载';
-  }catch(error){$('error').textContent=error.message;$('status').textContent='解析失败';}
+  }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;$('status').textContent='解析失败';}
   finally{busy=false;controls();}
 }
 $('inspect').addEventListener('click',inspectVideo);
@@ -114,7 +113,7 @@ $('browserCookies').addEventListener('click',async()=>{
     await send('video-browser-cookies',{windowId:current.id});
     imported=true;parsedUrl='';$('height').disabled=true;
     await settings();$('status').textContent='登录态已获取，请输入视频网址后解析';
-  } catch(error) { $('error').textContent=error.message;$('status').textContent='获取登录态失败'; }
+  } catch(error) { if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;$('status').textContent='获取登录态失败'; }
   finally { busy=false;controls(); }
   if(imported && supportedVideoUrl($('url').value.trim())) await inspectVideo();
 });
@@ -151,18 +150,18 @@ async function poll() {
       const actions=document.createElement('div');actions.className='task-actions';
       if(task.canResume){const resume=document.createElement('button');resume.textContent='续传';resume.title='继续下载（断点续传）';resume.addEventListener('click',async()=>{
         resume.disabled=true;
-        try{await send('video-resume',{id:task.id});await poll();}catch(error){$('tasksError').textContent=error.message;resume.disabled=false;}
+        try{await send('video-resume',{id:task.id});await poll();}catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('tasksError'),error);else $('tasksError').textContent=error.message;resume.disabled=false;}
       });actions.append(resume);}
       const open=document.createElement('button');open.textContent='打开目录';open.title=task.directory || '打开此任务的保存目录';
       open.addEventListener('click',async()=>{
         open.disabled=true;
-        try{await send('video-open-task',{id:task.id});$('tasksError').textContent='';}catch(error){$('tasksError').textContent=error.message;}
+        try{await send('video-open-task',{id:task.id});$('tasksError').textContent='';}catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('tasksError'),error);else $('tasksError').textContent=error.message;}
         finally{open.disabled=false;}
       });actions.append(open);
       const remove=document.createElement('button');remove.textContent=['running','starting'].includes(task.state)?'停止并删除':'删除';
       remove.addEventListener('click',async()=>{
         remove.disabled=true;clearTimeout(timer);
-        try{await send('video-delete',{id:task.id});await poll();}catch(error){$('tasksError').textContent=error.message;remove.disabled=false;timer=setTimeout(poll,3000);}
+        try{await send('video-delete',{id:task.id});await poll();}catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('tasksError'),error);else $('tasksError').textContent=error.message;remove.disabled=false;timer=setTimeout(poll,3000);}
       });actions.append(remove);card.append(actions);
       return card;
     }));
@@ -189,7 +188,7 @@ $('confirmGallery').addEventListener('click',async()=>{
     jobId=data.id;taskActive=true;runningSelection={url:parsedUrl,height:0};
     await chrome.storage.local.set({lastVideoJob:jobId,lastVideoSelection:runningSelection});
     $('directory').textContent=data.directory;galleryDraft=null;parsedUrl='';poll();
-  }catch(error){$('error').textContent=error.message;poll();}
+  }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;poll();}
   finally{busy=false;controls();}
 });
 $('download').addEventListener('click',async()=>{
@@ -198,7 +197,7 @@ $('download').addEventListener('click',async()=>{
     const data=await send('video-start',{url:parsedUrl,height:Number($('height').value),mediaMode:$('mediaMode').value||'video',audioFormat:$('audioFormat').value||'best',title:$('title').textContent});
     jobId=data.id;taskActive=true;runningSelection={url:parsedUrl,height:Number($('height').value),mediaMode:$('mediaMode').value||'video',audioFormat:$('audioFormat').value||'best'};
     await chrome.storage.local.set({lastVideoJob:jobId,lastVideoSelection:runningSelection});poll();
-  }catch(error){$('error').textContent=error.message;poll();}
+  }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;poll();}
   finally{busy=false;controls();}
 });
 for(const [id,action] of [['folder','video-folder'],['saveFolder','video-set-folder'],['cookies','video-cookies'],['clearCookies','video-clear-cookies']]){
@@ -206,8 +205,8 @@ for(const [id,action] of [['folder','video-folder'],['saveFolder','video-set-fol
     busy=true;controls();$('error').textContent='';
     $('status').textContent=id==='folder'?'正在打开系统目录选择框…':id==='cookies'?'正在打开 Cookie 文件选择框…':'正在保存设置…';
     try{const data=await send(action,{directory:$('directoryInput').value});if(!data.cancelled && ['cookies','clearCookies'].includes(id)){parsedUrl='';$('height').disabled=true;}await settings();$('status').textContent=data.cancelled?'已取消选择':'设置已保存';}
-    catch(error){$('error').textContent=error.message;$('status').textContent='设置失败';}
+    catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;$('status').textContent='设置失败';}
     finally{busy=false;controls();}
   });
 }
-(async()=>{try{await settings();$('status').textContent='下载引擎已就绪';const data=await chrome.storage.local.get(['lastVideoJob','lastVideoSelection']);if(data.lastVideoJob){jobId=data.lastVideoJob;runningSelection=data.lastVideoSelection;}await poll();}catch(error){$('error').textContent=error.message;$('status').textContent='本地程序检查失败';}})();
+(async()=>{try{await settings();$('status').textContent='下载引擎已就绪';const data=await chrome.storage.local.get(['lastVideoJob','lastVideoSelection']);if(data.lastVideoJob){jobId=data.lastVideoJob;runningSelection=data.lastVideoSelection;}await poll();}catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;$('status').textContent='本地程序检查失败';}})();

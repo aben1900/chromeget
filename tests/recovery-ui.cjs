@@ -1,0 +1,9 @@
+const fs=require('fs'),assert=require('assert/strict'),{chromium}=require('playwright');
+(async()=>{const b=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});try{const p=await b.newPage();await p.setContent('<div id="card"></div>');await p.addScriptTag({content:fs.readFileSync('extension/recovery.js','utf8')});assert.equal(await p.evaluate(()=>typeof Recovery.render),'function','recovery card renderer required');
+await p.evaluate(()=>{window.runs=0;Recovery.render(document.querySelector('#card'),{code:'NETWORK_TEMPORARY',error:'https://user:secret@a.test/a?token=private <img src=x>'},{retention:'片段保留',actions:[{id:'resume',label:'继续原任务',run:async()=>{window.runs++;await new Promise(r=>setTimeout(r,80));}}]});});
+assert.equal(await p.locator('#card img').count(),0);assert.ok(!(await p.locator('#card').textContent()).includes('private'));await p.locator('#card button').dblclick();await p.waitForTimeout(150);assert.equal(await p.evaluate(()=>window.runs),1);
+await p.evaluate(()=>Recovery.render(document.querySelector('#card'),{code:'DRM',error:'DRM'},{actions:[]}));assert.equal(await p.locator('#card button').count(),0);
+assert.equal(await p.evaluate(()=>typeof Recovery.setError),'function','structured errors must survive page rendering');
+await p.evaluate(()=>{const n=document.createElement('p');document.body.append(n);Recovery.bind(n,e=>({actions:Recovery.actionsFor(e,{hasSource:true}).map(id=>({id,label:id,run:async()=>{}}))}));Recovery.setError(n,{code:'LINK_EXPIRED',error:'HTTP 403'});});
+await p.waitForSelector('button:text("reparse")');assert.ok((await p.locator('body').textContent()).includes('下载链接已过期'));console.log('PASS actionable card, no markup injection, redacted details, guarded double click and structured error through legacy node');
+}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

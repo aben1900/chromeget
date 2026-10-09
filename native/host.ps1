@@ -1,5 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+. (Join-Path $PSScriptRoot 'recovery.ps1')
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $inputStream = [Console]::OpenStandardInput()
 $outputStream = [Console]::OpenStandardOutput()
@@ -27,6 +28,10 @@ try {
     $length = [BitConverter]::ToUInt32((Read-Exact 4), 0)
     if ($length -lt 2 -or $length -gt 1048576) { throw '单条记录不能超过 1 MB。' }
     $message = $utf8.GetString((Read-Exact ([int]$length))) | ConvertFrom-Json
+    if ($message.action -eq 'diagnostics') {
+        . (Join-Path $PSScriptRoot 'diagnostics.ps1')
+        $response=Get-SetupDiagnostics -HostRoot $PSScriptRoot -ExpectedExtensionId $message.extensionId -FullIntegrity:($message.fullIntegrity -eq $true) -ConnectedHost
+    } else {
     $config = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'config.json'), $utf8) | ConvertFrom-Json
     $directory = [IO.Path]::GetFullPath($config.directory)
     $journal = Join-Path $directory '摘录数据.json'
@@ -38,11 +43,17 @@ try {
         if (-not [IO.File]::Exists($journal)) { throw '所选 JSON 文件不存在，请重新选择。' }
         $directory = [IO.Path]::GetDirectoryName($journal)
     }
-    if ($message.action -like 'video-*') {
+    if ($message.action -like 'ai-*') {
+        . (Join-Path $PSScriptRoot 'ai.ps1')
+        $response = Invoke-AiAction $message $directory
+    } elseif ($message.action -like 'library-*') {
+        . (Join-Path $PSScriptRoot 'library.ps1')
+        $response = Invoke-LibraryAction $message $directory
+    } elseif ($message.action -like 'video-*') {
         . (Join-Path $PSScriptRoot 'video.ps1')
         $response = Invoke-VideoAction $message
     } elseif ($message.action -eq 'status') {
-        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.20.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.30.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('ai-config-models-v2','ai-models-v1','ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
     } elseif ($message.action -eq 'choose-json') {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -69,12 +80,14 @@ try {
         if ($ids.Count -lt 1 -or $ids.Count -gt 100) { throw '每次请选择 1–100 条记录。' }
         foreach ($id in $ids) { if ($id -isnot [string] -or $id -notmatch '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$') { throw '记录编号无效。' } }
       }
-        $sha = [Security.Cryptography.SHA256]::Create()
-        try { $hash = [BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($directory.ToLowerInvariant()))).Replace('-', '') }
-        finally { $sha.Dispose() }
-        $mutex = New-Object Threading.Mutex($false, ('Local\JingcaiClipper_' + $hash))
-        try { $locked = $mutex.WaitOne(30000) } catch [Threading.AbandonedMutexException] { $locked = $true }
-        if (-not $locked) { throw '文件忙，请稍后重试。' }
+        . (Join-Path $PSScriptRoot 'journal-lock.ps1')
+        $mutex = Enter-JournalLock $directory
+        $locked = $true
+        if ([IO.File]::Exists((Join-Path $directory '.jingcai-restore-transaction.json'))) {
+            . (Join-Path $PSScriptRoot 'library.ps1')
+            $recovered = Invoke-LibraryAction @{action='library-recover'} $directory
+            if (-not $recovered.ok) { throw $recovered.error }
+        }
         [IO.Directory]::CreateDirectory($directory) | Out-Null
         $records = @()
         if ([IO.File]::Exists($journal)) {
@@ -111,19 +124,29 @@ try {
         if ($message.action -eq 'delete') {
           $beforeCount = $records.Count
           $records = @($records | Where-Object { $_.id -notin $ids })
-          Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 5)
+          Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 25)
         } elseif (-not ($records | Where-Object { $_.id -eq $r.id })) {
             $entry = [PSCustomObject]@{id=$r.id; time=$instant.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss zzz'); type=$r.type; content=$r.content}
             if ($r.type -eq '提示词') { $entry | Add-Member -NotePropertyName title -NotePropertyValue $r.title.Trim() }
+            foreach($field in @('sourceUrl','sourceTitle','author')) {
+                $value=[string]$r.$field
+                if($field -eq 'sourceUrl') {
+                    $uri=$null
+                    if(-not [Uri]::TryCreate($value,[UriKind]::Absolute,[ref]$uri) -or $uri.Scheme -notin @('http','https') -or $uri.UserInfo){$value=''}
+                    elseif($uri.Query){$builder=New-Object UriBuilder($uri);$builder.Query=(@($uri.Query.TrimStart('?').Split('&')|Where-Object{[Uri]::UnescapeDataString(($_ -split '=')[0]) -notmatch 'token|sign|auth|cookie|secret|key|credential|expires|policy'}) -join '&');$value=$builder.Uri.AbsoluteUri}
+                } elseif($value.Length -gt 500){$value=$value.Substring(0,500)}
+                if($value){$entry|Add-Member -NotePropertyName $field -NotePropertyValue $value}
+            }
             $records += $entry
-            Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 5)
+            Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 25)
         }
         $response = @{ok = $true; path = $journal; journalPath=$journal}
         if ($message.action -eq 'delete') { $response.deleted = $beforeCount - $records.Count }
       }
     } else { throw "本地程序 1.19.0 不支持操作：$($message.action)。请重新加载扩展。" }
+    }
 } catch {
-    $response = @{ok = $false; error = $_.Exception.Message}
+    $response = New-RecoveryError -Message $_.Exception.Message -Code $_.Exception.Data['code']
 } finally {
     if ($locked) { $mutex.ReleaseMutex() }
     if ($mutex) { $mutex.Dispose() }

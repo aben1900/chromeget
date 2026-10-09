@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),fs=require('node:fs');
+assert.ok(fs.existsSync('extension/recovery.js'),'shared recovery module must exist');
+const R=require('../extension/recovery.js');
+assert.equal(R.normalize({error:'HTTP Error 403: Forbidden'}).code,'UNKNOWN');
+assert.equal(R.normalize({code:'AUTH_REQUIRED',error:'Sign in required'}).code,'AUTH_REQUIRED');
+assert.equal(R.normalize({error:'Specified native messaging host not found'}).code,'HOST_UNAVAILABLE');
+assert.equal(R.normalize({error:'磁盘空间不足'}).code,'DISK_FULL');
+assert.equal(R.normalize({error:'certificate verify failed'}).retryable,false);
+for(const secret of ['secret','private','password'])assert.ok(!R.redact('https://user:password@a.test/f?token=secret#private\nCookie: private\nAuthorization: Bearer secret').includes(secret));
+assert.ok(!R.redact('故障 C:\\Users\\Alice\\Downloads\\secret.zip').includes('Alice'));
+assert.deepEqual(R.actionsFor({code:'SUBMISSION_UNKNOWN'},{hasTask:true}),['view-tasks']);
+assert.ok(!R.actionsFor({code:'NETWORK_TEMPORARY'},{canResume:false}).includes('resume'));
+assert.ok(!R.actionsFor({code:'DRM'},{hasSource:true}).includes('retry'));
+assert.equal(R.toError({error:'failed',code:'LINK_EXPIRED'}).code,'LINK_EXPIRED');
+console.log('PASS conservative classification, structured errors, redaction and safe recovery actions');

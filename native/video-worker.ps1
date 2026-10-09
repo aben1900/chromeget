@@ -1,6 +1,7 @@
 ﻿param([string]$JobPath)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'video.ps1')
+. (Join-Path $PSScriptRoot 'recovery.ps1')
 $job = Read-VideoJson $JobPath
 $base = $JobPath.Substring(0,$JobPath.Length-5)
 $downloadMutex=$null;$downloadLocked=$false
@@ -101,8 +102,15 @@ try {
     }
     }
     $job.state='completed'
-} catch { $job.state='failed'; $job.error=$_.Exception.Message }
+} catch { $job.state='failed'; $job.error=$_.Exception.Message; $failure=New-RecoveryError -Message $job.error -Code $_.Exception.Data['code']; foreach($key in @('code','retryable','details')){$job|Add-Member -NotePropertyName $key -NotePropertyValue $failure[$key] -Force} }
 finally {if($downloadLocked){$downloadMutex.ReleaseMutex()};if($downloadMutex){$downloadMutex.Dispose()}}
 if(-not (Test-Path -LiteralPath ($JobPath+'.deleted')) -and -not (Test-Path -LiteralPath ($JobPath+'.paused'))){Write-VideoJson $JobPath $job}
 
+if($job.state -eq 'completed' -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'library.ps1'))){
+    try {
+        . (Join-Path $PSScriptRoot 'library.ps1')
+        $libraryConfig=Read-VideoJson (Join-Path $PSScriptRoot 'config.json')
+        $null=Invoke-LibraryAction ([pscustomobject]@{action='library-snapshot'}) $libraryConfig.directory
+    } catch { } # Library can rebuild from the completed job; download success remains independent.
+}
 Invoke-DownloadQueue

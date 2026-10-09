@@ -8,6 +8,8 @@ const root = path.resolve(__dirname, '..');
 const temp = path.resolve('work/tests/run-' + Date.now());
 fs.mkdirSync(temp, {recursive:true});
 fs.copyFileSync(path.join(root,'native/host.ps1'),path.join(temp,'host.ps1'));
+fs.copyFileSync(path.join(root,'native/recovery.ps1'),path.join(temp,'recovery.ps1'));
+fs.copyFileSync(path.join(root,'native/journal-lock.ps1'),path.join(temp,'journal-lock.ps1'));
 fs.copyFileSync(path.join(root,'native/host.cmd'),path.join(temp,'host.cmd'));
 fs.writeFileSync(path.join(temp,'config.json'),JSON.stringify({directory:temp}));
 function native(message, launcher=false) {
@@ -119,7 +121,7 @@ const record = content => ({id:randomUUID(),time:'2026-09-30T07:20:08.000Z',type
   assert.equal(context.summarizePromptTitle('你是一位老师。请设计三天写作课程。包含练习。'),'设计三天写作课程');
   assert.equal(context.summarizePromptTitle('# 数据分析助手\n请分析表格'),'数据分析助手');
   assert.ok(Array.from(context.summarizePromptTitle('写'.repeat(100))).length<=36);
-  installed();await new Promise(r=>setImmediate(r));assert.equal(menu.length,8);
+  installed();await new Promise(r=>setImmediate(r));assert.equal(menu.length,9);
   const settle=()=>new Promise(r=>setTimeout(r,20));
   click({menuItemId:'download-link',linkUrl:'https://example.com/model.gguf'},{windowId:42});await settle();assert.equal(session['app-view:42'],'download');assert.equal(session['download-link:42'].url,'https://example.com/model.gguf');assert.equal(panels.at(-1).windowId,42);panels.length=0;delete session['app-view:42'];delete session['download-link:42'];
 

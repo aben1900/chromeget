@@ -1,0 +1,1 @@
+chrome.storage.local.get('lastDuplicate').then(({lastDuplicate})=>{if(lastDuplicate&&Date.now()-lastDuplicate.time<86400000)document.getElementById('duplicateNotice').textContent='最近保存发现相同内容，已保留，可在资料库搜索查看。';});

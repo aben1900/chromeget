@@ -1,0 +1,24 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{randomUUID}=require('node:crypto');
+const {dispatch}=require('../native/library.cjs');
+(async()=>{
+ const root=path.resolve('work/library-'+Date.now()),directory=path.join(root,'data'),jobs=path.join(root,'video-jobs');fs.mkdirSync(directory,{recursive:true});fs.mkdirSync(jobs);
+ const ctx={root,directory},request=m=>dispatch(m,ctx),id=randomUUID(),jid='a'.repeat(32),file=path.join(directory,'样本.txt');fs.writeFileSync(file,'abc');
+ const records=Array.from({length:55},(_,i)=>({id:i===54?id:randomUUID(),type:'内容',time:'2026-10-08 10:00:00 +08:00',content:i===54?'目标内容\r\n第二行':'记录'+i,sourceUrl:'https://example.com/p?a=1',author:''}));
+ fs.writeFileSync(path.join(directory,'摘录数据.json'),JSON.stringify(records));
+ fs.writeFileSync(path.join(jobs,jid+'.json'),JSON.stringify({state:'completed',kind:'files',createdAt:'2026-10-08T02:00:00Z',title:'资料',directory,file,expectedFiles:[file],source:'https://example.com/a?token=secret'}));
+ let r=await request({action:'library-query'});assert.equal(r.total,56);assert.equal(r.items.length,40);assert.ok(r.items.every(x=>!('content'in x)));
+ r=await request({action:'library-query',query:'目标'});assert.equal(r.total,1);const rid='clip:'+id;
+ await request({action:'library-taxonomy',kind:'tags',operation:'create',name:'研究'});await request({action:'library-taxonomy',kind:'collections',operation:'create',name:'项目'});
+ await request({action:'library-update',ids:[rid],tags:['研究'],collections:['项目'],author:'作者'});
+ r=await request({action:'library-query',tag:'研究',collection:'项目',source:'example.com'});assert.equal(r.total,1);
+ r=await request({action:'library-read',id:rid});assert.equal(r.content,'目标内容\r\n第二行');assert.equal(r.item.author,'作者');
+ r=await request({action:'library-duplicates',content:'目标内容\n第二行',type:'内容'});assert.equal(r.matches[0].id,rid);
+ fs.unlinkSync(path.join(jobs,jid+'.json'));r=await request({action:'library-query',type:'文件'});assert.equal(r.total,1);assert.ok(!JSON.stringify(r).includes('secret'));
+ fs.unlinkSync(file);r=await request({action:'library-read',id:'download:'+jid});assert.equal(r.item.files[0].exists,false);
+ await request({action:'library-taxonomy',kind:'tags',operation:'rename',name:'研究',newName:'工作'});assert.equal((await request({action:'library-query',tag:'工作'})).total,1);
+ await request({action:'library-taxonomy',kind:'collections',operation:'delete',name:'项目'});assert.equal((await request({action:'library-query',collection:'项目'})).total,0);
+ await assert.rejects(request({action:'library-update',ids:['../x'],tags:[]}));
+ const many='c'.repeat(32);fs.writeFileSync(path.join(jobs,many+'.json'),JSON.stringify({state:'completed',kind:'files',directory,expectedFiles:Array.from({length:205},(_,n)=>path.join(directory,'file-'+n+'.txt'))}));const page=await request({action:'library-read',id:'download:'+many});assert.equal(page.item.files.length,200);assert.equal(page.fileTotal,205);assert.equal((await request({action:'library-read',id:'download:'+many,fileOffset:page.nextFileOffset})).item.files.length,5);
+ fs.writeFileSync(path.join(directory,'资料库索引.json'),'{bad');await assert.rejects(request({action:'library-query'}));assert.equal(fs.readFileSync(path.join(directory,'资料库索引.json'),'utf8'),'{bad');
+ console.log('PASS library full search, source filtering, taxonomy CRUD, provenance, duplicates, durable download snapshot, missing files and corrupt-index protection');
+})().catch(e=>{console.error(e);process.exitCode=1});

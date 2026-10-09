@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {presets,buildRequest,parseResponse}=require('../native/ai-provider.cjs');
+const {upgradeSettings}=require('../native/ai-model-registry.cjs');
+const old={schemaVersion:1,profiles:{openai:{...presets().openai,ciphertext:'fixture-cipher'},deepseek:presets().deepseek}};
+const before=JSON.stringify(old),next=upgradeSettings(old);
+assert.equal(next.schemaVersion,3);assert.equal(next.profiles.openai.ciphertext,'fixture-cipher');assert.equal(next.defaultProfileId,null);assert.equal(JSON.stringify(old),before);
+const p={...presets().openai,protocol:'chat-completions',secret:'sk-fixture'};
+const req=buildRequest(p,'OK','short',true);assert.ok(req.url.endsWith('/chat/completions'));assert.equal(req.body.thinking,undefined);
+assert.equal(parseResponse('chat-completions',{choices:[{finish_reason:'stop',message:{content:'OK'}}]}),'OK');
+assert.throws(()=>upgradeSettings({schemaVersion:2,profiles:JSON.parse('{"__proto__":{}}')}));
+assert.throws(()=>upgradeSettings({...next,defaultProfileId:'missing'}));
+assert.throws(()=>buildRequest({...p,protocol:'wrong'},'OK','short',true));
+console.log('PASS registry upgrade preserves ciphertext, rejects invalid IDs/defaults; explicit generic chat protocol');

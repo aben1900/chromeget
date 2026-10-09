@@ -1,6 +1,6 @@
 const http=require('http'),fs=require('fs'),path=require('path'),{spawn}=require('child_process'),crypto=require('crypto'),assert=require('assert/strict');
 const root=path.resolve('work/progress-'+Date.now()),jobs=path.join(root,'video-jobs');fs.mkdirSync(jobs,{recursive:true});
-for(const name of ['video.ps1','video-worker.ps1','telemetry.ps1'])fs.copyFileSync('native/'+name,path.join(root,name));
+for(const name of ['recovery.ps1','video.ps1','video-worker.ps1','telemetry.ps1'])fs.copyFileSync('native/'+name,path.join(root,name));
 const payload=crypto.randomBytes(32*1024*1024),sha=crypto.createHash('sha256').update(payload).digest('hex');
 const server=http.createServer((req,res)=>{const m=req.headers.range?.match(/bytes=(\d+)-(\d*)/);let offset=m?+m[1]:0;const end=m&&m[2]?Math.min(+m[2],payload.length-1):payload.length-1;res.writeHead(m?206:200,{'Accept-Ranges':'bytes','Content-Length':end-offset+1,...(m?{'Content-Range':`bytes ${offset}-${end}/${payload.length}`}:{})});const t=setInterval(()=>{const next=Math.min(offset+16384,end+1);res.write(payload.subarray(offset,next));offset=next;if(offset>end)res.end();},45);res.on('close',()=>clearInterval(t));});
 const id=crypto.randomBytes(16).toString('hex'),jobPath=path.join(jobs,id+'.json'),out=path.join(root,'payload.bin');

@@ -5,7 +5,7 @@ function node(id){return nodes[id] ||= {hidden:false,setAttribute(){},addEventLi
 const context=vm.createContext({document:{getElementById:node,querySelector:()=>frame},chrome:{windows:{getCurrent:async()=>({id:1})},storage:{onChanged:{addListener(){}},session:{get:async()=>({}),set:async()=>{}}}},currentBiliVideo:async()=>''});
 (async()=>{
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/app.js'),'utf8'),context);
- await new Promise(r=>setImmediate(r));assert.equal(node('clips').hidden,false);assert.equal(loads,0);
+ await new Promise(r=>setImmediate(r));assert.equal(node('collect').hidden,false);assert.equal(loads,1);src='';loads=0;
  context.selectView('video');assert.equal(src,'video.html');assert.equal(node('clips').hidden,true);
  context.selectView('clips');context.selectView('video');assert.equal(loads,1,'switching must retain video state');
  const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'../extension/manifest.json')));

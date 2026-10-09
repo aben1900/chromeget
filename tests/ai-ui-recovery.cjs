@@ -8,7 +8,7 @@ const fs=require('fs'),assert=require('assert/strict'),{chromium}=require('playw
  await page.waitForFunction(()=>document.getElementById('aiModel').value==='gpt-4.1-mini');
  await page.evaluate(()=>{document.getElementById('detail').hidden=false;dispatchEvent(new CustomEvent('library-detail',{detail:{id:'clip:old',type:'内容'}}));});
  const failures=[];try{await page.waitForFunction(()=>document.getElementById('aiText').value==='之前已生成的摘要',{},{timeout:1000});assert.ok(calls.some(m=>m.action==='ai-status'&&m.requestId==='paid-result'));}catch{failures.push('paid request not recovered');}
- await page.locator('#aiSettings summary').first().click();await page.click('#aiLoadCc');await page.waitForFunction(()=>document.getElementById('aiProvider').value.startsWith('cc:'));
+ await page.locator('#aiSettings summary').first().click();await page.click('#aiCompanySource');await page.waitForFunction(()=>document.getElementById('aiProvider').value.startsWith('cc:'));
  if(await page.inputValue('#aiProvider')!=='cc:two'||await page.inputValue('#aiModel')!=='custom-model')failures.push('saved CC selection/model not restored');assert.deepEqual(failures,[]);
  await page.evaluate(()=>dispatchEvent(new CustomEvent('library-detail',{detail:{id:'clip:concurrent',type:'内容'}})));await page.click('#aiPrepare');await page.waitForSelector('#aiGenerate:not([hidden])');await page.click('#aiGenerate');await page.waitForSelector('#aiCheck:not([hidden])');await page.click('#aiCheck');await page.waitForFunction(()=>document.getElementById('aiText').value==='另一个窗口生成的结果');assert.ok(calls.some(m=>m.action==='ai-status'&&m.requestId==='active-request'));
  console.log('PASS AI persisted request recovery beyond global recent cap and explicit CC selection restoration');

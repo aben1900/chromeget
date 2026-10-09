@@ -62,5 +62,5 @@ function Get-SetupDiagnostics {
     }
     $checks.Add(@{id='integrity';state=$integrity;message=$integrityMessage})
     $checks.Add(@{id='browser';state='pending';message='请在 Chrome 扩展中验证实际连接'})
-    return @{ok=$true;checks=@($checks.ToArray());hostVersion='1.27.0';capabilities=@('setup-diagnostics','structured-errors')}
+    return @{ok=$true;checks=@($checks.ToArray());hostVersion='1.27.1';capabilities=@('setup-diagnostics','structured-errors')}
 }

@@ -8,6 +8,7 @@ function upgradeSettings(value){
  const profiles={};
  for(const [id,p]of Object.entries(s.profiles)){
   if(!validId(id)||!p||p.profileId!==id)throw Error('CONFIG_INVALID');
+  if(p.tags===undefined&&['workbuddy','ccswitch'].includes(p.origin?.source)&&new URL(p.baseUrl).hostname==='aigateway.smec-cn.com')p.tags=['SMEC'];
   profiles[id]={...normalizeProfile(p),ciphertext:typeof p.ciphertext==='string'?p.ciphertext:''};
   if(p.origin)profiles[id].origin=p.origin;
   if(p.lastTest?.revision===p.revision)profiles[id].lastTest=p.lastTest;

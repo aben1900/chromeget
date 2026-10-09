@@ -10,34 +10,57 @@
  }
  Object.assign(messages,{DEFAULT_MODEL_REQUIRED:'请在模型管理中为一个已配置模型点击“设为默认”。',IMPORT_UNAVAILABLE:'未读取到可用配置。请检查 WorkBuddy 配置，或选择 CC-Switch 导入。',IMPORT_CHANGED:'来源或本地配置已变化，请重新读取再导入。',IMPORT_CONFLICT:'此项有本地修改，请明确勾选覆盖后再导入。',CONFIG_LIMIT:'最多保存 200 个模型，请先删除不再需要的配置。'});
  let profiles={},defaultId=null,selectionRevision='',connected=false,busy=false,dialogSession=0,dialogEditing=null,dialogBusy=false,preview=null,importSession=0,signature='';
+ let view={query:'',tag:'',status:'',sort:'name-asc',defaultFirst:true};
+ const collator=new Intl.Collator('zh-CN',{numeric:true,sensitivity:'base'});
  const dialog=$('aiModelDialog'),importDialog=$('aiImportDialog');
  function selected(){const p=profiles[defaultId];if(!connected||!p||!p.hasKey)throw Error('DEFAULT_MODEL_REQUIRED');return {...p};}
  function setStatus(text){$('aiSettingsStatus').textContent=text;}
  function controls(){for(const id of ['aiAddModel','aiImportModels'])$(id).disabled=busy||!connected;$('aiReconnect').disabled=busy;for(const b of $('aiModelList').querySelectorAll('button'))b.disabled=busy;}
  function update(r){profiles=r.profiles||{};defaultId=r.defaultProfileId||null;selectionRevision=r.selectionRevision;connected=true;render();const next=JSON.stringify([defaultId,selectionRevision,Object.values(profiles).map(p=>[p.profileId,p.revision])]);if(next!==signature){signature=next;window.dispatchEvent(new Event('ai-profile-changed'));}}
  function button(text,fn){const b=document.createElement('button');b.type='button';b.textContent=text;b.addEventListener('click',fn);return b;}
- function render(){
-  $('aiDefaultLabel').textContent=profiles[defaultId]?'默认模型：'+profiles[defaultId].label:'尚未设置默认模型 · 在列表中点击“设为默认”';
-  const list=$('aiModelList');list.replaceChildren();
-  for(const p of Object.values(profiles)){
-   const row=document.createElement('div');row.className='model-row';row.dataset.modelId=p.profileId;const info=document.createElement('div');info.className='model-info';const name=document.createElement('strong');name.textContent=p.label;if(p.profileId===defaultId){const badge=document.createElement('span');badge.className='model-badge';badge.textContent='默认';name.append(badge)}
-   const detail=document.createElement('small');detail.textContent=p.model+' · '+(!p.hasKey?'未配置密钥':p.lastTest?.revision===p.revision?(p.lastTest.ok?'测试成功':'测试失败 · '+explain(Error(p.lastTest.code))):'未测试');info.append(name,detail);
-   const actions=document.createElement('div');actions.className='ai-actions';actions.append(button('编辑',()=>openEditor(p)),button('测试',()=>run(async()=>{setStatus('正在测试 '+p.label+'…');try{await send('ai-test',{profileId:p.profileId,expectedRevision:p.revision,confirmed:true});setStatus(p.label+'：连接测试成功。')}finally{update(await send('ai-settings-get'));}})),button(p.profileId===defaultId?'已设为默认':'设为默认',()=>run(async()=>{update(await send('ai-default-set',{profileId:p.profileId,expectedSelectionRevision:selectionRevision}));setStatus('默认模型已设置，选择文字摘录即可生成摘要。')})),button('删除',()=>confirmDelete(row,p)));
-   row.append(info,actions);list.append(row);
-  }
-  if(!list.children.length){const empty=document.createElement('p');empty.textContent='还没有模型，点击“添加模型”或“导入模型”。';list.append(empty)}controls();
+ function statusOf(p){return !p.hasKey?'unconfigured':p.lastTest?.revision===p.revision?(p.lastTest.ok?'passed':'failed'):'untested';}
+ function syncView(){
+  $('aiModelSearch').value=view.query;$('aiStatusFilter').value=view.status;$('aiModelSort').value=view.sort;$('aiDefaultFirst').checked=view.defaultFirst;
+  const tags=[...new Set(Object.values(profiles).flatMap(p=>p.tags||[]))].sort(collator.compare);
+  if(view.tag&&!tags.includes(view.tag))tags.push(view.tag);
+  $('aiTagFilter').replaceChildren(new Option('全部标签',''),...tags.map(t=>new Option(t,t)));$('aiTagFilter').value=view.tag;
  }
+ function saveView(){chrome.storage.local.set({aiModelView:view}).catch(()=>setStatus('筛选已生效，但未能记住本次选择。'));}
+ function visibleModels(){const q=view.query.trim().toLocaleLowerCase();const rows=Object.values(profiles).filter(p=>(!q||[p.label,p.model,...(p.tags||[])].join(' ').toLocaleLowerCase().includes(q))&&(!view.tag||(p.tags||[]).includes(view.tag))&&(!view.status||statusOf(p)===view.status));
+  const rank={passed:0,untested:1,failed:2,unconfigured:3};return rows.sort((a,b)=>{if(view.defaultFirst&&(a.profileId===defaultId)!==(b.profileId===defaultId))return a.profileId===defaultId?-1:1;
+   if(view.sort==='tags'){const at=[...(a.tags||[])].sort(collator.compare)[0],bt=[...(b.tags||[])].sort(collator.compare)[0];const order=at&&bt?collator.compare(at,bt):at?-1:bt?1:0;if(order)return order;}
+   if(view.sort==='status'){const order=rank[statusOf(a)]-rank[statusOf(b)];if(order)return order;}
+   return collator.compare(a.label,b.label)*(view.sort==='name-desc'?-1:1)||collator.compare(a.model,b.model)||a.profileId.localeCompare(b.profileId);
+  });
+ }
+ function render(){
+  $('aiDefaultLabel').textContent=profiles[defaultId]?'★ 默认模型：'+profiles[defaultId].label:'尚未设置默认模型 · 在列表中点击“设为默认”';$('aiDefaultLabel').classList.toggle('has-default',!!profiles[defaultId]);syncView();
+  const list=$('aiModelList');list.replaceChildren();const rows=visibleModels();$('aiModelCount').textContent='显示 '+rows.length+' / '+Object.keys(profiles).length+' 个模型';
+  for(const p of rows){
+   const row=document.createElement('div');row.className='model-row'+(p.profileId===defaultId?' is-default':'');row.dataset.modelId=p.profileId;
+   const info=document.createElement('div');info.className='model-info';const name=document.createElement('strong');name.className='model-name';name.textContent=p.label;
+   const detail=document.createElement('small');detail.textContent=p.model;info.append(name,detail);if(p.profileId===defaultId){const badge=document.createElement('span');badge.className='model-badge';badge.textContent='★ 当前默认';info.append(badge)}
+   const tags=document.createElement('div');tags.className='model-tags';if(!(p.tags||[]).length){const empty=document.createElement('span');empty.className='muted';empty.textContent='无标签';tags.append(empty)}for(const tag of p.tags||[]){const chip=button(tag,()=>{view.tag=tag;saveView();render()});chip.className='model-tag';chip.setAttribute('aria-label','筛选标签：'+tag);tags.append(chip)}
+   const status=document.createElement('div');status.className='model-state';const kind=statusOf(p),badge=document.createElement('span');badge.className='model-status '+kind;badge.textContent={passed:'✓ 测试成功',failed:'✕ 测试失败',untested:'○ 未测试',unconfigured:'— 未配置密钥'}[kind];status.append(badge);
+   if(kind==='failed'){const reason=document.createElement('small');reason.textContent={AUTH_FAILED:'权限或鉴权失败',RATE_LIMITED:'限流或额度限制',OUTPUT_INCOMPLETE:'输出未完成',NETWORK_TIMEOUT:'请求超时',NETWORK_ERROR:'网络异常'}[p.lastTest.code]||'查看错误详情';reason.title=explain(Error(p.lastTest.code));status.append(reason)}
+   const actions=document.createElement('div');actions.className='ai-actions';actions.append(button('编辑',()=>openEditor(p)),button('测试',()=>run(async()=>{setStatus('正在测试 '+p.label+'…');try{await send('ai-test',{profileId:p.profileId,expectedRevision:p.revision,confirmed:true});setStatus(p.label+'：连接测试成功。')}finally{update(await send('ai-settings-get'));}})),button(p.profileId===defaultId?'已设为默认':'设为默认',()=>run(async()=>{update(await send('ai-default-set',{profileId:p.profileId,expectedSelectionRevision:selectionRevision}));setStatus('默认模型已设置，选择文字摘录即可生成摘要。')})),button('删除',()=>confirmDelete(row,p)));
+   row.append(info,tags,status,actions);list.append(row);
+  }
+  if(!list.children.length){const empty=document.createElement('p');empty.className='model-empty';empty.textContent=Object.keys(profiles).length?'没有匹配的模型，请修改搜索条件或清除筛选。':'还没有模型，点击“添加模型”或“导入模型”。';list.append(empty)}controls();
+ }
+ for(const id of ['aiModelSearch','aiTagFilter','aiStatusFilter','aiModelSort','aiDefaultFirst'])$(id).addEventListener(id==='aiModelSearch'?'input':'change',()=>{view={query:$('aiModelSearch').value,tag:$('aiTagFilter').value,status:$('aiStatusFilter').value,sort:$('aiModelSort').value,defaultFirst:$('aiDefaultFirst').checked};saveView();render()});
+ $('aiClearFilters').onclick=()=>{view.query='';view.tag='';view.status='';saveView();render()};
  function confirmDelete(row,p){if(row.querySelector('.model-delete-confirm'))return;const area=document.createElement('div');area.className='model-delete-confirm';const text=document.createElement('span');text.textContent=p.profileId===defaultId?'删除后需要重新设置默认模型。':'删除此模型？';area.append(text,button('确认删除',()=>run(async()=>{update(await send('ai-model-delete',{profileId:p.profileId,expectedRevision:p.revision}));setStatus('模型已删除。')})),button('取消',()=>area.remove()));row.append(area);}
  function report(e){setStatus(explain(e));if(e.message==='EXTENSION_RELOAD_REQUIRED'){connected=false;$('aiReloadExtension').hidden=$('aiReloadHint').hidden=false;$('aiConnection').textContent='扩展后台需要重新加载';}controls();}
  async function run(fn){if(busy)return;busy=true;controls();try{await fn()}catch(e){report(e)}finally{busy=false;controls();}}
  async function connect(){
-  const local=await chrome.storage.local.get('aiSelection');const r=await send('ai-settings-get',{legacySelection:local.aiSelection});update(r);$('aiConnection').textContent='已连接本地程序';$('aiReloadExtension').hidden=$('aiReloadHint').hidden=true;setStatus('配置已刷新。');
+  const local=await chrome.storage.local.get(['aiSelection','aiModelView']);if(local.aiModelView){const v=local.aiModelView;view={query:typeof v.query==='string'?v.query.slice(0,200):'',tag:typeof v.tag==='string'?v.tag:'',status:['passed','failed','untested','unconfigured'].includes(v.status)?v.status:'',sort:['name-asc','name-desc','tags','status'].includes(v.sort)?v.sort:'name-asc',defaultFirst:v.defaultFirst!==false};}const r=await send('ai-settings-get',{legacySelection:local.aiSelection});update(r);$('aiConnection').textContent='已连接本地程序';$('aiReloadExtension').hidden=$('aiReloadHint').hidden=true;setStatus('配置已刷新。');
   if(!r.importsCompleted){try{const p=await send('ai-model-import-preview',{source:'workbuddy'});const ids=p.items.filter(v=>v.change==='add'&&!v.conflict).map(v=>v.candidateId);if(p.items.length){update(await send('ai-model-import-apply',{previewId:p.previewId,candidateIds:ids}));setStatus('已自动导入 '+ids.length+' 个模型。请选择默认模型；导入不代表连接测试成功。')}else setStatus('没有找到 SMEC 模型，可手动添加或从 CC-Switch 导入。')}catch(e){setStatus(explain(e)+' 手动添加模型仍可使用。')}}
  }
  function protocolControls(){$('aiAuthLabel').hidden=$('aiProtocol').value!=='anthropic';if($('aiAuthLabel').hidden)$('aiAuth').value='bearer';}
- function openEditor(p){dialogSession++;dialogEditing=p?{...p}:null;dialogBusy=false;$('aiModelForm').reset();$('aiDialogTitle').textContent=p?'编辑模型':'添加模型';$('aiLabel').value=p?.label||'';$('aiProvider').value=p?.provider||'custom';$('aiBaseUrl').value=p?.baseUrl||'';$('aiModel').value=p?.model||'';$('aiProtocol').value=p?.protocol||({openai:'responses',deepseek:'chat-completions',claude:'anthropic'}[p?.provider])||'chat-completions';$('aiAuth').value=p?.auth||'bearer';$('aiKey').value='';$('aiKeyState').textContent=p?.hasKey?'密钥已保存；留空保留，填写新值则替换。修改接口地址需要重新填写。':'填写真实 API Key 后即可测试；可先测试再保存。';$('aiDialogStatus').textContent='';editorControls();protocolControls();dialog.showModal();$('aiLabel').focus();}
+ function openEditor(p){dialogSession++;dialogEditing=p?{...p}:null;dialogBusy=false;$('aiModelForm').reset();$('aiDialogTitle').textContent=p?'编辑模型':'添加模型';$('aiLabel').value=p?.label||'';$('aiTags').value=(p?.tags||[]).join(', ');$('aiProvider').value=p?.provider||'custom';$('aiBaseUrl').value=p?.baseUrl||'';$('aiModel').value=p?.model||'';$('aiProtocol').value=p?.protocol||({openai:'responses',deepseek:'chat-completions',claude:'anthropic'}[p?.provider])||'chat-completions';$('aiAuth').value=p?.auth||'bearer';$('aiKey').value='';$('aiKeyState').textContent=p?.hasKey?'密钥已保存；留空保留，填写新值则替换。修改接口地址需要重新填写。':'填写真实 API Key 后即可测试；可先测试再保存。';$('aiDialogStatus').textContent='';editorControls();protocolControls();dialog.showModal();$('aiLabel').focus();}
  function editorControls(){for(const el of $('aiModelForm').querySelectorAll('input,select'))el.disabled=dialogBusy;$('aiTest').disabled=$('aiSaveSettings').disabled=dialogBusy;}
- function draft(){return {...(dialogEditing?{profileId:dialogEditing.profileId,expectedRevision:dialogEditing.revision}:{}),label:$('aiLabel').value.trim(),provider:$('aiProvider').value,baseUrl:$('aiBaseUrl').value.trim(),model:$('aiModel').value.trim(),protocol:$('aiProtocol').value,auth:$('aiAuth').value,...($('aiKey').value?{key:$('aiKey').value}:{})};}
+ function draft(){return {...(dialogEditing?{profileId:dialogEditing.profileId,expectedRevision:dialogEditing.revision}:{}),label:$('aiLabel').value.trim(),tags:$('aiTags').value.split(/[,，;；]/).map(t=>t.trim()).filter(Boolean),provider:$('aiProvider').value,baseUrl:$('aiBaseUrl').value.trim(),model:$('aiModel').value.trim(),protocol:$('aiProtocol').value,auth:$('aiAuth').value,...($('aiKey').value?{key:$('aiKey').value}:{})};}
  async function editorAction(save){if(dialogBusy||!$('aiModelForm').reportValidity())return;const token=dialogSession;dialogBusy=true;editorControls();$('aiDialogStatus').textContent=save?'正在保存…':'正在测试连接…';try{const d=draft();const r=await send(save?'ai-settings-save':'ai-test-draft',save?d:{draft:d,confirmed:true});if(token!==dialogSession||!dialog.open)return;if(save){update(r);$('aiKey').value='';dialog.close();setStatus('模型已保存。可在列表中设为默认，用于智能摘要。')}else $('aiDialogStatus').textContent='连接测试成功。保存后可在列表设为默认。';}catch(e){if(token===dialogSession&&dialog.open)$('aiDialogStatus').textContent=explain(e);}finally{if(token===dialogSession){dialogBusy=false;editorControls();}}}
  dialog.addEventListener('close',()=>{dialogSession++;$('aiKey').value='';dialogEditing=null;dialogBusy=false;});
  $('aiCloseDialog').onclick=$('aiCancelDialog').onclick=()=>dialog.close();$('aiModelForm').onsubmit=e=>{e.preventDefault();editorAction(true)};$('aiTest').onclick=()=>editorAction(false);

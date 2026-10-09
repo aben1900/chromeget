@@ -19,7 +19,11 @@ try{Resolve-AiDraft $PSScriptRoot @{profileId=$id;expectedRevision=$revision;bas
 $d=Set-AiDefault $PSScriptRoot @{profileId=$id;expectedSelectionRevision=$b.selectionRevision}
 if($d.defaultProfileId -ne $id){throw 'default'}
 try{Save-AiSettings $PSScriptRoot @{profileId=$id;expectedRevision='stale';label='wrong'};throw 'lost update'}catch{if($_.Exception.Message -ne 'CONFIG_CHANGED'){throw}}
-$updated=Save-AiSettings $PSScriptRoot @{profileId=$id;expectedRevision=$revision;label='new label'}
+Save-AiTestResult $PSScriptRoot @{profileId=$id;revision=$revision} @{revision=$revision;ok=$true;code='OK';at='fixture'}
+$updated=Save-AiSettings $PSScriptRoot @{profileId=$id;expectedRevision=$revision;label='new label';tags=@('SMEC','个人')}
+if(($updated.profiles.$id.tags -join ',') -cne 'SMEC,个人'){throw 'tags lost'}
+if(-not $updated.profiles.$id.lastTest.ok -or $updated.profiles.$id.lastTest.revision -cne $updated.profiles.$id.revision){throw 'metadata change cleared test'}
+if($updated.defaultProfileId -ne $id){throw 'metadata change cleared default'}
 if(-not $updated.profiles.$id.hasKey){throw 'lost cipher'}
 $removed=Remove-AiModel $PSScriptRoot @{profileId=$id;expectedRevision=$updated.profiles.$id.revision}
 if($removed.defaultProfileId -or $removed.profiles.$id){throw 'delete default'}

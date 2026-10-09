@@ -4,7 +4,7 @@ const {normalizeProfile,hasKey}=require('./ai-provider.cjs');
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 function safeFile(file){let p=path.resolve(file);while(true){if(fs.existsSync(p)&&fs.lstatSync(p).isSymbolicLink())throw Error('IMPORT_UNAVAILABLE');const up=path.dirname(p);if(p===up)break;p=up;}if(!fs.existsSync(file)||fs.statSync(file).size>2097152)throw Error('IMPORT_UNAVAILABLE');return file;}
 function candidate(p,source,sourceId,secret){
- const normalized=normalizeProfile(p);if(!hasKey(secret))throw Error('KEY_NOT_CONFIGURED');
+ const normalized=normalizeProfile({...p,tags:p.tags||['SMEC']});if(!hasKey(secret))throw Error('KEY_NOT_CONFIGURED');
  return {...normalized,source,sourceId,secret,credentialFingerprint:hash(secret),fingerprint:hash([sourceId,normalized.label,normalized.baseUrl,normalized.protocol,normalized.auth,normalized.model,secret])};
 }
 function resolveModelId(localId,availableIds){const id=localId.startsWith('custom:smec-')?localId.slice(12):localId;return {model:availableIds.includes(localId)?localId:id,verified:availableIds.includes(localId)||availableIds.includes(id)};}

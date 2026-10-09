@@ -82,6 +82,7 @@ function New-AiDraftProfile($old,$message,[string]$id) {
     $p=@{source='manual';profileId=$id;provider='custom';protocol='chat-completions';label='自定义模型';baseUrl='';model='';auth='bearer';revision=[Guid]::NewGuid().ToString();hasKey=$false}
     if($old){foreach($field in @('provider','protocol','label','baseUrl','model','auth')){if($null -ne $old.$field){$p[$field]=$old.$field}}}
     foreach($field in @('provider','protocol','label','baseUrl','model','auth')){if($null -ne $message.$field){$p[$field]=[string]$message.$field}}
+    $p.tags=@();if($old -and $null -ne $old.tags){$p.tags=@($old.tags)};if($null -ne $message.tags){$p.tags=$message.tags}
     return Invoke-AiNode @{op='normalize';profile=$p}
 }
 function Save-AiSettings([string]$root,$message) {
@@ -92,7 +93,11 @@ function Save-AiSettings([string]$root,$message) {
         if($message.clearKey -eq $true -or $p.baseUrl -cne $old.baseUrl){$cipher=''}
         if($null -ne $message.key){$null=Invoke-AiNode @{op='normalize';key=[string]$message.key};$cipher=Protect-AiKey ([string]$message.key)}
         Set-AiProperty $p 'ciphertext' $cipher
-        if($old.origin){Set-AiProperty $old.origin 'locallyEdited' $true;Set-AiProperty $p 'origin' $old.origin}
+        $requestSame=[bool]$old
+        foreach($field in @('provider','protocol','baseUrl','model','auth')){if($p.$field -cne $old.$field){$requestSame=$false}}
+        if($null -ne $message.key -or $message.clearKey -eq $true){$requestSame=$false}
+        if($requestSame -and $old.lastTest -and $old.lastTest.revision -ceq $old.revision){$old.lastTest.revision=$p.revision;Set-AiProperty $p 'lastTest' $old.lastTest}
+        if($old.origin){if(-not $requestSame -or $p.label -cne $old.label){Set-AiProperty $old.origin 'locallyEdited' $true};Set-AiProperty $p 'origin' $old.origin}
         Set-AiProperty $s.profiles $id $p;Write-AiSettings $root $s
         $r=ConvertTo-AiPublicSettings $s;$r.profileId=$id;return $r
     }

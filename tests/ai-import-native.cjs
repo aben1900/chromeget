@@ -3,6 +3,7 @@ const fs=require('fs'),path=require('path'),assert=require('assert/strict'),{spa
 const root=path.resolve('work/import-native-'+Date.now());fs.mkdirSync(path.join(root,'.cc-switch'),{recursive:true});for(const n of fs.readdirSync('native').filter(n=>/\.(ps1|cjs)$/.test(n)))fs.copyFileSync('native/'+n,path.join(root,n));
 fs.mkdirSync(path.join(root,'bin'));fs.copyFileSync('native/bin/node.exe',path.join(root,'bin/node.exe'));
 const db=new DatabaseSync(path.join(root,'.cc-switch','cc-switch.db'));db.exec('CREATE TABLE providers (id TEXT, app_type TEXT, name TEXT, settings_config TEXT)');db.prepare('INSERT INTO providers VALUES (?,?,?,?)').run('yqn','claude','SMEC',JSON.stringify({env:{ANTHROPIC_BASE_URL:'https://aigateway.smec-cn.com',ANTHROPIC_AUTH_TOKEN:'sk-fixture',ANTHROPIC_MODEL:'glm-5.2'}}));db.close();
+fs.writeFileSync(path.join(root,'rotate.cjs'),"const{DatabaseSync}=require('node:sqlite');const path=require('node:path');const db=new DatabaseSync(path.join(__dirname,'.cc-switch','cc-switch.db'));db.prepare(\"UPDATE providers SET settings_config=replace(settings_config, 'sk-fixture', 'sk-rotated')\").run();db.close();");
 fs.writeFileSync(path.join(root,'test.ps1'),'\ufeff'+`$ErrorActionPreference='Stop'
 $env:USERPROFILE=$PSScriptRoot
 . (Join-Path $PSScriptRoot 'ai-config.ps1')
@@ -23,6 +24,14 @@ $resolved=Resolve-AiProfile $PSScriptRoot $model.profileId ''
 if($resolved.secret -cne 'sk-fixture'){throw 'cipher'}
 $again=New-AiImportPreview $PSScriptRoot 'ccswitch'
 if($again.items[0].change -ne 'same'){throw 'duplicate'}
+$tagged=Save-AiSettings $PSScriptRoot @{profileId=$model.profileId;expectedRevision=$model.revision;tags=@('个人','常用')}
+$model=$tagged.profiles.($model.profileId)
+& (Join-Path $PSScriptRoot 'bin/node.exe') (Join-Path $PSScriptRoot 'rotate.cjs')
+$changed=New-AiImportPreview $PSScriptRoot 'ccswitch'
+if($changed.items[0].conflict){throw 'tags created source conflict'}
+$reimported=Apply-AiImport $PSScriptRoot @{previewId=$changed.previewId;candidateIds=@($changed.items[0].candidateId)}
+$model=$reimported.profiles.($model.profileId)
+if(($model.tags -join ',') -cne '个人,常用'){throw 'reimport erased tags'}
 $null=Remove-AiModel $PSScriptRoot @{profileId=$model.profileId;expectedRevision=$model.revision}
 $deleted=New-AiImportPreview $PSScriptRoot 'ccswitch'
 if($deleted.items[0].change -ne 'ignored'){throw 'resurrection'}

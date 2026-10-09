@@ -29,7 +29,7 @@ function Apply-AiImport([string]$root,$message) {
             if($item.change -eq 'same'){continue}
             if($item.conflict -and $candidateId -notin @($message.overwriteIds)){throw 'IMPORT_CONFLICT'}
             if($item.change -eq 'ignored' -and $candidateId -notin @($message.restoreIds)){throw 'IMPORT_CONFLICT'}
-            $target=[string]$item.targetId
+            $old=$null;$target=[string]$item.targetId
             if($target){$old=$s.profiles.$target;if(-not $old -or $old.revision -cne $item.targetRevision){throw 'IMPORT_CHANGED'}}else{
                 if(@($s.profiles.PSObject.Properties).Count -ge 200){throw 'CONFIG_LIMIT'}
                 $current=@(Invoke-AiNode @{op='import-compare';settings=$s;candidates=@($matches[0])})
@@ -37,6 +37,7 @@ function Apply-AiImport([string]$root,$message) {
                 $target=[Guid]::NewGuid().ToString()
             }
             $p=Invoke-AiNode @{op='normalize';profile=$matches[0]};$p.profileId=$target;$p.revision=[Guid]::NewGuid().ToString()
+            if($old){Set-AiProperty $p 'tags' @($old.tags)}
             Set-AiProperty $p 'ciphertext' (Protect-AiKey $matches[0].secret)
             Set-AiProperty $p 'origin' @{source=$item.source;sourceId=$item.sourceId;fingerprint=$item.fingerprint;credentialFingerprint=$item.credentialFingerprint;locallyEdited=$false}
             Set-AiProperty $s.profiles $target $p

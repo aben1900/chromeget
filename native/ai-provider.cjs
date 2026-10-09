@@ -5,6 +5,10 @@ const DEFAULTS={
 };
 const fail=code=>{throw Error(code)};
 function presets(){return structuredClone(DEFAULTS);}
+function normalizeTags(tags=[]){
+ if(!Array.isArray(tags)||tags.length>10)fail('CONFIG_INVALID');const seen=new Set(),result=[];
+ for(const value of tags){if(typeof value!=='string'||/[\x00-\x1f,，;；]/.test(value))fail('CONFIG_INVALID');const tag=value.trim();if(!tag||Array.from(tag).length>24)fail('CONFIG_INVALID');const key=tag.toLocaleLowerCase();if(!seen.has(key)){seen.add(key);result.push(tag)}}return result;
+}
 function normalizeProfile(v){
  if(!v||!['openai','deepseek','claude','custom'].includes(v.provider))fail('CONFIG_INVALID');
  if(typeof v.baseUrl!=='string'||/[\x00-\x20]/.test(v.baseUrl))fail('CONFIG_INVALID');
@@ -15,7 +19,7 @@ function normalizeProfile(v){
  const protocol=v.protocol||({openai:'responses',deepseek:'chat-completions',claude:'anthropic'})[v.provider];
  if(!['responses','chat-completions','anthropic'].includes(protocol))fail('CONFIG_INVALID');
  if(!['bearer','x-api-key'].includes(v.auth)||protocol!=='anthropic'&&v.auth!=='bearer')fail('CONFIG_INVALID');
- return {protocol,source:v.source,provider:v.provider,profileId:v.profileId,label:String(v.label||v.provider).slice(0,200),baseUrl:u.href.replace(/\/$/,''),model:v.model.trim(),auth:v.auth,hasKey:!!v.hasKey,revision:String(v.revision||'default'),...(v.models?{models:v.models}:{})};
+ return {tags:normalizeTags(v.tags),protocol,source:v.source,provider:v.provider,profileId:v.profileId,label:String(v.label||v.provider).slice(0,200),baseUrl:u.href.replace(/\/$/,''),model:v.model.trim(),auth:v.auth,hasKey:!!v.hasKey,revision:String(v.revision||'default'),...(v.models?{models:v.models}:{})};
 }
 function hasKey(key){return typeof key==='string'&&key.trim().length>0&&key.length<=8192&&!/[\r\n]/.test(key)&&!/^sk-(placeholder|your|example|replace)/i.test(key);}
 function validateInput(text){if(typeof text!=='string'||!text.trim())fail('INPUT_EMPTY');if(Array.from(text).length>24000||Buffer.byteLength(text)>98304)fail('INPUT_TOO_LARGE');}

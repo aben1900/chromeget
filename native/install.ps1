@@ -33,7 +33,7 @@ try {
     [IO.Directory]::CreateDirectory($InstallDirectory)|Out-Null
     Write-Host '正在准备引擎。首次安装需要联网，请等待；网络中断可重新运行。'
     & (Join-Path (Split-Path $PSScriptRoot -Parent) 'tools\prepare-engines.ps1') -BinDirectory (Join-Path $InstallDirectory 'bin') -CacheDirectory $EngineCache
-    foreach($name in @('ai-model-registry.cjs','ai-model-import.cjs','ai-model-import.ps1','ai-provider.cjs','ai-transport.cjs','ai-ccswitch.cjs','ai-runner.cjs','ai-config.ps1','ai.ps1','library-ai.cjs','journal-lock.ps1','library-backup.cjs','library-backup-model.cjs','library.ps1','library.cjs','library-export.cjs','library-zip.cjs','diagnostics.ps1','recovery.ps1','host.ps1','host.cmd','video.ps1','video-worker.ps1','transfer.ps1','telemetry.ps1','transfer-probe.ps1','queue-watch.ps1','range-worker.ps1','range-engine.cs')){
+    foreach($name in @('ai-config-model.cjs','ai-model-discovery.cjs','ai-model-registry.cjs','ai-model-import.cjs','ai-model-import.ps1','ai-provider.cjs','ai-transport.cjs','ai-ccswitch.cjs','ai-runner.cjs','ai-config.ps1','ai.ps1','library-ai.cjs','journal-lock.ps1','library-backup.cjs','library-backup-model.cjs','library.ps1','library.cjs','library-export.cjs','library-zip.cjs','diagnostics.ps1','recovery.ps1','host.ps1','host.cmd','video.ps1','video-worker.ps1','transfer.ps1','telemetry.ps1','transfer-probe.ps1','queue-watch.ps1','range-worker.ps1','range-engine.cs')){
         $source=Join-Path $PSScriptRoot $name;$destination=Join-Path $InstallDirectory $name
         if($source -eq $destination){continue}
         Copy-Item -LiteralPath $source -Destination $destination -Force

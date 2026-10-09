@@ -40,6 +40,7 @@ function Apply-AiImport([string]$root,$message) {
             foreach($entry in $s.profiles.PSObject.Properties){try{if($entry.Value.ciphertext -and (Unprotect-AiKey $entry.Value.ciphertext) -ceq $candidate.secret){$matching+=$entry.Name}}catch{}}
             $current=@(Invoke-AiNode @{op='import-compare';settings=$s;candidates=@($candidate)})
             if(-not $item.targetId -and $current[0].targetId){throw 'IMPORT_CHANGED'}
+            if($current[0].change -eq 'ignored' -and $item.change -ne 'ignored'){throw 'IMPORT_CHANGED'}
             $applied=Invoke-AiNode @{op='import-apply-one';settings=$s;candidate=$candidate;ciphertext=(Protect-AiKey $candidate.secret);targetId=$item.targetId;matchingIds=@($matching)}
             $s=$applied.settings
             $s.imports.ignored=@($s.imports.ignored|Where-Object {$_ -cne ($item.source+':'+$item.sourceId)})

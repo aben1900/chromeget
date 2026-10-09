@@ -15,3 +15,7 @@ const split=applyCandidate(s,change,'newcipher',first,[]);
 assert.notEqual(split,first);assert.equal(s.profiles[first].model,'b');assert.equal(s.profiles[first].ciphertext,'cipher');assert.equal(s.defaultProfileId,split);assert.deepEqual(s.profiles[split].tags,['个人']);
 assert.equal(compareImports(s,[change])[0].change,'same');
 console.log('PASS grouped import, repeat matching, partial credential split, tags and default continuity');
+const atLimit=migrateSettings(null).settings;const limitId=applyCandidate(atLimit,c,'cipher',null,[]);applyCandidate(atLimit,{...c,model:'b',sourceId:'b',fingerprint:'fb'},'cipher',null,[limitId]);while(Object.keys(atLimit.profiles).length<200){const id=crypto.randomUUID();atLimit.profiles[id]={...structuredClone(atLimit.profiles[limitId]),profileId:id}}
+const limitBefore=JSON.stringify(atLimit);assert.throws(()=>applyCandidate(atLimit,change,'new',limitId,[]),/CONFIG_LIMIT/);assert.equal(JSON.stringify(atLimit),limitBefore);
+const dual=migrateSettings(null).settings;const dualId=applyCandidate(dual,c,'cipher',null,[]);applyCandidate(dual,{...c,source:'ccswitch',sourceId:'cc-a'},'cipher',dualId,[dualId]);const dualNew=applyCandidate(dual,change,'new',dualId,[]);assert.notEqual(dualNew,dualId);assert.ok(dual.profiles[dualId].models[0].origins.some(o=>o.source==='ccswitch'));assert.equal(compareImports(dual,[{...c,source:'ccswitch',sourceId:'cc-a'}])[0].change,'same');
+console.log('PASS import split profile limit is atomic and independent source mappings retained');

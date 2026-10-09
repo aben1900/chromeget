@@ -20,5 +20,9 @@ if($saved.profiles.($ids[1]).lastTest.code -ne 'OK'){throw 'wrong model test los
 # m1 must retain its failure; mismatching draft receipt must not overwrite it.
 $back=Select-AiModel $PSScriptRoot @{profileId=$ids[1];expectedRevision=$saved.profiles.($ids[1]).revision;model='m1'}
 if($back.profiles.($ids[1]).lastTest.ok){throw 'wrong receipt applied'}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'ai-settings.json'),$raw)
+function Write-AiSettings($root,$settings){throw 'SIMULATED_COMMIT_FAIL'}
+try{$null=Get-AiPublicSettings $PSScriptRoot;throw 'fault not triggered'}catch{if($_.Exception.Message -ne 'SIMULATED_COMMIT_FAIL'){throw}}
+if([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'ai-settings.json')) -cne $raw){throw 'old file corrupted'}
 Write-Output 'PASS encrypted upgrade snapshot, safe credentials grouping, defaults, privacy and bound draft receipts'
 `);const r=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(root,'test.ps1')],{encoding:'utf8',windowsHide:true});assert.equal(r.status,0,r.stdout+r.stderr);console.log(r.stdout.trim());

@@ -4,7 +4,7 @@ const {normalizeProfile,hasKey}=require('./ai-provider.cjs');
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 function safeFile(file){let p=path.resolve(file);while(true){if(fs.existsSync(p)&&fs.lstatSync(p).isSymbolicLink())throw Error('IMPORT_UNAVAILABLE');const up=path.dirname(p);if(p===up)break;p=up;}if(!fs.existsSync(file)||fs.statSync(file).size>2097152)throw Error('IMPORT_UNAVAILABLE');return file;}
 function candidate(p,source,sourceId,secret){
- const normalized=normalizeProfile({...p,tags:p.tags||['SMEC']});if(!hasKey(secret))throw Error('KEY_NOT_CONFIGURED');
+ const normalized=normalizeProfile({...p,tags:p.tags?.length?p.tags:['SMEC']});if(!hasKey(secret))throw Error('KEY_NOT_CONFIGURED');
  return {...normalized,source,sourceId,secret,credentialFingerprint:hash(secret),fingerprint:hash([sourceId,normalized.label,normalized.baseUrl,normalized.protocol,normalized.auth,normalized.model,secret])};
 }
 function resolveModelId(localId,availableIds){const id=localId.startsWith('custom:smec-')?localId.slice(12):localId;return {model:availableIds.includes(localId)?localId:id,verified:availableIds.includes(localId)||availableIds.includes(id)};}
@@ -60,9 +60,11 @@ function applyCandidate(settings,c,ciphertext,targetId,matchingIds){
  const origin={source:c.source,sourceId:c.sourceId,fingerprint:c.fingerprint,credentialFingerprint:c.credentialFingerprint};
  const sameConnection=old&&matchingIds.includes(targetId)&&['provider','baseUrl','protocol','auth'].every(k=>old[k]===c[k]);
  let target=old;
- if(old&&!sameConnection&&old.models.length>1){
+ const remainingOrigins=original?.origins.filter(o=>!(o.source===c.source&&o.sourceId===c.sourceId))||[];
+ if(old&&!sameConnection&&(old.models.length>1||remainingOrigins.length)){
+  if(Object.keys(settings.profiles).length>=200)throw Error('CONFIG_LIMIT');
   const wasDefault=settings.defaultProfileId===old.profileId&&old.model===original?.id;
-  old.models=old.models.filter(m=>m!==original);if(!old.models.some(m=>m.id===old.model))old.model=old.models[0].id;old.revision=crypto.randomUUID();
+  if(remainingOrigins.length)original.origins=remainingOrigins;else old.models=old.models.filter(m=>m!==original);if(!old.models.some(m=>m.id===old.model))old.model=old.models[0].id;old.revision=crypto.randomUUID();
   target=null;if(wasDefault)settings.defaultProfileId=null;
   target={...old,profileId:crypto.randomUUID(),models:[],label:c.label,model:c.model};
   if(wasDefault){settings.defaultProfileId=target.profileId;settings.selectionRevision=crypto.randomUUID();}
@@ -73,7 +75,7 @@ function applyCandidate(settings,c,ciphertext,targetId,matchingIds){
  const previous=target.models.find(m=>m.id===c.model);
  const connectionSame=target.ciphertext&&matchingIds.includes(target.profileId)&&['provider','baseUrl','protocol','auth'].every(k=>target[k]===c[k]);
  if(!connectionSame){target.connectionRevision=crypto.randomUUID();for(const m of target.models)delete m.lastTest;}
- if(original&&original.id!==c.model)target.models=target.models.filter(m=>m.id!==original.id);
+ if(original&&original.id!==c.model&&target===old){if(remainingOrigins.length)original.origins=remainingOrigins;else target.models=target.models.filter(m=>m.id!==original.id);}
  const entry={id:c.model,label:previous?.locallyEdited?previous.label:c.label,origins:[...(previous?.origins||[]).filter(o=>!(o.source===c.source&&o.sourceId===c.sourceId)),origin],locallyEdited:false,...(connectionSame&&previous?.lastTest?{lastTest:previous.lastTest}:{})};
  target.models=target.models.filter(m=>m.id!==c.model);target.models.push(entry);
  for(const field of ['provider','protocol','baseUrl','auth'])target[field]=c[field];

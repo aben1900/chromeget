@@ -1,6 +1,9 @@
 'use strict';
 const provider=require('./ai-provider.cjs');
 async function dispatch(p){
+ if(p.op==='config-migrate')return require('./ai-config-model.cjs').migrateSettings(p.settings,p.credentialGroups);
+ if(p.op==='config-public')return require('./ai-config-model.cjs').publicConfig(p.profile);
+ if(p.op==='config-update')return require('./ai-config-model.cjs').updateConfig(p.old,p.message,p.ciphertext,p.keyChanged);
  if(p.op==='import-read')return require('./ai-model-import.cjs').readSource(p.source,p.home);
  if(p.op==='import-compare')return require('./ai-model-import.cjs').compareImports(p.settings,p.candidates);
  if(p.op==='import-public')return require('./ai-model-import.cjs').publicPreview(p.items);

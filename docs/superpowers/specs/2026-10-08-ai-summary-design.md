@@ -1,7 +1,7 @@
 # 智能摘要：OpenAI、DeepSeek 与 CC-Switch 配置
 
 日期：2026-10-08
-状态：功能范围已确认，书面设计待用户审阅；尚未修改产品代码。
+状态：2026-10-09 用户确认设计并要求先检查代码、除 SK 外预填全部参数；实施计划待审阅，尚未修改产品代码。
 
 ## 用户目标
 
@@ -35,7 +35,20 @@
 | DeepSeek | API 基础地址、模型 ID、API Key | Chat Completions |
 | CC-Switch / Claude | 选择配置，选择已配置模型或填写模型 ID | Anthropic Messages |
 
-OpenAI 官方基础地址预填 https://api.openai.com/v1；DeepSeek 预填 https://api.deepseek.com。模型 ID 可编辑，不写死账户一定可用的模型。服务商选择决定协议，地址本身不用于猜测协议。
+2026-10-09 用户要求除 SK 外都预填。默认如下，用户只需选择服务商并填密钥：
+
+| 设置 | OpenAI | DeepSeek |
+| --- | --- | --- |
+| 基础地址 | https://api.openai.com/v1 | https://api.deepseek.com |
+| 完整请求地址（程序拼接） | https://api.openai.com/v1/responses | https://api.deepseek.com/chat/completions |
+| 默认模型 | gpt-4.1-mini | deepseek-flash |
+| 协议 | Responses | Chat Completions |
+| 鉴权 | Bearer | Bearer |
+| 摘要语言/长度 | 中文/标准 | 中文/标准 |
+| 输出上限/超时 | 4096 tokens / 45 秒 | 4096 tokens / 45 秒 |
+| 其他参数 | store:false、stream:false，不传 reasoning 参数 | thinking:{type:'disabled'}、stream:false |
+
+高级设置允许修改地址和模型，不要求用户填写；这些默认值依据官方文档，不保证用户账户权限或余额。默认不传 temperature、top_p，以免用户换模型后遇到不支持参数。服务商选择决定协议，地址本身不用于猜测协议。
 
 手动配置的密钥输入框使用 `sk-placeholder-replace-me` 作为占位提示；不是有效密钥，不把它当成“配置完成”，不发请求验证此占位值。保存实际密钥后仅显示“已设置”，支持替换和清除。用户不需要在聊天中发送密钥。
 
@@ -123,3 +136,5 @@ OpenAI 官方基础地址预填 https://api.openai.com/v1；DeepSeek 预填 http
 - Claude Messages：https://platform.claude.com/docs/en/api/messages/create ，采用 /v1/messages、顶层 system 和文本 content blocks。
 
 以上是协议依据，CC-Switch 中第三方服务的兼容性仍需其自身连接测试确认。
+
+默认模型依据（2026-10-09 核对）：https://developers.openai.com/api/docs/models/gpt-4.1-mini ；https://api-docs.deepseek.com/api/create-chat-completion/ 。

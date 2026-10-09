@@ -1,5 +1,6 @@
 ﻿. (Join-Path $PSScriptRoot 'ai-config.ps1')
 . (Join-Path $PSScriptRoot 'library.ps1')
+. (Join-Path $PSScriptRoot 'ai-model-import.ps1')
 function Get-AiPublicProfile($profile) {
     $result=@{}
     foreach($name in @('source','provider','profileId','label','baseUrl','model','auth','hasKey','revision','models','protocol')){if($null -ne $profile.$name){$result[$name]=$profile.$name}}
@@ -11,6 +12,8 @@ function Invoke-AiAction($message,[string]$directory) {
             'ai-settings-get' {$r=Get-AiPublicSettings $PSScriptRoot $message.legacySelection;$r.ok=$true;return $r}
             'ai-settings-save' {$r=Save-AiSettings $PSScriptRoot $message;$r.ok=$true;return $r}
             'ai-ccswitch-list' {return @{ok=$true;profiles=@(Invoke-AiNode @{op='cc-list';dbPath=(Join-Path $env:USERPROFILE '.cc-switch\cc-switch.db')})}}
+            'ai-model-import-preview' {return New-AiImportPreview $PSScriptRoot ([string]$message.source)}
+            'ai-model-import-apply' {$r=Apply-AiImport $PSScriptRoot $message;$r.ok=$true;return $r}
             'ai-model-delete' {$r=Remove-AiModel $PSScriptRoot $message;$r.ok=$true;return $r}
             'ai-default-set' {$r=Set-AiDefault $PSScriptRoot $message;$r.ok=$true;return $r}
             {$_ -in @('ai-test','ai-test-draft')} {

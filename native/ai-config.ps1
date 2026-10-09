@@ -1,9 +1,26 @@
-﻿function Invoke-AiNode($payload) {
+﻿function Set-AiNetworkEnvironment($info,$payload,[Net.IWebProxy]$systemProxy=$null) {
+    if($payload.op -notin @('request','models-discover')){return}
+    $uri=[Uri]$payload.profile.baseUrl
+    $info.EnvironmentVariables['NODE_USE_ENV_PROXY']='1'
+    $bypass=[string]$info.EnvironmentVariables['NO_PROXY']
+    $info.EnvironmentVariables['NO_PROXY']=(@($bypass,'localhost','127.0.0.1','::1')|Where-Object {$_}) -join ','
+    if($uri.IsLoopback){return}
+    $key=if($uri.Scheme -eq 'https'){'HTTPS_PROXY'}else{'HTTP_PROXY'}
+    if($info.EnvironmentVariables[$key]){return}
+    if($info.EnvironmentVariables['ALL_PROXY']){$info.EnvironmentVariables[$key]=$info.EnvironmentVariables['ALL_PROXY'];return}
+    if(-not $systemProxy){$systemProxy=[Net.WebRequest]::GetSystemWebProxy()}
+    if($systemProxy -and -not $systemProxy.IsBypassed($uri)){
+        $proxy=$systemProxy.GetProxy($uri)
+        if($proxy -and $proxy.AbsoluteUri -ne $uri.AbsoluteUri -and $proxy.Scheme -in @('http','https')){$info.EnvironmentVariables[$key]=$proxy.AbsoluteUri}
+    }
+}
+function Invoke-AiNode($payload) {
     $node=Join-Path $PSScriptRoot 'bin\node.exe'
     if(-not(Test-Path -LiteralPath $node)){$node=(Get-Command node.exe -ErrorAction Stop).Source}
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=$node;$info.Arguments='"'+(Join-Path $PSScriptRoot 'ai-runner.cjs')+'"'
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true
+    Set-AiNetworkEnvironment $info $payload
     $info.RedirectStandardInput=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
     $encoding=New-Object Text.UTF8Encoding($false)
     $info.StandardOutputEncoding=$encoding;$info.StandardErrorEncoding=$encoding

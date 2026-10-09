@@ -1,6 +1,6 @@
 'use strict';
 const {normalizeProfile,hasKey}=require('./ai-provider.cjs');
-function discoverModels(profile){
+function discoverModels(profile,{timeoutMs=20000}={}){
  const p=normalizeProfile({...profile,model:profile.model||'discovery',provider:profile.provider||'custom'});
  if(!hasKey(profile.secret))throw Error('KEY_NOT_CONFIGURED');
  const suffix=p.protocol!=='chat-completions'&&!/\/v1$/.test(p.baseUrl)?'/v1/models':'/models';
@@ -12,7 +12,7 @@ function discoverModels(profile){
    if(res.statusCode!==200){res.resume();finish([401,403].includes(res.statusCode)?'AUTH_FAILED':res.statusCode===429?'RATE_LIMITED':'MODELS_UNAVAILABLE');req.destroy();return;}
    let size=0;const chunks=[];res.on('data',b=>{size+=b.length;if(size>262144){finish('RESPONSE_TOO_LARGE');req.destroy()}else chunks.push(b)});res.on('error',()=>finish('NETWORK_ERROR'));
    res.on('end',()=>{if(done)return;try{const j=JSON.parse(Buffer.concat(chunks));if(!Array.isArray(j.data))throw Error('RESPONSE_INVALID');if(j.data.length>200)throw Error('RESPONSE_TOO_LARGE');const models=new Map();for(const m of j.data){if(typeof m?.id!=='string'||!m.id.trim()||m.id!==m.id.trim()||m.id.length>200||/[\x00-\x1f]/.test(m.id))throw Error('RESPONSE_INVALID');models.set(m.id,{id:m.id,label:String(m.display_name||m.id).slice(0,200)})}finish(null,[...models.values()]);}catch(e){finish(e.message==='RESPONSE_TOO_LARGE'?e.message:'RESPONSE_INVALID')}});
-  });const timer=setTimeout(()=>{finish('NETWORK_TIMEOUT');req.destroy()},10000);req.on('error',()=>finish('NETWORK_ERROR'));
+  });const timer=setTimeout(()=>{finish('NETWORK_TIMEOUT');req.destroy()},Math.min(20000,Math.max(1,timeoutMs)));req.on('error',()=>finish('NETWORK_ERROR'));
  });
 }
 module.exports={discoverModels};

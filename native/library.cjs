@@ -31,10 +31,10 @@ function load(ctx,s){const warnings=[],journal=path.join(ctx.directory,'摘录�
  }catch(e){warnings.push('部分下载记录未能索引：'+e.message);}}
  const items=records.map(r=>({id:'clip:'+r.id,type:r.type,title:r.title||(r.type==='网页地址'?sourceUrl(r.content):r.content).slice(0,65),content:r.content,time:r.time,sourceUrl:sourceUrl(r.sourceUrl||(r.type==='网页地址'?r.content:'')),sourceTitle:r.sourceTitle||'',author:r.author||'',files:[]}));
  for(const item of Object.values(s.downloads)){if(!ID.test(item.id)||!Array.isArray(item.files))throw Error('下载索引损坏');const files=item.files.map(f=>{try{return fileInfo(f.path,item.directory);}catch{return {...f,exists:false,unsafe:true};}});items.push({...item,files});}
- for(const item of items){const a=s.annotations[item.id]||{};item.tags=Array.isArray(a.tags)?a.tags:[];item.collections=Array.isArray(a.collections)?a.collections:[];if(typeof a.author==='string')item.author=a.author;try{item.source=new URL(item.sourceUrl).hostname;}catch{item.source='未知来源';}}
+ for(const item of items){const a=s.annotations[item.id]||{};item.aiSummaryText=typeof a.summary?.text==='string'?a.summary.text:'';item.aiSummaryStale=!!item.aiSummaryText&&a.summary.sourceHash!==crypto.createHash('sha256').update(JSON.stringify([item.type,item.content])).digest('hex');item.tags=Array.isArray(a.tags)?a.tags:[];item.collections=Array.isArray(a.collections)?a.collections:[];if(typeof a.author==='string')item.author=a.author;try{item.source=new URL(item.sourceUrl).hostname;}catch{item.source='未知来源';}}
  return {items,warnings,changed};
 }
-function summary(item){const {content,files,...rest}=item;return {...rest,preview:content.slice(0,240),fileCount:files.length,missingCount:files.filter(f=>!f.exists).length};}
+function summary(item){const {content,files,aiSummaryText,...rest}=item;return {...rest,summaryPreview:(aiSummaryText||'').slice(0,400),summaryTruncated:(aiSummaryText||'').length>400,preview:content.slice(0,240),fileCount:files.length,missingCount:files.filter(f=>!f.exists).length};}
 function select(items,ids){if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||!ID.test(id)))throw Error('请选择 1–100 份有效资料');return [...new Set(ids)].map(id=>{const item=items.find(i=>i.id===id);if(!item)throw Error('资料已变化，请刷新后重试');return item;});}
 async function dispatch(message,ctx){if(!ctx?.directory||!ctx.root)throw Error('资料目录未配置');return locked(ctx.directory,async()=>{
  const backup=require('./library-backup.cjs');const recovery=backup.recover(ctx);if(message.action==='library-recover')return {ok:true,...recovery};
@@ -45,7 +45,7 @@ async function dispatch(message,ctx){if(!ctx?.directory||!ctx.root)throw Error('
  if(message.action==='library-snapshot')return {ok:true,warnings:warnings.slice(0,50),snapshotted:message.id?!!s.downloads['download:'+message.id]:true};
  if(message.action==='library-query'){
   if(message.revision&&message.revision!==revision)throw Error('资料已变化，请刷新列表后翻页');
-  const query=String(message.query||'').toLocaleLowerCase();let filtered=items.filter(i=>(!message.type||i.type===message.type)&&(!message.source||i.source===message.source)&&(!message.tag||i.tags.includes(message.tag))&&(!message.collection||i.collections.includes(message.collection))&&[i.title,i.content,i.author,i.sourceUrl,i.sourceTitle,...i.tags,...i.collections,...i.files.map(f=>f.name)].join('\n').toLocaleLowerCase().includes(query));
+  const query=String(message.query||'').toLocaleLowerCase();let filtered=items.filter(i=>(!message.type||i.type===message.type)&&(!message.source||i.source===message.source)&&(!message.tag||i.tags.includes(message.tag))&&(!message.collection||i.collections.includes(message.collection))&&[i.title,i.content,i.aiSummaryText,i.author,i.sourceUrl,i.sourceTitle,...i.tags,...i.collections,...i.files.map(f=>f.name)].join('\n').toLocaleLowerCase().includes(query));
   filtered.sort((a,b)=>(Date.parse(b.time)||0)-(Date.parse(a.time)||0)||a.id.localeCompare(b.id));const offset=Math.max(0,Math.trunc(Number(message.offset)||0));
   return {ok:true,items:filtered.slice(offset,offset+40).map(summary),total:filtered.length,offset,revision,warnings:warnings.slice(0,50),warningCount:warnings.length,facets:{types:[...new Set(items.map(i=>i.type))].sort(),sources:[...new Set(items.map(i=>i.source))].sort(),tags:s.tags,collections:s.collections}};
  }

@@ -117,6 +117,8 @@ function Save-AiSettings([string]$root,$message) {
         $p=Invoke-AiNode @{op='config-update';old=$old;message=$draft;ciphertext=$cipher;keyChanged=$keyChanged}
         foreach($m in @($old.models)){if($m.id -cnotin @($p.models.id)){foreach($o in @($m.origins)){$s.imports.ignored=@($s.imports.ignored)+($o.source+':'+$o.sourceId)}}}
         if($message.testReceipt){Restore-AiDraftTest $root $p ([string]$message.testReceipt)}
+        if(@($message.testReceipts).Count -gt 200){throw 'CONFIG_LIMIT'}
+        foreach($receiptId in @($message.testReceipts)){if($receiptId){Restore-AiDraftTest $root $p ([string]$receiptId) -AnyModel}}
         if($s.defaultProfileId -ceq $id -and $old.model -cne $p.model){$s.selectionRevision=[Guid]::NewGuid().ToString()}
         Set-AiProperty $s.profiles $id $p;Write-AiSettings $root $s
         $r=ConvertTo-AiPublicSettings $s;$r.profileId=$id;return $r
@@ -147,6 +149,12 @@ function Set-AiDefault([string]$root,$message) {
         $s=Read-AiSettings $root;$id=[string]$message.profileId;$p=$s.profiles.$id
         if($message.expectedSelectionRevision -cne $s.selectionRevision){throw 'CONFIG_CHANGED'}
         if(-not $p -or -not $p.ciphertext){throw 'KEY_NOT_CONFIGURED'}
+        if($message.model){
+            if($p.revision -cne $message.expectedRevision){throw 'CONFIG_CHANGED'}
+            $m=@($p.models | Where-Object {$_.id -ceq [string]$message.model})[0]
+            if(-not $m -or -not $m.lastTest.ok -or $m.lastTest.connectionRevision -cne $p.connectionRevision){throw 'MODEL_NOT_TESTED'}
+            $p.model=[string]$message.model;$p.revision=[Guid]::NewGuid().ToString()
+        }
         $s.defaultProfileId=$id;$s.selectionRevision=[Guid]::NewGuid().ToString();$s.legacySelectionHandled=$true;$s.legacySelectionPending=$null
         Write-AiSettings $root $s;return ConvertTo-AiPublicSettings $s
     }
@@ -186,15 +194,17 @@ function Get-AiTestSignature($p,[string]$secret) {
 }
 function Save-AiDraftTest([string]$root,$profile,$result) {
     $folder=Join-Path $root 'ai-test-receipts';[void][IO.Directory]::CreateDirectory($folder)
-    foreach($file in [IO.Directory]::GetFiles($folder,'*.json')){if([IO.File]::GetLastWriteTimeUtc($file) -lt [DateTime]::UtcNow.AddMinutes(-10)){[IO.File]::Delete($file)}}
-    $id=[Guid]::NewGuid().ToString();$payload=@{signature=(Get-AiTestSignature $profile $profile.secret);result=$result;expires=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()+600000}
+    foreach($file in [IO.Directory]::GetFiles($folder,'*.json')){if([IO.File]::GetLastWriteTimeUtc($file) -lt [DateTime]::UtcNow.AddHours(-4)){[IO.File]::Delete($file)}}
+    $id=[Guid]::NewGuid().ToString();$payload=@{model=$profile.model;signature=(Get-AiTestSignature $profile $profile.secret);result=$result;expires=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()+14400000}
     [IO.File]::WriteAllText((Join-Path $folder ($id+'.json')),(Protect-AiKey (ConvertTo-Json -InputObject $payload -Depth 8 -Compress)))
     return $id
 }
-function Restore-AiDraftTest([string]$root,$p,[string]$id) {
+function Restore-AiDraftTest([string]$root,$p,[string]$id,[switch]$AnyModel) {
     if($id -notmatch '^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$'){return}
     $file=Join-Path (Join-Path $root 'ai-test-receipts') ($id+'.json');if(-not [IO.File]::Exists($file)){return}
-    try{$receipt=(Unprotect-AiKey ([IO.File]::ReadAllText($file)))|ConvertFrom-Json;if($receipt.expires -lt [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()){return};$signature=Get-AiTestSignature $p (Unprotect-AiKey $p.ciphertext)
-      if($signature -ceq $receipt.signature){$m=@($p.models|Where-Object {$_.id -ceq $p.model})[0];Set-AiProperty $receipt.result 'connectionRevision' $p.connectionRevision;Set-AiProperty $m 'lastTest' $receipt.result}
+    try{$receipt=(Unprotect-AiKey ([IO.File]::ReadAllText($file)))|ConvertFrom-Json;if($receipt.expires -lt [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()){return};$model=if($AnyModel -and $receipt.model){[string]$receipt.model}else{$p.model};$m=@($p.models|Where-Object {$_.id -ceq $model})[0];if(-not $m){return}
+      $snapshot=@{provider=$p.provider;protocol=$p.protocol;baseUrl=$p.baseUrl;auth=$p.auth;model=$model}
+      $signature=Get-AiTestSignature $snapshot (Unprotect-AiKey $p.ciphertext)
+      if($signature -ceq $receipt.signature){Set-AiProperty $receipt.result 'connectionRevision' $p.connectionRevision;Set-AiProperty $m 'lastTest' $receipt.result}
     }catch{}finally{if([IO.File]::Exists($file)){[IO.File]::Delete($file)}}
 }

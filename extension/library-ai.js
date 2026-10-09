@@ -1,6 +1,7 @@
 (() => {
  const $=id=>document.getElementById(id),{send,selected,explain}=window.LibraryAi;let recordId=null,epoch=0,prepared=null,request=null,busy=false;
- function invalidate(){epoch++;prepared=null;$('aiGenerate').hidden=true;$('aiPreview').textContent='';}
+ function modelLabel(){try{$('aiSummaryModel').textContent='使用模型：'+selected().label}catch{$('aiSummaryModel').textContent='请先到模型管理设置默认模型。'}}
+ function invalidate(){modelLabel();epoch++;prepared=null;$('aiGenerate').hidden=true;$('aiPreview').textContent='';}
  function result(r){if(r.recordId!==recordId)return;request=r;$('aiCheck').hidden=!['running','unknown'].includes(r.state);$('aiGenerate').hidden=true;
   if(r.state==='completed'){$('aiResult').hidden=false;$('aiText').value=r.text;$('aiSave').disabled=!!r.savedRevision;$('aiStatus').textContent=r.savedRevision?'已保存摘要':'生成完成，请核对后保存。';}
   else $('aiStatus').textContent=r.state==='running'?'正在生成，可继续浏览其他资料。':explain(Error(r.errorCode||'RESULT_UNKNOWN'));
@@ -12,7 +13,7 @@
    else{const local=await chrome.storage.local.get('aiPending');if(e!==epoch)return;if(typeof local.aiPending==='string'){try{const r=await send('ai-status',{requestId:local.aiPending});if(e===epoch&&r.recordId===recordId&&!r.savedRevision)result(r);}catch{/* A removed or different-directory request must not hide the saved summary. */}}}
   }catch(err){if(e===epoch)$('aiStatus').textContent=explain(err);}
  }
- window.addEventListener('library-detail',e=>open(e.detail));window.addEventListener('library-restored',()=>open({id:null}));window.addEventListener('ai-profile-changed',invalidate);$('aiLength').addEventListener('change',invalidate);
+ window.addEventListener('library-detail',e=>open(e.detail));window.addEventListener('library-restored',()=>open({id:null}));window.addEventListener('ai-profile-changed',invalidate);modelLabel();$('aiLength').addEventListener('change',invalidate);
  $('aiPrepare').addEventListener('click',async()=>{if(busy||!recordId)return;invalidate();const e=epoch;try{const p=selected();$('aiPrepare').disabled=true;const r=await send('ai-prepare',{id:recordId,profileId:p.profileId,model:p.model,length:$('aiLength').value});if(e!==epoch)return;prepared=r;$('aiPreview').textContent=`将发送 ${r.characters} 字到 ${new URL(r.profile.baseUrl).origin}\n${r.profile.label} · ${r.profile.model}，可能产生 API 费用。`;$('aiGenerate').hidden=false;$('aiStatus').textContent='确认目标后点击“生成摘要”。';}catch(err){if(e===epoch)$('aiStatus').textContent=explain(err);}finally{$('aiPrepare').disabled=false;}});
  $('aiGenerate').addEventListener('click',async()=>{if(busy||!prepared)return;busy=true;const p=prepared,e=epoch;prepared=null;$('aiGenerate').hidden=true;$('aiPrepare').disabled=true;request={requestId:p.requestId,recordId:p.recordId,state:'running',expectedSummaryRevision:p.expectedSummaryRevision};$('aiStatus').textContent='正在生成…';try{await chrome.storage.local.set({aiPending:p.requestId});const r=await send('ai-generate',{requestId:p.requestId,confirmed:true});if(e===epoch)result(r);}catch(err){if(e===epoch){$('aiStatus').textContent=explain(err)+' 可点击核对结果。';$('aiCheck').hidden=false;}}finally{busy=false;$('aiPrepare').disabled=false;}});
  $('aiCheck').addEventListener('click',async()=>{if(!request)return;const e=epoch;try{const r=await send('ai-status',{requestId:request.requestId});if(e===epoch)result(r);}catch(err){if(e===epoch)$('aiStatus').textContent=explain(err);}});

@@ -27,15 +27,20 @@ function Invoke-AiAction($message,[string]$directory) {
                 return $result
             }
             'ai-prepare' {
-                $profile=Resolve-AiProfile $PSScriptRoot ([string]$message.profileId) ([string]$message.model)
-                return Invoke-LibraryAction @{action='library-ai-prepare';id=$message.id;profile=(Get-AiPublicProfile $profile);length=$message.length} $directory
+                $settings=Get-AiPublicSettings $PSScriptRoot
+                if(-not $settings.defaultProfileId){throw 'DEFAULT_MODEL_REQUIRED'}
+                if($message.profileId -and $message.profileId -cne $settings.defaultProfileId){throw 'CONFIG_CHANGED'}
+                $profile=Resolve-AiProfile $PSScriptRoot ([string]$settings.defaultProfileId) ([string]$message.model)
+                return Invoke-LibraryAction @{action='library-ai-prepare';id=$message.id;profile=(Get-AiPublicProfile $profile);length=$message.length;selectionRevision=$settings.selectionRevision} $directory
             }
             'ai-generate' {
                 if($message.confirmed -ne $true){throw 'CONFIRM_REQUIRED'}
                 $state=Invoke-LibraryAction @{action='library-ai-inspect';requestId=$message.requestId} $directory
                 if(-not $state.ok -or $state.state -ne 'prepared'){return $state}
+                $settings=Get-AiPublicSettings $PSScriptRoot
+                if(-not $state.selectionRevision -or $state.selectionRevision -cne $settings.selectionRevision -or $state.profileId -cne $settings.defaultProfileId){throw 'CONFIG_CHANGED'}
                 $profile=Resolve-AiProfile $PSScriptRoot ([string]$state.profileId) ([string]$state.model)
-                $claim=Invoke-LibraryAction @{action='library-ai-claim';requestId=$message.requestId;profileRevision=$profile.revision} $directory
+                $claim=Invoke-LibraryAction @{action='library-ai-claim';requestId=$message.requestId;profileRevision=$profile.revision;selectionRevision=$settings.selectionRevision} $directory
                 if(-not $claim.ok -or -not $claim.shouldSend){return $claim}
                 $finish=@{action='library-ai-finish';requestId=$message.requestId;executionToken=$claim.executionToken}
                 try {$r=Invoke-AiNode @{op='request';profile=$profile;text=$claim.text;length=$claim.length};$finish.text=$r.text}

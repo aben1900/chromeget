@@ -5,6 +5,8 @@ const record={id:uuid,type:'内容',time:new Date().toISOString(),content:'完�
 const profile={...require('../native/ai-provider.cjs').presets().openai,hasKey:true,revision:'rev1'};
 const action=(name,rest)=>dispatch({action:'library-ai-'+name,...rest},ctx);
 (async()=>{
+ const defaultBound=await action('prepare',{id,profile,length:'short',selectionRevision:'selection-A'});
+ await assert.rejects(action('claim',{requestId:defaultBound.requestId,profileRevision:'rev1',selectionRevision:'selection-B'}),/CONFIG_CHANGED/);
  const p=await action('prepare',{id,profile,length:'standard'});assert.equal(p.characters,16000);assert.equal(p.expectedSummaryRevision,null);
  const c=await action('claim',{requestId:p.requestId,profileRevision:'rev1'});assert.equal(c.shouldSend,true);assert.equal(c.text,record.content);assert.ok(c.executionToken);
  assert.equal((await action('claim',{requestId:p.requestId,profileRevision:'rev1'})).state,'running');

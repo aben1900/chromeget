@@ -8,8 +8,15 @@ function send(message,onSpawn){return new Promise((resolve,reject)=>{const p=spa
  let release,received;let count=0;const arrived=new Promise(r=>received=r);const server=http.createServer((req,res)=>{count++;req.resume();req.on('end',()=>{release=()=>res.end(JSON.stringify({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'生成摘要'}]}]}));received();});});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  try{
   const settings=await send({action:'ai-settings-save',profileId:'openai',baseUrl:'http://127.0.0.1:'+server.address().port,key:'sk-fixture-only'});assert.equal(settings.ok,true,JSON.stringify(settings));assert.ok(!JSON.stringify(settings).includes('sk-fixture-only'));
+  assert.equal((await send({action:'ai-prepare',id:'clip:missing',length:'short'})).code,'DEFAULT_MODEL_REQUIRED');
+  const d=await send({action:'ai-default-set',profileId:'openai',expectedSelectionRevision:settings.selectionRevision});assert.equal(d.ok,true);
   const id=randomUUID();assert.equal((await send({action:'save',record:{id,time:new Date().toISOString(),type:'内容',content:'原文'}})).ok,true);
   const p=await send({action:'ai-prepare',id:'clip:'+id,profileId:'openai',length:'standard'});assert.equal(p.ok,true,JSON.stringify(p));
+  const other=await send({action:'ai-settings-save',label:'Other',provider:'custom',protocol:'chat-completions',baseUrl:'https://example.test',model:'other',auth:'bearer',key:'sk-fixture'});
+  const switched=await send({action:'ai-default-set',profileId:other.profileId,expectedSelectionRevision:d.selectionRevision});
+  assert.equal((await send({action:'ai-generate',requestId:p.requestId,confirmed:true})).code,'CONFIG_CHANGED');
+  const restored=await send({action:'ai-default-set',profileId:'openai',expectedSelectionRevision:switched.selectionRevision});
+  const fresh=await send({action:'ai-prepare',id:'clip:'+id,profileId:'openai',length:'standard'});Object.assign(p,fresh);
   const first=send({action:'ai-generate',requestId:p.requestId,confirmed:true});await Promise.race([arrived,new Promise((_,reject)=>{const t=setTimeout(()=>reject(Error('request did not arrive')),12000);t.unref();})]);
   assert.equal((await send({action:'save',record:{id:randomUUID(),time:new Date().toISOString(),type:'内容',content:'生成时并发保存'}})).ok,true);
   assert.equal((await send({action:'ai-generate',requestId:p.requestId,confirmed:true})).state,'running');assert.equal(count,1);release();const result=await first;assert.equal(result.text,'生成摘要');assert.ok(!result.executionToken);

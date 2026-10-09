@@ -7,7 +7,7 @@ assert.deepEqual(normalizeProfile(p).tags,['SMEC','个人','常用']);
 for(const tags of ['SMEC',[null],['x'.repeat(25)],Array.from({length:11},(_,i)=>'t'+i),['a\nb']])assert.throws(()=>normalizeProfile({...p,tags}),/CONFIG_INVALID/);
 const id='12345678-1234-1234-1234-123456789abc';
 const stored={schemaVersion:2,profiles:{[id]:{...presets().openai,profileId:id,origin:{source:'workbuddy'},baseUrl:'https://aigateway.smec-cn.com/v1',ciphertext:'fixture',lastTest:{revision:'default',ok:true}}}};
-const s=upgradeSettings(stored);assert.deepEqual(s.profiles[id].tags,['SMEC']);assert.equal(s.profiles[id].lastTest.ok,true);
+const s=upgradeSettings(stored);assert.deepEqual(s.profiles[id].tags,['SMEC']);assert.equal(s.profiles[id].models[0].lastTest.ok,true);
 s.profiles[id].tags=[];assert.deepEqual(upgradeSettings(s).profiles[id].tags,[],'cleared tags must not reappear');
 assert.ok(!JSON.stringify(buildRequest({...p,secret:'sk-fixture'},'OK','short',true).body).includes('SMEC'));
 console.log('PASS tags normalization, limits, one-time SMEC backfill, clear persistence and request privacy');

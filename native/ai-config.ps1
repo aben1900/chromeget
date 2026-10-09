@@ -51,7 +51,7 @@ function Read-AiSettings([string]$root) {
 
 function Write-AiSettings([string]$root,$settings) {
     $target=Join-Path $root 'ai-settings.json';$temp=$target+'.'+[Guid]::NewGuid().ToString('N')+'.tmp'
-    try{[IO.File]::WriteAllText($temp,($settings|ConvertTo-Json -Depth 20),(New-Object Text.UTF8Encoding($false)));if([IO.File]::Exists($target)){[IO.File]::Replace($temp,$target,[NullString]::Value)}else{[IO.File]::Move($temp,$target)}}finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
+    try{$json=$settings|ConvertTo-Json -Depth 20;if([Text.Encoding]::UTF8.GetByteCount($json) -gt 2097152){throw 'CONFIG_LIMIT'};[IO.File]::WriteAllText($temp,$json,(New-Object Text.UTF8Encoding($false)));if([IO.File]::Exists($target)){[IO.File]::Replace($temp,$target,[NullString]::Value)}else{[IO.File]::Move($temp,$target)}}finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
 }
 function Protect-AiKey([string]$key) {
     Add-Type -AssemblyName System.Security;$bytes=[Text.Encoding]::UTF8.GetBytes($key)
@@ -166,7 +166,7 @@ function Resolve-AiProfile([string]$root,[string]$profileId,[string]$model) {
     if($profileId.StartsWith('cc:')){return Invoke-AiNode @{op='cc-resolve';dbPath=(Join-Path $env:USERPROFILE '.cc-switch\cc-switch.db');id=$profileId.Substring(3);model=$model}}
     return Invoke-AiConfigLock $root {
         $s=Read-AiSettings $root;$saved=$s.profiles.$profileId;if(-not $saved){throw 'CONFIG_CHANGED'}
-        $p=Invoke-AiNode @{op='normalize';profile=$saved};if($model -and $model -cne $p.model){throw 'CONFIG_CHANGED'}
+        $p=Invoke-AiNode @{op='config-public';profile=$saved};if($model -and $model -cne $p.model){throw 'CONFIG_CHANGED'}
         $secret=Unprotect-AiKey $saved.ciphertext;$p.hasKey=[bool]$secret;Set-AiProperty $p 'secret' $secret;return $p
     }
 }

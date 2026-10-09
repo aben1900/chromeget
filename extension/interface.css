@@ -32,3 +32,5 @@ body:not(:has(.video-page)) main>details{background:#fff;border:1px solid var(--
 body:not(:has(.video-page)) .secondary:not(:disabled):hover{background:#dae9df}
 @media(max-width:340px){main{padding:10px 8px 16px}.video-page .video-card,.video-page .login-card{padding:12px}.video-page .actions{gap:6px}.video-page .actions>button{font-size:12px;padding:7px 6px}.video-page summary span{font-size:11px}.video-page .field-action{gap:6px}}
 @media(prefers-reduced-motion:reduce){button{transition:none!important}}
+/* Compact settings groups; text/article content retains its own line-height. */
+main{padding:8px 10px 14px}main.video-page{gap:8px}.video-page .video-card,.video-page .login-card{padding:10px;border-radius:8px}.video-page .video-card h2,.video-page .login-card h2{margin-top:0;margin-bottom:8px}.video-page .actions{gap:6px}.video-page details>summary{line-height:1.4}.video-page .hint{margin-top:5px;margin-bottom:5px}

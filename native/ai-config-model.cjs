@@ -47,7 +47,7 @@ function migrateSettings(value,credentialGroups={}){
   for(const p of rows.slice(1)){for(const item of p.models){const m=structuredClone(item);if(m.lastTest)m.lastTest.connectionRevision=keep.connectionRevision;const existing=keep.models.find(x=>x.id===m.id);if(!existing)keep.models.push(m);else{existing.origins.push(...m.origins);if(m.lastTest&&(!existing.lastTest||m.lastTest.at>existing.lastTest.at))existing.lastTest=m.lastTest;}}aliases[p.profileId]=keep.profileId;delete profiles[p.profileId];}
   if(rows.length>1)keep.label=keep.tags.includes('SMEC')?'SMEC 网关':keep.label;
  }}
- return {settings:{schemaVersion:3,profiles,defaultProfileId:s.defaultProfileId?aliases[s.defaultProfileId]:null,selectionRevision:s.selectionRevision||crypto.randomUUID(),imports:s.imports||{completed:false,ignored:[]},legacySelectionPending:s.legacySelectionPending||null,legacySelectionHandled:!!s.legacySelectionHandled},aliases,warnings};
+ return {settings:{schemaVersion:3,profiles,defaultProfileId:s.defaultProfileId?aliases[s.defaultProfileId]:null,selectionRevision:s.selectionRevision||crypto.randomUUID(),imports:s.imports||{completed:false,ignored:[]},legacySelectionPending:s.legacySelectionPending||null,legacySelectionHandled:!!s.legacySelectionHandled,migrationWarnings:[...(s.migrationWarnings||[]).filter(v=>['KEY_DECRYPT_FAILED','GROUP_MODEL_LIMIT'].includes(v)),...warnings]},aliases,warnings};
 }
 function updateConfig(old,message,ciphertext,keyChanged=false){
  const input={...(old||{}),...Object.fromEntries(['label','tags','provider','protocol','baseUrl','auth','model'].filter(k=>message[k]!==undefined).map(k=>[k,message[k]])),profileId:old?.profileId||message.profileId||crypto.randomUUID(),revision:crypto.randomUUID(),ciphertext};

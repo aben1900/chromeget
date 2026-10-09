@@ -2,7 +2,7 @@
 const fs=require('fs'),path=require('path'),assert=require('assert/strict'),http=require('http'),{spawn}=require('child_process'),{randomUUID}=require('crypto');
 const root=path.resolve('work/ai-native-'+Date.now());fs.mkdirSync(root,{recursive:true});
 for(const n of fs.readdirSync('native').filter(n=>/\.(ps1|cjs)$/.test(n)))fs.copyFileSync('native/'+n,path.join(root,n));fs.writeFileSync(path.join(root,'config.json'),JSON.stringify({directory:root}));
-function send(message){return new Promise((resolve,reject)=>{const p=spawn('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,'host.ps1')],{windowsHide:true});const out=[];p.stdout.on('data',b=>out.push(b));p.on('error',reject);p.on('close',()=>{try{resolve(JSON.parse(Buffer.concat(out).subarray(4)))}catch(e){reject(e)}});const b=Buffer.from(JSON.stringify(message)),h=Buffer.alloc(4);h.writeUInt32LE(b.length);p.stdin.end(Buffer.concat([h,b]));});}
+function send(message,onSpawn){return new Promise((resolve,reject)=>{const p=spawn('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,'host.ps1')],{windowsHide:true});if(onSpawn)onSpawn(p);const out=[];p.stdout.on('data',b=>out.push(b));p.on('error',reject);p.on('close',()=>{try{resolve(JSON.parse(Buffer.concat(out).subarray(4)))}catch(e){reject(e)}});const b=Buffer.from(JSON.stringify(message)),h=Buffer.alloc(4);h.writeUInt32LE(b.length);p.stdin.end(Buffer.concat([h,b]));});}
 (async()=>{
  const defaults=await send({action:'ai-settings-get'});assert.equal(defaults.ok,true,JSON.stringify(defaults));assert.equal(defaults.profiles.deepseek.model,'deepseek-flash');
  let release,received;let count=0;const arrived=new Promise(r=>received=r);const server=http.createServer((req,res)=>{count++;req.resume();req.on('end',()=>{release=()=>res.end(JSON.stringify({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'生成摘要'}]}]}));received();});});await new Promise(r=>server.listen(0,'127.0.0.1',r));
@@ -16,6 +16,10 @@ function send(message){return new Promise((resolve,reject)=>{const p=spawn('powe
   assert.equal((await send({action:'ai-generate',requestId:p.requestId,confirmed:true})).state,'completed');assert.equal(count,1);
   assert.equal((await send({action:'ai-save',requestId:p.requestId,text:result.text,expectedSummaryRevision:null})).ok,true);
   assert.equal((await send({action:'ai-read',id:'clip:'+id})).summary.text,'生成摘要');
+  const interruptedPlan=await send({action:'ai-prepare',id:'clip:'+id,profileId:'openai',length:'standard'});const secondArrived=new Promise(r=>received=r);let killed;
+  const interrupted=send({action:'ai-generate',requestId:interruptedPlan.requestId,confirmed:true},p=>killed=p).catch(()=>null);await secondArrived;killed.kill();release();await interrupted;
+  const jobRoot=path.join(root,'ai-jobs');const job=path.join(jobRoot,fs.readdirSync(jobRoot)[0],interruptedPlan.requestId+'.json');const state=JSON.parse(fs.readFileSync(job));assert.equal(state.state,'running');state.startedAt=Date.now()-91000;fs.writeFileSync(job,JSON.stringify(state));
+  assert.equal((await send({action:'ai-status',requestId:interruptedPlan.requestId})).state,'unknown');assert.equal((await send({action:'ai-generate',requestId:interruptedPlan.requestId,confirmed:true})).state,'unknown');assert.equal(count,2);
   console.log('PASS real native AI bridge: DPAPI, concurrent collection, deduplication and summary save');
  }finally{server.closeAllConnections();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1});

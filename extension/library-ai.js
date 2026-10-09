@@ -7,7 +7,9 @@
  }
  async function open(detail){invalidate();const e=epoch;recordId=detail.id;request=null;$('aiResult').hidden=true;$('aiCheck').hidden=true;$('aiStatus').textContent='';$('aiSummary').hidden=!recordId||!['内容','评论','评阅','提示词'].includes(detail.type);if($('aiSummary').hidden)return;
   try{const r=await send('ai-read',{id:recordId});if(e!==epoch)return;if(r.summary){$('aiResult').hidden=false;$('aiText').value=r.summary.text;$('aiSave').disabled=true;$('aiStatus').textContent=(r.stale?'原文已变化，摘要可能过期。':'已保存摘要。')+' '+r.summary.provider+' · '+r.summary.model;}
-   const recent=await send('ai-recent');if(e!==epoch)return;const pending=recent.requests.find(v=>v.recordId===recordId&&!v.savedRevision&&v.state!=='prepared');if(pending){const r=await send('ai-status',{requestId:pending.requestId});if(e===epoch)result(r);}
+   const recent=await send('ai-recent',{id:recordId});if(e!==epoch)return;const latest=recent.requests.find(v=>v.recordId===recordId&&v.state!=='prepared');
+   if(latest){if(!latest.savedRevision){const r=await send('ai-status',{requestId:latest.requestId});if(e===epoch)result(r);}}
+   else{const local=await chrome.storage.local.get('aiPending');if(e!==epoch)return;if(typeof local.aiPending==='string'){try{const r=await send('ai-status',{requestId:local.aiPending});if(e===epoch&&r.recordId===recordId&&!r.savedRevision)result(r);}catch{/* A removed or different-directory request must not hide the saved summary. */}}}
   }catch(err){if(e===epoch)$('aiStatus').textContent=explain(err);}
  }
  window.addEventListener('library-detail',e=>open(e.detail));window.addEventListener('library-restored',()=>open({id:null}));window.addEventListener('ai-profile-changed',invalidate);$('aiLength').addEventListener('change',invalidate);

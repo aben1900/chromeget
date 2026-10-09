@@ -34,7 +34,7 @@ function Invoke-AiAction($message,[string]$directory) {
                 return Invoke-LibraryAction $finish $directory
             }
             'ai-status' {return Invoke-LibraryAction @{action='library-ai-status';requestId=$message.requestId} $directory}
-            'ai-recent' {return Invoke-LibraryAction @{action='library-ai-recent'} $directory}
+            'ai-recent' {return Invoke-LibraryAction @{action='library-ai-recent';id=$message.id} $directory}
             'ai-read' {return Invoke-LibraryAction @{action='library-ai-read';id=$message.id} $directory}
             'ai-save' {return Invoke-LibraryAction @{action='library-ai-save';requestId=$message.requestId;text=$message.text;expectedSummaryRevision=$message.expectedSummaryRevision} $directory}
             default {throw 'REQUEST_INVALID'}

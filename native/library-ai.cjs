@@ -15,7 +15,7 @@ function dispatch(m,ctx,items,index){
  const itemFor=id=>{const item=select(items,[id])[0];if(!['内容','评论','评阅','提示词'].includes(item.type)||!item.id.startsWith('clip:'))throw Error('INPUT_UNSUPPORTED');return item;};
  const sourceHash=item=>hash(JSON.stringify([item.type,item.content]));
  if(m.action==='library-ai-read'){const item=itemFor(m.id),summary=index.annotations[item.id]?.summary||null;return {ok:true,summary,stale:!!summary&&summary.sourceHash!==sourceHash(item)};}
- if(m.action==='library-ai-recent')return {ok:true,requests:states().sort((a,b)=>b.createdAt-a.createdAt).slice(0,10).map(s=>{const {text,...rest}=publicState(s);return rest;})};
+ if(m.action==='library-ai-recent'){if(m.id)itemFor(m.id);return {ok:true,requests:states().filter(s=>!m.id||(s.recordId===m.id&&s.state!=='prepared')).sort((a,b)=>b.createdAt-a.createdAt).slice(0,10).map(s=>{const {text,...rest}=publicState(s);return rest;})};}
  if(m.action==='library-ai-prepare'){
   const item=itemFor(m.id);validateInput(item.content);const p=normalizeProfile(m.profile);if(!p.hasKey)throw Error('KEY_NOT_CONFIGURED');if(!['short','standard','detailed'].includes(m.length))throw Error('CONFIG_INVALID');
   const s={id:crypto.randomUUID(),recordId:item.id,profileId:p.profileId,profileRevision:p.revision,providerLabel:p.label,model:p.model,length:m.length,sourceHash:sourceHash(item),expectedSummaryRevision:index.annotations[item.id]?.summary?.revision||null,directoryHash,state:'prepared',createdAt:Date.now()};persist(s);
@@ -26,7 +26,7 @@ function dispatch(m,ctx,items,index){
  if(m.action==='library-ai-status')return publicState(s);
  if(m.action==='library-ai-claim'){
   if(s.state!=='prepared')return publicState(s);if(Date.now()-s.createdAt>900000)throw Error('PREVIEW_EXPIRED');if(s.profileRevision!==m.profileRevision)throw Error('CONFIG_CHANGED');
-  const item=itemFor(s.recordId);if(sourceHash(item)!==s.sourceHash)throw Error('SOURCE_CHANGED');if(states().some(v=>v.recordId===s.recordId&&v.state==='running'))throw Error('ALREADY_RUNNING');
+  const item=itemFor(s.recordId);if(sourceHash(item)!==s.sourceHash)throw Error('SOURCE_CHANGED');const running=states().find(v=>v.recordId===s.recordId&&v.state==='running');if(running)return {...publicState(running),alreadyRunning:true};
   s.state='running';s.startedAt=Date.now();s.executionToken=crypto.randomUUID();persist(s);return {ok:true,shouldSend:true,executionToken:s.executionToken,text:item.content,length:s.length};
  }
  if(m.action==='library-ai-finish'||m.action==='library-ai-fail'){

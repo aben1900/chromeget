@@ -7,7 +7,7 @@ function send(message,onSpawn){return new Promise((resolve,reject)=>{const p=spa
  const defaults=await send({action:'ai-settings-get'});assert.equal(defaults.ok,true,JSON.stringify(defaults));assert.equal(defaults.profiles.deepseek.model,'deepseek-flash');
  let release,received;let count=0;const arrived=new Promise(r=>received=r);const server=http.createServer((req,res)=>{count++;req.resume();req.on('end',()=>{release=()=>res.end(JSON.stringify({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'生成摘要'}]}]}));received();});});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  try{
-  const settings=await send({action:'ai-settings-save',profileId:'openai',baseUrl:'http://127.0.0.1:'+server.address().port,key:'sk-fixture-only'});assert.equal(settings.ok,true,JSON.stringify(settings));assert.ok(!JSON.stringify(settings).includes('sk-fixture-only'));
+  const settings=await send({action:'ai-settings-save',profileId:'openai',expectedRevision:defaults.profiles.openai.revision,baseUrl:'http://127.0.0.1:'+server.address().port,key:'sk-fixture-only'});assert.equal(settings.ok,true,JSON.stringify(settings));assert.ok(!JSON.stringify(settings).includes('sk-fixture-only'));
   assert.equal((await send({action:'ai-prepare',id:'clip:missing',length:'short'})).code,'DEFAULT_MODEL_REQUIRED');
   const d=await send({action:'ai-default-set',profileId:'openai',expectedSelectionRevision:settings.selectionRevision});assert.equal(d.ok,true);
   const id=randomUUID();assert.equal((await send({action:'save',record:{id,time:new Date().toISOString(),type:'内容',content:'原文'}})).ok,true);

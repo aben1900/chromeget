@@ -13,6 +13,6 @@ function upgradeSettings(value){
   if(p.lastTest?.revision===p.revision)profiles[id].lastTest=p.lastTest;
  }
  if(s.defaultProfileId&&!profiles[s.defaultProfileId])throw Error('CONFIG_INVALID');
- return {schemaVersion:2,profiles,defaultProfileId:s.defaultProfileId||null,selectionRevision:s.selectionRevision||crypto.randomUUID(),imports:s.imports||{completed:false,ignored:[]},legacySelectionHandled:!!s.legacySelectionHandled};
+ return {schemaVersion:2,profiles,defaultProfileId:s.defaultProfileId||null,selectionRevision:s.selectionRevision||crypto.randomUUID(),imports:s.imports||{completed:false,ignored:[]},legacySelectionPending:s.legacySelectionPending||null,legacySelectionHandled:!!s.legacySelectionHandled};
 }
 module.exports={upgradeSettings,validId};

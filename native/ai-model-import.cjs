@@ -5,7 +5,7 @@ const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex'
 function safeFile(file){let p=path.resolve(file);while(true){if(fs.existsSync(p)&&fs.lstatSync(p).isSymbolicLink())throw Error('IMPORT_UNAVAILABLE');const up=path.dirname(p);if(p===up)break;p=up;}if(!fs.existsSync(file)||fs.statSync(file).size>2097152)throw Error('IMPORT_UNAVAILABLE');return file;}
 function candidate(p,source,sourceId,secret){
  const normalized=normalizeProfile(p);if(!hasKey(secret))throw Error('KEY_NOT_CONFIGURED');
- return {...normalized,source,sourceId,secret,credentialFingerprint:hash(secret),fingerprint:hash([sourceId,normalized.label,normalized.baseUrl,normalized.protocol,normalized.model,secret])};
+ return {...normalized,source,sourceId,secret,credentialFingerprint:hash(secret),fingerprint:hash([sourceId,normalized.label,normalized.baseUrl,normalized.protocol,normalized.auth,normalized.model,secret])};
 }
 function resolveModelId(localId,availableIds){const id=localId.startsWith('custom:smec-')?localId.slice(12):localId;return {model:availableIds.includes(localId)?localId:id,verified:availableIds.includes(localId)||availableIds.includes(id)};}
 function readWorkBuddy(file){
@@ -34,14 +34,14 @@ async function readSource(source,home){
  if(source==='ccswitch')return readCcSwitch(path.join(home,'.cc-switch','cc-switch.db'));
  if(source!=='workbuddy')throw Error('CONFIG_INVALID');
  const rows=readWorkBuddy(path.join(home,'.workbuddy','models.json')),cache=new Map();
- for(const p of rows){const k=p.baseUrl+':'+p.credentialFingerprint;if(!cache.has(k)){try{cache.set(k,await queryModels(p))}catch{cache.set(k,[])}}const mapping=resolveModelId(p.model,cache.get(k));p.model=mapping.model;p.verified=mapping.verified;p.fingerprint=hash([p.sourceId,p.label,p.baseUrl,p.protocol,p.model,p.secret]);}
+ for(const p of rows){const k=p.baseUrl+':'+p.credentialFingerprint;if(!cache.has(k)){try{cache.set(k,await queryModels(p))}catch{cache.set(k,[])}}const mapping=resolveModelId(p.model,cache.get(k));p.model=mapping.model;p.verified=mapping.verified;p.fingerprint=hash([p.sourceId,p.label,p.baseUrl,p.protocol,p.auth,p.model,p.secret]);}
  return rows;
 }
 function compareImports(settings,candidates){
  return candidates.map(c=>{
   const existing=Object.values(settings.profiles).find(p=>p.origin?.source===c.source&&p.origin?.sourceId===c.sourceId)||Object.values(settings.profiles).find(p=>p.baseUrl===c.baseUrl&&p.protocol===c.protocol&&p.model===c.model&&p.origin?.credentialFingerprint===c.credentialFingerprint);
   const ignored=settings.imports.ignored.includes(c.source+':'+c.sourceId);
-  const same=existing?.origin?.fingerprint===c.fingerprint;
+  const same=!!existing&&existing.origin?.fingerprint===c.fingerprint&&['label','baseUrl','protocol','auth','model'].every(k=>existing[k]===c[k])&&!existing.origin?.locallyEdited;
   return {...c,candidateId:hash([c.source,c.sourceId]),targetId:existing?.profileId,targetRevision:existing?.revision,conflict:!!existing?.origin?.locallyEdited&&!same,change:existing?(same?'same':'update'):(ignored?'ignored':'add')};
  });
 }

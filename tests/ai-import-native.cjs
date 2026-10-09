@@ -7,12 +7,18 @@ fs.writeFileSync(path.join(root,'test.ps1'),'\ufeff'+`$ErrorActionPreference='St
 $env:USERPROFILE=$PSScriptRoot
 . (Join-Path $PSScriptRoot 'ai-config.ps1')
 . (Join-Path $PSScriptRoot 'ai-model-import.ps1')
+$legacy=Get-AiPublicSettings $PSScriptRoot @{profileId='cc:yqn';model='glm-5.2'}
+if((Read-AiSettings $PSScriptRoot).legacySelectionHandled){throw 'CC selection lost before import'}
 $preview=New-AiImportPreview $PSScriptRoot 'ccswitch'
 if($preview.items.Count -ne 1){throw 'preview'}
 if(($preview|ConvertTo-Json -Depth 20).Contains('sk-fixture')){throw 'leak'}
 $saved=Apply-AiImport $PSScriptRoot @{previewId=$preview.previewId;candidateIds=@($preview.items[0].candidateId)}
 $model=@($saved.profiles.Values|Where-Object {$_.model -eq 'glm-5.2'})[0]
+if($saved.defaultProfileId -ne $model.profileId){throw 'legacy CC selection not mapped'}
 if(-not $model.hasKey){throw 'import key'}
+$state=Read-AiSettings $PSScriptRoot;$state.defaultProfileId=$null;$state.legacySelectionHandled=$false;Write-AiSettings $PSScriptRoot $state
+$late=Get-AiPublicSettings $PSScriptRoot @{profileId='cc:yqn';model='glm-5.2'}
+if($late.defaultProfileId -ne $model.profileId){throw 'late legacy selection not mapped'}
 $resolved=Resolve-AiProfile $PSScriptRoot $model.profileId ''
 if($resolved.secret -cne 'sk-fixture'){throw 'cipher'}
 $again=New-AiImportPreview $PSScriptRoot 'ccswitch'

@@ -8,10 +8,17 @@ assert.deepEqual(resolveModelId('custom:smec-glm-5.2',['glm-5.2']),{model:'glm-5
 const c=candidates[0],id=crypto.randomUUID();let settings={profiles:{},imports:{ignored:[]}};assert.equal(compareImports(settings,candidates)[0].change,'add');
 settings.profiles[id]={...c,profileId:id,origin:{source:c.source,sourceId:c.sourceId,fingerprint:c.fingerprint,credentialFingerprint:c.credentialFingerprint,locallyEdited:false}};
 assert.equal(compareImports(settings,[c])[0].change,'same');
-settings.profiles[id].origin.locallyEdited=true;
+settings.profiles[id].origin.locallyEdited=true;settings.profiles[id].model='locally-edited-model';
+assert.equal(compareImports(settings,[c])[0].change,'update');assert.equal(compareImports(settings,[c])[0].conflict,true);
+const authChanged={...c,auth:'x-api-key'};settings.profiles[id].origin.locallyEdited=false;assert.equal(compareImports(settings,[authChanged])[0].change,'update');settings.profiles[id].origin.locallyEdited=true;
 assert.equal(compareImports(settings,[{...c,fingerprint:'changed'}])[0].conflict,true);
 assert.equal(JSON.stringify(publicPreview(compareImports(settings,candidates))).includes('sk-fixture'),false);
 settings={profiles:{},imports:{ignored:[c.source+':'+c.sourceId]}};assert.equal(compareImports(settings,[c])[0].change,'ignored');
 fs.writeFileSync(file,'broken');assert.throws(()=>readWorkBuddy(file),/IMPORT_UNAVAILABLE/);
 fs.writeFileSync(file,' '.repeat(2097153));assert.throws(()=>readWorkBuddy(file),/IMPORT_UNAVAILABLE/);
 console.log('PASS import 13 models, ID mapping, duplicates, edits, deletion suppression, malformed/oversize and public projection');
+
+const {DatabaseSync}=require('node:sqlite'),{readCcSwitch}=require('../native/ai-model-import.cjs');
+const dbFile=path.join(root,'auth.db'),db=new DatabaseSync(dbFile);db.exec('CREATE TABLE providers (id TEXT, app_type TEXT, name TEXT, settings_config TEXT)');
+const env={ANTHROPIC_BASE_URL:'https://aigateway.smec-cn.com',ANTHROPIC_MODEL:'glm-5.2',ANTHROPIC_AUTH_TOKEN:'sk-fixture'};
+db.prepare('INSERT INTO providers VALUES (?,?,?,?)').run('test','claude','SMEC',JSON.stringify({env}));const bearer=readCcSwitch(dbFile)[0];delete env.ANTHROPIC_AUTH_TOKEN;env.ANTHROPIC_API_KEY='sk-fixture';db.prepare('UPDATE providers SET settings_config=?').run(JSON.stringify({env}));const apiKey=readCcSwitch(dbFile)[0];db.close();assert.notEqual(bearer.fingerprint,apiKey.fingerprint);console.log('PASS authentication mode changes import fingerprint');

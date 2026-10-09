@@ -10,16 +10,16 @@ const script=`$ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ai-config.ps1')
 $first=Get-AiPublicSettings $PSScriptRoot
 if($first.profiles.openai.model -ne 'gpt-4.1-mini' -or $first.profiles.deepseek.model -ne 'deepseek-flash'){throw 'defaults'}
-$saved=Save-AiSettings $PSScriptRoot @{profileId='openai';key='sk-fixture-only'}
+$saved=Save-AiSettings $PSScriptRoot @{profileId='openai';expectedRevision=(Get-AiPublicSettings $PSScriptRoot).profiles.openai.revision;key='sk-fixture-only'}
 if(-not $saved.profiles.openai.hasKey){throw 'save'}
 if((Get-Content (Join-Path $PSScriptRoot 'ai-settings.json') -Raw).Contains('sk-fixture-only')){throw 'plaintext'}
 $resolved=Resolve-AiProfile $PSScriptRoot 'openai' ''
 if($resolved.secret -ne 'sk-fixture-only'){throw 'decrypt'}
-$retained=Save-AiSettings $PSScriptRoot @{profileId='openai';model='custom-model'}
+$retained=Save-AiSettings $PSScriptRoot @{profileId='openai';expectedRevision=(Get-AiPublicSettings $PSScriptRoot).profiles.openai.revision;model='custom-model'}
 if(-not $retained.profiles.openai.hasKey){throw 'retain'}
-$cleared=Save-AiSettings $PSScriptRoot @{profileId='openai';baseUrl='https://other.test/v1'}
+$cleared=Save-AiSettings $PSScriptRoot @{profileId='openai';expectedRevision=(Get-AiPublicSettings $PSScriptRoot).profiles.openai.revision;baseUrl='https://other.test/v1'}
 if($cleared.profiles.openai.hasKey){throw 'address leak'}
-try {Save-AiSettings $PSScriptRoot @{profileId='openai';key='sk-placeholder-replace-me'};throw 'placeholder accepted'}catch{if($_.Exception.Message -ne 'KEY_NOT_CONFIGURED'){throw}}
+try {Save-AiSettings $PSScriptRoot @{profileId='openai';expectedRevision=(Get-AiPublicSettings $PSScriptRoot).profiles.openai.revision;key='sk-placeholder-replace-me'};throw 'placeholder accepted'}catch{if($_.Exception.Message -ne 'KEY_NOT_CONFIGURED'){throw}}
 Write-Output 'PASS DPAPI encrypted settings, defaults, model retain and endpoint clear'
 `;
 fs.writeFileSync(path.join(root,'test.ps1'),'\ufeff'+script);const r=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(root,'test.ps1')],{encoding:'utf8',windowsHide:true});assert.equal(r.status,0,r.stdout+r.stderr);console.log(r.stdout.trim());console.log('PASS CC-Switch read-only, model mapping, app filtering and no credential disclosure');

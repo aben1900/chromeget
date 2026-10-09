@@ -9,6 +9,7 @@ $id=$a.profileId
 if(-not $id){throw 'new model ID missing'}
 $b=Save-AiSettings $PSScriptRoot @{label='B';provider='openai';protocol='responses';baseUrl='https://example.test/v1';model='n';auth='bearer';key='sk-fixture-other'}
 if($id -eq $b.profileId){throw 'same provider overwritten'}
+try{Save-AiSettings $PSScriptRoot @{profileId=$id;label='blind write'};throw 'missing revision accepted'}catch{if($_.Exception.Message -ne 'CONFIG_CHANGED'){throw}}
 $revision=$a.profiles.$id.revision
 $before=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'ai-settings.json'))
 $draft=Resolve-AiDraft $PSScriptRoot @{profileId=$id;expectedRevision=$revision;model='draft-model'}

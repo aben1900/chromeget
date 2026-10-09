@@ -18,6 +18,9 @@ function Apply-AiImport([string]$root,$message) {
     $preview=(Unprotect-AiKey ([IO.File]::ReadAllText($file)))|ConvertFrom-Json
     if($preview.expiresAt -lt [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()){throw 'IMPORT_CHANGED'}
     $fresh=@(Invoke-AiNode @{op='import-read';source=$preview.source;home=$env:USERPROFILE})
+    $ccCandidates=@()
+    $pending=(Read-AiSettings $root).legacySelectionPending
+    if($pending){try{$ccCandidates=@(Invoke-AiNode @{op='import-read';source='ccswitch';home=$env:USERPROFILE})}catch{}}
     return Invoke-AiConfigLock $root {
         $s=Read-AiSettings $root
         foreach($candidateId in @($message.candidateIds)){
@@ -39,6 +42,7 @@ function Apply-AiImport([string]$root,$message) {
             Set-AiProperty $s.profiles $target $p
             $s.imports.ignored=@($s.imports.ignored|Where-Object {$_ -cne ($item.source+':'+$item.sourceId)})
         }
+        Restore-AiLegacySelection $s $ccCandidates
         $s.imports.completed=$true;Write-AiSettings $root $s;[IO.File]::Delete($file)
         return ConvertTo-AiPublicSettings $s
     }

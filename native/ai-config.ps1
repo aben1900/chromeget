@@ -51,14 +51,29 @@ function ConvertTo-AiPublicSettings($s) {
     foreach($entry in $s.profiles.PSObject.Properties){$p=Invoke-AiNode @{op='normalize';profile=$entry.Value};$p.hasKey=[bool]$entry.Value.ciphertext;if($entry.Value.lastTest){Set-AiProperty $p 'lastTest' $entry.Value.lastTest};$profiles[$entry.Name]=$p}
     return @{profiles=$profiles;defaultProfileId=$s.defaultProfileId;selectionRevision=$s.selectionRevision;importsCompleted=[bool]$s.imports.completed}
 }
+function Restore-AiLegacySelection($s,$ccCandidates=$null) {
+    if($s.defaultProfileId -or $s.legacySelectionHandled -or -not $s.legacySelectionPending){return}
+    $pending=$s.legacySelectionPending
+    if($null -eq $ccCandidates){try{$ccCandidates=@(Invoke-AiNode @{op='import-read';source='ccswitch';home=$env:USERPROFILE})}catch{return}}
+    $verified=@($ccCandidates|Where-Object {$_.sourceId -ceq ($pending.profileId+':'+$pending.model)})
+    if($verified.Count -eq 1){
+        $matches=@($s.profiles.PSObject.Properties.Value|Where-Object {$_.model -ceq $pending.model -and $_.origin.credentialFingerprint -ceq $verified[0].credentialFingerprint -and ([uri]$_.baseUrl).Host -ceq ([uri]$verified[0].baseUrl).Host -and -not $_.origin.locallyEdited})
+        if($matches.Count -eq 1){$s.defaultProfileId=$matches[0].profileId;$s.selectionRevision=[Guid]::NewGuid().ToString();$s.legacySelectionHandled=$true;$s.legacySelectionPending=$null}
+    }
+}
 function Get-AiPublicSettings([string]$root,$legacySelection=$null) {
     Invoke-AiConfigLock $root {
         $s=Read-AiSettings $root
-        if(-not $s.legacySelectionHandled -and $legacySelection){
-            $p=$s.profiles.([string]$legacySelection.profileId)
-            if($p -and $p.ciphertext -and $p.model -ceq $legacySelection.model){$s.defaultProfileId=$p.profileId;$s.selectionRevision=[Guid]::NewGuid().ToString()}
-            $s.legacySelectionHandled=$true
+        if(-not $s.legacySelectionHandled -and -not $s.defaultProfileId){
+            $choice=if($s.legacySelectionPending){$s.legacySelectionPending}else{$legacySelection}
+            if($choice){
+                $p=$s.profiles.([string]$choice.profileId)
+                if($p -and $p.ciphertext -and $p.model -ceq $choice.model){$s.defaultProfileId=$p.profileId;$s.selectionRevision=[Guid]::NewGuid().ToString();$s.legacySelectionHandled=$true;$s.legacySelectionPending=$null}
+                elseif(([string]$choice.profileId).StartsWith('cc:') -and [string]$choice.model){$s.legacySelectionPending=@{profileId=[string]$choice.profileId;model=[string]$choice.model}}
+                else{$s.legacySelectionHandled=$true}
+            }
         }
+        Restore-AiLegacySelection $s
         Write-AiSettings $root $s
         return ConvertTo-AiPublicSettings $s
     }
@@ -72,7 +87,7 @@ function New-AiDraftProfile($old,$message,[string]$id) {
 function Save-AiSettings([string]$root,$message) {
     return Invoke-AiConfigLock $root {
         $s=Read-AiSettings $root;$id=[string]$message.profileId;$old=$null
-        if($id){$old=$s.profiles.$id;if(-not $old){throw 'CONFIG_INVALID'};if($null -ne $message.expectedRevision -and $message.expectedRevision -cne $old.revision){throw 'CONFIG_CHANGED'}}else{$id=[Guid]::NewGuid().ToString();if(@($s.profiles.PSObject.Properties).Count -ge 200){throw 'CONFIG_LIMIT'}}
+        if($id){$old=$s.profiles.$id;if(-not $old){throw 'CONFIG_INVALID'};if($message.expectedRevision -cne $old.revision){throw 'CONFIG_CHANGED'}}else{$id=[Guid]::NewGuid().ToString();if(@($s.profiles.PSObject.Properties).Count -ge 200){throw 'CONFIG_LIMIT'}}
         $p=New-AiDraftProfile $old $message $id;$cipher=[string]$old.ciphertext
         if($message.clearKey -eq $true -or $p.baseUrl -cne $old.baseUrl){$cipher=''}
         if($null -ne $message.key){$null=Invoke-AiNode @{op='normalize';key=[string]$message.key};$cipher=Protect-AiKey ([string]$message.key)}
@@ -97,7 +112,7 @@ function Set-AiDefault([string]$root,$message) {
         $s=Read-AiSettings $root;$id=[string]$message.profileId;$p=$s.profiles.$id
         if($message.expectedSelectionRevision -cne $s.selectionRevision){throw 'CONFIG_CHANGED'}
         if(-not $p -or -not $p.ciphertext){throw 'KEY_NOT_CONFIGURED'}
-        $s.defaultProfileId=$id;$s.selectionRevision=[Guid]::NewGuid().ToString();$s.legacySelectionHandled=$true
+        $s.defaultProfileId=$id;$s.selectionRevision=[Guid]::NewGuid().ToString();$s.legacySelectionHandled=$true;$s.legacySelectionPending=$null
         Write-AiSettings $root $s;return ConvertTo-AiPublicSettings $s
     }
 }

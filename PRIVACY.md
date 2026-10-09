@@ -31,6 +31,6 @@ Cookie、含签名参数的下载网址和聊天摘录可能包含敏感信息�
 
 ### 可选智能摘要（1.27.0）
 
-仅在资料库点击“生成摘要”后，将所选单条文字原文与摘要指令发送至你配置的模型服务；测试连接只发送固定短提示，也可能产生少量 API 用量。支持 OpenAI Responses、DeepSeek Chat Completions 和 CC-Switch Claude Messages。使用 CC-Switch 配置不代表本机推理，发送前显示服务域名与模型。OpenAI 请求设置 store:false，这不等于服务商零保留承诺，远端处理以所选服务条款为准。
+仅在资料库点击“生成摘要”后，将所选单条文字原文与摘要指令发送至你配置的模型服务；测试连接只发送固定短提示，也可能产生少量 API 用量。支持 OpenAI Responses、OpenAI 兼容 Chat Completions 和 Anthropic Messages。使用 CC-Switch 配置不代表本机推理，发送前显示服务域名与模型。OpenAI Responses 请求设置 store:false，这不等于服务商零保留承诺，远端处理以所选服务条款为准。
 
-手动 API Key 使用 Windows 当前用户 DPAPI 加密保存在本地程序的 ai-settings.json；不回显或放入浏览器存储。读取 CC-Switch 仅访问当前用户 .cc-switch/cc-switch.db 的 Claude 提供方允许字段，不修改其配置。运行状态与未保存摘要在本地程序 ai-jobs 目录，含摘要文字但不含原文或密钥，按私人数据保管；界面显示最近 10 项，不自动删除历史状态。已保存摘要进入资料库索引和资料备份；密钥与运行状态不进入备份或发布包。浏览器只记住选择与待核对请求编号。
+所有模型密钥（包括导入副本）使用 Windows 当前用户 DPAPI 加密保存在本地程序的 ai-settings.json；不回显或放入浏览器存储。首次打开模型管理会读取当前用户 .workbuddy/models.json 的 SMEC 配置，并向同一网关查询模型列表以匹配实际 ID，不自动请求生成。也可主动读取 .cc-switch/cc-switch.db 中的 SMEC Claude 配置。源文件和数据库保持不变，导入后可独立编辑。导入预览加密暂存于 ai-import-previews，10 分钟失效，下次读取时清理过期项；来源更新不会自动覆盖手动修改的副本。默认选择保存在本机，模型测试状态不含原文或响应内容。运行状态与未保存摘要在本地程序 ai-jobs 目录，含摘要文字但不含原文或密钥，按私人数据保管；界面显示最近 10 项，不自动删除历史状态。已保存摘要进入资料库索引和资料备份；密钥与运行状态不进入备份或发布包。浏览器只记住选择与待核对请求编号。

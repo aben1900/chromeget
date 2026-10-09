@@ -88,7 +88,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -PublicRel
 
 资料库 → 备份与恢复：创建 `.jingcai-backup.json`，预览后确认合并恢复。冲突保留当前内容，恢复前自动备份，支持中断回滚与结果核对。范围为摘录和资料索引，不含实际下载文件、Cookie、引擎及浏览器注册；最多 100 MiB、100000 条摘录。详见使用说明。
 
-## 智能摘要（1.27.0）
+## 智能摘要（1.27.0 历史记录）
 
 打开侧栏的“资料库”，展开页面上方“智能摘要设置”。OpenAI / DeepSeek 的地址、模型及参数已经填写，只需填真实 API Key 并保存；示例 sk-placeholder-replace-me 不能使用。也可点击“读取 CC-Switch 配置”，选择 yqn Claude 及其模型，保存选择。重新打开页面如需 CC-Switch，主动读取配置后选择。
 
@@ -96,6 +96,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -PublicRel
 
 支持最多 24000 Unicode 字符、96 KiB 的单条原文；不抓取 URL 网页，不解析下载文件，不含 OCR、音视频转写或迁移。摘要会发送到所选服务并使用 API 额度。尚未替用户验证真实密钥或线上服务可用性。
 
-### 1.27.1 配置入口
+### 1.27.1 配置入口（历史记录）
 
 OpenAI / DeepSeek 是独立个人 SK 配置。公司模型单独点击“公司模型”，直接引用 CC-Switch 现有服务与模型，无需 SK 或保存步骤；不会导入或覆盖个人 API。读取后在“使用模型”下拉框切换即可。配置完成后点击“去选择摘录”，文字资料卡上的“生成摘要”直达详情顶部的摘要面板。
+
+### 1.28.0 模型管理
+
+资料库 → 模型管理：统一模型列表支持新增、编辑、测试、删除、设为默认；弹窗可保存前测试。首次自动导入本机 WorkBuddy 的 SMEC 模型，也可从 CC-Switch 导入。密钥保存为本机加密副本，导入模型可独立编辑，重复导入不会覆盖手动修改。文字资料卡的“生成摘要”使用所设默认模型。具体操作见《使用说明》的 1.28.0 章节；旧版三来源配置入口已替换。

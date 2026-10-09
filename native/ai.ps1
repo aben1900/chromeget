@@ -37,10 +37,14 @@ function Invoke-AiAction($message,[string]$directory) {
                 if($message.confirmed -ne $true){throw 'CONFIRM_REQUIRED'}
                 $state=Invoke-LibraryAction @{action='library-ai-inspect';requestId=$message.requestId} $directory
                 if(-not $state.ok -or $state.state -ne 'prepared'){return $state}
-                $settings=Get-AiPublicSettings $PSScriptRoot
-                if(-not $state.selectionRevision -or $state.selectionRevision -cne $settings.selectionRevision -or $state.profileId -cne $settings.defaultProfileId){throw 'CONFIG_CHANGED'}
-                $profile=Resolve-AiProfile $PSScriptRoot ([string]$state.profileId) ([string]$state.model)
-                $claim=Invoke-LibraryAction @{action='library-ai-claim';requestId=$message.requestId;profileRevision=$profile.revision;selectionRevision=$settings.selectionRevision} $directory
+                $snapshot=Invoke-AiConfigLock $PSScriptRoot {
+                    $settings=Get-AiPublicSettings $PSScriptRoot
+                    if(-not $state.selectionRevision -or $state.selectionRevision -cne $settings.selectionRevision -or $state.profileId -cne $settings.defaultProfileId){throw 'CONFIG_CHANGED'}
+                    $profile=Resolve-AiProfile $PSScriptRoot ([string]$state.profileId) ([string]$state.model)
+                    $claim=Invoke-LibraryAction @{action='library-ai-claim';requestId=$message.requestId;profileRevision=$profile.revision;selectionRevision=$settings.selectionRevision} $directory
+                    return @{profile=$profile;claim=$claim}
+                }
+                $profile=$snapshot.profile;$claim=$snapshot.claim
                 if(-not $claim.ok -or -not $claim.shouldSend){return $claim}
                 $finish=@{action='library-ai-finish';requestId=$message.requestId;executionToken=$claim.executionToken}
                 try {$r=Invoke-AiNode @{op='request';profile=$profile;text=$claim.text;length=$claim.length};$finish.text=$r.text}

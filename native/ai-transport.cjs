@@ -11,6 +11,6 @@ async function requestSummary(profile,text,length,{isTest=false,timeoutMs=45000}
   });
   req.on('error',()=>finish('NETWORK_ERROR'));timer=setTimeout(()=>{finish('NETWORK_TIMEOUT');req.destroy();},Math.min(45000,Math.max(1,timeoutMs)));req.end(JSON.stringify(request.body));
  });
- return {text:parseResponse(profile.provider,json)};
+ return {text:parseResponse(profile.protocol||profile.provider,json)};
 }
 module.exports={requestSummary};

@@ -1,0 +1,24 @@
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert/strict'),crypto=require('crypto'),{dispatch}=require('../native/library.cjs');
+const root=path.resolve('work/ai-generation-'+Date.now());fs.mkdirSync(root,{recursive:true});const ctx={root,directory:root};const uuid=crypto.randomUUID(),id='clip:'+uuid;
+const record={id:uuid,type:'内容',time:new Date().toISOString(),content:'完整原文'.repeat(4000)};fs.writeFileSync(path.join(root,'摘录数据.json'),JSON.stringify([record]));
+const profile={...require('../native/ai-provider.cjs').presets().openai,hasKey:true,revision:'rev1'};
+const action=(name,rest)=>dispatch({action:'library-ai-'+name,...rest},ctx);
+(async()=>{
+ const p=await action('prepare',{id,profile,length:'standard'});assert.equal(p.characters,16000);assert.equal(p.expectedSummaryRevision,null);
+ const c=await action('claim',{requestId:p.requestId,profileRevision:'rev1'});assert.equal(c.shouldSend,true);assert.equal(c.text,record.content);assert.ok(c.executionToken);
+ assert.equal((await action('claim',{requestId:p.requestId,profileRevision:'rev1'})).state,'running');
+ const p2=await action('prepare',{id,profile,length:'short'});await assert.rejects(action('claim',{requestId:p2.requestId,profileRevision:'rev1'}),/ALREADY_RUNNING/);
+ await assert.rejects(action('finish',{requestId:p.requestId,executionToken:'wrong',text:'摘要'}),/REQUEST_INVALID/);
+ const finished=await action('finish',{requestId:p.requestId,executionToken:c.executionToken,text:'摘要'});assert.equal(finished.state,'completed');assert.equal(finished.text,'摘要');assert.ok(!finished.executionToken);
+ const journal=fs.readFileSync(path.join(root,'摘录数据.json'));
+ const saved=await action('save',{requestId:p.requestId,text:'编辑摘要',expectedSummaryRevision:null});assert.ok(saved.summaryRevision);
+ assert.equal((await action('read',{id})).summary.edited,true);assert.deepEqual(fs.readFileSync(path.join(root,'摘录数据.json')),journal);
+ assert.equal((await action('save',{requestId:p.requestId,text:'编辑摘要',expectedSummaryRevision:null})).summaryRevision,saved.summaryRevision);
+ await assert.rejects(action('save',{requestId:p.requestId,text:'覆盖',expectedSummaryRevision:null}),/SUMMARY_CONFLICT/);
+ await assert.rejects(action('claim',{requestId:p2.requestId,profileRevision:'rev2'}),/CONFIG_CHANGED/);
+ const p3=await action('prepare',{id,profile,length:'standard'});record.content='新正文';fs.writeFileSync(path.join(root,'摘录数据.json'),JSON.stringify([record]));await assert.rejects(action('claim',{requestId:p3.requestId,profileRevision:'rev1'}),/SOURCE_CHANGED/);
+ assert.equal((await action('read',{id})).stale,true);
+ assert.ok(!(await action('recent',{})).requests.some(v=>v.text));
+ console.log('PASS AI full source preparation, source/config binding, exclusive claim and safe status');
+})().catch(e=>{console.error(e);process.exitCode=1});

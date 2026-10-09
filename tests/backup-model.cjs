@@ -25,3 +25,8 @@ const imported=mergeSnapshots(empty(),other).snapshot;assert.equal(imported.inde
 const upper=empty();upper.records=[{...r,id:'ABCDEF12-ABCD-1234-1234-ABCDEF123456'}];assert.throws(()=>validateSnapshot(upper),/编号|字段/);
 const caseKeys=empty();caseKeys.records=[{...r,extra:{A:1,a:2}}];assert.throws(()=>validateSnapshot(caseKeys),/大小写/);
 const emptyKey=empty();emptyKey.records=[{...r,extra:{'':1}}];assert.throws(()=>validateSnapshot(emptyKey),/空/);
+
+const withSummary=structuredClone(a);withSummary.index.annotations['clip:'+r.id].summary={text:'摘要',provider:'OpenAI',model:'gpt-4.1-mini',generatedAt:'2026-10-09T00:00:00.000Z',sourceHash:'c'.repeat(64),revision:randomUUID(),generationId:randomUUID(),edited:false};
+assert.deepEqual(decodeBackup(pack(withSummary)).snapshot,withSummary);
+const badSummary=structuredClone(withSummary);badSummary.index.annotations['clip:'+r.id].summary.text='字'.repeat(16001);assert.throws(()=>validateSnapshot(badSummary),/摘要/);
+const incomingSummary=structuredClone(withSummary);incomingSummary.index.annotations['clip:'+r.id].summary.text='其他摘要';assert.equal(mergeSnapshots(withSummary,incomingSummary).snapshot.index.annotations['clip:'+r.id].summary.text,'摘要');

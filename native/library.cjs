@@ -40,6 +40,7 @@ async function dispatch(message,ctx){if(!ctx?.directory||!ctx.root)throw Error('
  const backup=require('./library-backup.cjs');const recovery=backup.recover(ctx);if(message.action==='library-recover')return {ok:true,...recovery};
  if(/^library-(backup|restore)-/.test(message.action))return backup.dispatch(message,ctx);
  const s=metadata(ctx.directory),{items,warnings,changed}=load(ctx,s),index=path.join(ctx.directory,'资料库索引.json');if(changed)atomic(index,s);
+ if(message.action.startsWith('library-ai-'))return require('./library-ai.cjs').dispatch(message,ctx,items,s);
  const revision=crypto.createHash('sha256').update(JSON.stringify([items,s.tags,s.collections])).digest('hex').slice(0,24);
  if(message.action==='library-snapshot')return {ok:true,warnings:warnings.slice(0,50),snapshotted:message.id?!!s.downloads['download:'+message.id]:true};
  if(message.action==='library-query'){

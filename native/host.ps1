@@ -43,14 +43,17 @@ try {
         if (-not [IO.File]::Exists($journal)) { throw '所选 JSON 文件不存在，请重新选择。' }
         $directory = [IO.Path]::GetDirectoryName($journal)
     }
-    if ($message.action -like 'library-*') {
+    if ($message.action -like 'ai-*') {
+        . (Join-Path $PSScriptRoot 'ai.ps1')
+        $response = Invoke-AiAction $message $directory
+    } elseif ($message.action -like 'library-*') {
         . (Join-Path $PSScriptRoot 'library.ps1')
         $response = Invoke-LibraryAction $message $directory
     } elseif ($message.action -like 'video-*') {
         . (Join-Path $PSScriptRoot 'video.ps1')
         $response = Invoke-VideoAction $message
     } elseif ($message.action -eq 'status') {
-        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.26.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.27.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
     } elseif ($message.action -eq 'choose-json') {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = New-Object System.Windows.Forms.OpenFileDialog

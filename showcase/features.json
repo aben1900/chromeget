@@ -8,7 +8,7 @@
       "name": "内容摘录",
       "subtitle": "让好内容，成为自己的资料库。",
       "description": "选中文字，右键保存。整理评论、评阅、正文与提示词，原文和记录留在本机。",
-      "label": "本地 JSON · 不上传原文",
+      "label": "本地保存 · 摘要按需调用",
       "icon": "bookmark"
     },
     {
@@ -21,6 +21,13 @@
     }
   ],
   "features": [
+    {
+      "group": "clips",
+      "icon": "edit",
+      "title": "读完长文，留下重点",
+      "text": "资料库提供智能摘要：OpenAI 与 DeepSeek 已预填地址和模型，只需填写 API Key；可只读复用本机 CC-Switch Claude 配置。主动确认后发送单条文字摘录，生成后可编辑、复制、保存，原文保留。最多 24000 字，不含 OCR、音视频转写或迁移；调用使用所选服务的 API 额度。",
+      "tag": "可选智能摘要"
+    },
     {
       "group": "clips",
       "icon": "list",

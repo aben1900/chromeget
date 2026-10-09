@@ -26,44 +26,103 @@ function Invoke-AiConfigLock([string]$root,[scriptblock]$body) {
     $handle=New-Object Threading.Mutex($false,('Local\JingcaiAi_'+$hash));$held=$false
     try{try{$held=$handle.WaitOne(30000)}catch [Threading.AbandonedMutexException]{$held=$true};if(-not $held){throw 'CONFIG_BUSY'}; & $body}finally{if($held){$handle.ReleaseMutex()};$handle.Dispose()}
 }
-function Read-AiSettings([string]$root) {
-    $path=Join-Path $root 'ai-settings.json'
-    if(-not [IO.File]::Exists($path)){return [pscustomobject]@{schemaVersion=1;profiles=(Invoke-AiNode @{op='normalize'})}}
-    try{if((Get-Item -LiteralPath $path).Length -gt 65536){throw 'size'};$value=[IO.File]::ReadAllText($path)|ConvertFrom-Json;if($value.schemaVersion -ne 1 -or -not $value.profiles.openai -or -not $value.profiles.deepseek){throw 'schema'};return $value}catch{throw 'CONFIG_INVALID'}
+function Set-AiProperty($object,[string]$name,$value) {
+    if($object -is [Collections.IDictionary]){$object[$name]=$value}else{$object|Add-Member -NotePropertyName $name -NotePropertyValue $value -Force}
 }
-function Get-AiPublicSettings([string]$root) {
+function Read-AiSettings([string]$root) {
+    $path=Join-Path $root 'ai-settings.json';$value=$null
+    if([IO.File]::Exists($path)){try{if((Get-Item -LiteralPath $path).Length -gt 2097152){throw 'size'};$value=[IO.File]::ReadAllText($path)|ConvertFrom-Json}catch{throw 'CONFIG_INVALID'}}
+    return Invoke-AiNode @{op='upgrade';settings=$value}
+}
+function Write-AiSettings([string]$root,$settings) {
+    $target=Join-Path $root 'ai-settings.json';$temp=$target+'.'+[Guid]::NewGuid().ToString('N')+'.tmp'
+    try{[IO.File]::WriteAllText($temp,($settings|ConvertTo-Json -Depth 20),(New-Object Text.UTF8Encoding($false)));if([IO.File]::Exists($target)){[IO.File]::Replace($temp,$target,[NullString]::Value)}else{[IO.File]::Move($temp,$target)}}finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
+}
+function Protect-AiKey([string]$key) {
+    Add-Type -AssemblyName System.Security;$bytes=[Text.Encoding]::UTF8.GetBytes($key)
+    try{return [Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($bytes,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser))}finally{[Array]::Clear($bytes,0,$bytes.Length)}
+}
+function Unprotect-AiKey([string]$cipher) {
+    if(-not $cipher){return ''}
+    try{Add-Type -AssemblyName System.Security;$bytes=[Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($cipher),$null,[Security.Cryptography.DataProtectionScope]::CurrentUser);try{return [Text.Encoding]::UTF8.GetString($bytes)}finally{[Array]::Clear($bytes,0,$bytes.Length)}}catch{throw 'KEY_DECRYPT_FAILED'}
+}
+function ConvertTo-AiPublicSettings($s) {
+    $profiles=@{}
+    foreach($entry in $s.profiles.PSObject.Properties){$p=Invoke-AiNode @{op='normalize';profile=$entry.Value};$p.hasKey=[bool]$entry.Value.ciphertext;if($entry.Value.lastTest){Set-AiProperty $p 'lastTest' $entry.Value.lastTest};$profiles[$entry.Name]=$p}
+    return @{profiles=$profiles;defaultProfileId=$s.defaultProfileId;selectionRevision=$s.selectionRevision;importsCompleted=[bool]$s.imports.completed}
+}
+function Get-AiPublicSettings([string]$root,$legacySelection=$null) {
     Invoke-AiConfigLock $root {
-        $s=Read-AiSettings $root;$profiles=@{}
-        foreach($id in @('openai','deepseek')){$p=Invoke-AiNode @{op='normalize';profile=$s.profiles.$id};$p.hasKey=[bool]$s.profiles.$id.ciphertext;$profiles[$id]=$p}
-        return @{profiles=$profiles}
+        $s=Read-AiSettings $root
+        if(-not $s.legacySelectionHandled -and $legacySelection){
+            $p=$s.profiles.([string]$legacySelection.profileId)
+            if($p -and $p.ciphertext -and $p.model -ceq $legacySelection.model){$s.defaultProfileId=$p.profileId;$s.selectionRevision=[Guid]::NewGuid().ToString()}
+            $s.legacySelectionHandled=$true
+        }
+        Write-AiSettings $root $s
+        return ConvertTo-AiPublicSettings $s
     }
+}
+function New-AiDraftProfile($old,$message,[string]$id) {
+    $p=@{source='manual';profileId=$id;provider='custom';protocol='chat-completions';label='自定义模型';baseUrl='';model='';auth='bearer';revision=[Guid]::NewGuid().ToString();hasKey=$false}
+    if($old){foreach($field in @('provider','protocol','label','baseUrl','model','auth')){if($null -ne $old.$field){$p[$field]=$old.$field}}}
+    foreach($field in @('provider','protocol','label','baseUrl','model','auth')){if($null -ne $message.$field){$p[$field]=[string]$message.$field}}
+    return Invoke-AiNode @{op='normalize';profile=$p}
 }
 function Save-AiSettings([string]$root,$message) {
-    Invoke-AiConfigLock $root {
-        $id=[string]$message.profileId;if($id -notin @('openai','deepseek')){throw 'CONFIG_INVALID'}
-        $s=Read-AiSettings $root;$old=$s.profiles.$id
-        $p=@{source='manual';provider=$id;profileId=$id;label=$old.label;baseUrl=$old.baseUrl;model=$old.model;auth='bearer';revision=[Guid]::NewGuid().ToString();hasKey=$false}
-        foreach($field in @('baseUrl','model')){if($null -ne $message.$field){$p[$field]=[string]$message.$field}}
-        $args=@{op='normalize';profile=$p};if($null -ne $message.key){$args.key=[string]$message.key}
-        $normalized=Invoke-AiNode $args;$cipher=[string]$old.ciphertext
-        if($message.clearKey -eq $true -or $normalized.baseUrl -cne $old.baseUrl){$cipher=''}
-        if($null -ne $message.key){
-            Add-Type -AssemblyName System.Security;$bytes=[Text.Encoding]::UTF8.GetBytes([string]$message.key)
-            try{$cipher=[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($bytes,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser))}finally{[Array]::Clear($bytes,0,$bytes.Length)}
-        }
-        $normalized|Add-Member -NotePropertyName ciphertext -NotePropertyValue $cipher -Force
-        $s.profiles.$id=$normalized;$target=Join-Path $root 'ai-settings.json';$temp=$target+'.'+[Guid]::NewGuid().ToString('N')+'.tmp'
-        try{[IO.File]::WriteAllText($temp,($s|ConvertTo-Json -Depth 12),(New-Object Text.UTF8Encoding($false)));if([IO.File]::Exists($target)){[IO.File]::Replace($temp,$target,[NullString]::Value)}else{[IO.File]::Move($temp,$target)}}finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
+    return Invoke-AiConfigLock $root {
+        $s=Read-AiSettings $root;$id=[string]$message.profileId;$old=$null
+        if($id){$old=$s.profiles.$id;if(-not $old){throw 'CONFIG_INVALID'};if($null -ne $message.expectedRevision -and $message.expectedRevision -cne $old.revision){throw 'CONFIG_CHANGED'}}else{$id=[Guid]::NewGuid().ToString();if(@($s.profiles.PSObject.Properties).Count -ge 200){throw 'CONFIG_LIMIT'}}
+        $p=New-AiDraftProfile $old $message $id;$cipher=[string]$old.ciphertext
+        if($message.clearKey -eq $true -or $p.baseUrl -cne $old.baseUrl){$cipher=''}
+        if($null -ne $message.key){$null=Invoke-AiNode @{op='normalize';key=[string]$message.key};$cipher=Protect-AiKey ([string]$message.key)}
+        Set-AiProperty $p 'ciphertext' $cipher
+        if($old.origin){Set-AiProperty $old.origin 'locallyEdited' $true;Set-AiProperty $p 'origin' $old.origin}
+        Set-AiProperty $s.profiles $id $p;Write-AiSettings $root $s
+        $r=ConvertTo-AiPublicSettings $s;$r.profileId=$id;return $r
     }
-    return Get-AiPublicSettings $root
+}
+function Remove-AiModel([string]$root,$message) {
+    return Invoke-AiConfigLock $root {
+        $s=Read-AiSettings $root;$id=[string]$message.profileId;$old=$s.profiles.$id
+        if(-not $old -or $message.expectedRevision -cne $old.revision){throw 'CONFIG_CHANGED'}
+        if($old.origin){$s.imports.ignored=@($s.imports.ignored)+($old.origin.source+':'+$old.origin.sourceId)}
+        $s.profiles.PSObject.Properties.Remove($id)
+        if($s.defaultProfileId -eq $id){$s.defaultProfileId=$null;$s.selectionRevision=[Guid]::NewGuid().ToString()}
+        Write-AiSettings $root $s;return ConvertTo-AiPublicSettings $s
+    }
+}
+function Set-AiDefault([string]$root,$message) {
+    return Invoke-AiConfigLock $root {
+        $s=Read-AiSettings $root;$id=[string]$message.profileId;$p=$s.profiles.$id
+        if($message.expectedSelectionRevision -cne $s.selectionRevision){throw 'CONFIG_CHANGED'}
+        if(-not $p -or -not $p.ciphertext){throw 'KEY_NOT_CONFIGURED'}
+        $s.defaultProfileId=$id;$s.selectionRevision=[Guid]::NewGuid().ToString();$s.legacySelectionHandled=$true
+        Write-AiSettings $root $s;return ConvertTo-AiPublicSettings $s
+    }
+}
+function Resolve-AiDraft([string]$root,$message) {
+    return Invoke-AiConfigLock $root {
+        $s=Read-AiSettings $root;$old=$null;$id=[string]$message.profileId
+        if($id){$old=$s.profiles.$id;if(-not $old -or $message.expectedRevision -cne $old.revision){throw 'CONFIG_CHANGED'}}else{$id=[Guid]::NewGuid().ToString()}
+        $p=New-AiDraftProfile $old $message $id;$secret=''
+        if($message.key){$null=Invoke-AiNode @{op='normalize';key=[string]$message.key};$secret=[string]$message.key}
+        elseif($old -and $old.baseUrl -ceq $p.baseUrl){$secret=Unprotect-AiKey $old.ciphertext}
+        if(-not $secret){throw 'KEY_NOT_CONFIGURED'}
+        Set-AiProperty $p 'secret' $secret;$p.hasKey=$true;return $p
+    }
 }
 function Resolve-AiProfile([string]$root,[string]$profileId,[string]$model) {
     if($profileId.StartsWith('cc:')){return Invoke-AiNode @{op='cc-resolve';dbPath=(Join-Path $env:USERPROFILE '.cc-switch\cc-switch.db');id=$profileId.Substring(3);model=$model}}
-    if($profileId -notin @('openai','deepseek')){throw 'CONFIG_INVALID'}
+    return Invoke-AiConfigLock $root {
+        $s=Read-AiSettings $root;$saved=$s.profiles.$profileId;if(-not $saved){throw 'CONFIG_CHANGED'}
+        $p=Invoke-AiNode @{op='normalize';profile=$saved};if($model -and $model -cne $p.model){throw 'CONFIG_CHANGED'}
+        $secret=Unprotect-AiKey $saved.ciphertext;$p.hasKey=[bool]$secret;Set-AiProperty $p 'secret' $secret;return $p
+    }
+}
+function Save-AiTestResult([string]$root,$profile,$result) {
     Invoke-AiConfigLock $root {
-        $s=Read-AiSettings $root;$saved=$s.profiles.$profileId;$p=Invoke-AiNode @{op='normalize';profile=$saved};$secret=''
-        if($model -and $model -cne $p.model){throw 'CONFIG_CHANGED'}
-        if($saved.ciphertext){try{Add-Type -AssemblyName System.Security;$bytes=[Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($saved.ciphertext),$null,[Security.Cryptography.DataProtectionScope]::CurrentUser);try{$secret=[Text.Encoding]::UTF8.GetString($bytes)}finally{[Array]::Clear($bytes,0,$bytes.Length)}}catch{throw 'KEY_DECRYPT_FAILED'}}
-        $p.hasKey=[bool]$secret;$p|Add-Member -NotePropertyName secret -NotePropertyValue $secret;return $p
+        $s=Read-AiSettings $root;$p=$s.profiles.([string]$profile.profileId)
+        if($p -and $p.revision -ceq $profile.revision){Set-AiProperty $p 'lastTest' $result;Write-AiSettings $root $s}
     }
 }

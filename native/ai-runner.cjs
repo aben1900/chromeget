@@ -1,6 +1,7 @@
 'use strict';
 const provider=require('./ai-provider.cjs');
 async function dispatch(p){
+ if(p.op==='upgrade')return require('./ai-model-registry.cjs').upgradeSettings(p.settings);
  if(p.op==='normalize'){if(p.key!==undefined&&!provider.hasKey(p.key))throw Error('KEY_NOT_CONFIGURED');return p.profile?provider.normalizeProfile(p.profile):provider.presets();}
  if(p.op==='cc-list')return require('./ai-ccswitch.cjs').listClaudeProviders(p.dbPath);
  if(p.op==='cc-resolve')return require('./ai-ccswitch.cjs').resolveClaudeProvider(p.dbPath,p.id,p.model);

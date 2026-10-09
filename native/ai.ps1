@@ -2,20 +2,26 @@
 . (Join-Path $PSScriptRoot 'library.ps1')
 function Get-AiPublicProfile($profile) {
     $result=@{}
-    foreach($name in @('source','provider','profileId','label','baseUrl','model','auth','hasKey','revision','models')){if($null -ne $profile.$name){$result[$name]=$profile.$name}}
+    foreach($name in @('source','provider','profileId','label','baseUrl','model','auth','hasKey','revision','models','protocol')){if($null -ne $profile.$name){$result[$name]=$profile.$name}}
     return $result
 }
 function Invoke-AiAction($message,[string]$directory) {
     try {
         switch ([string]$message.action) {
-            'ai-settings-get' {$r=Get-AiPublicSettings $PSScriptRoot;return @{ok=$true;profiles=$r.profiles}}
-            'ai-settings-save' {$r=Save-AiSettings $PSScriptRoot $message;return @{ok=$true;profiles=$r.profiles}}
+            'ai-settings-get' {$r=Get-AiPublicSettings $PSScriptRoot $message.legacySelection;$r.ok=$true;return $r}
+            'ai-settings-save' {$r=Save-AiSettings $PSScriptRoot $message;$r.ok=$true;return $r}
             'ai-ccswitch-list' {return @{ok=$true;profiles=@(Invoke-AiNode @{op='cc-list';dbPath=(Join-Path $env:USERPROFILE '.cc-switch\cc-switch.db')})}}
-            'ai-test' {
+            'ai-model-delete' {$r=Remove-AiModel $PSScriptRoot $message;$r.ok=$true;return $r}
+            'ai-default-set' {$r=Set-AiDefault $PSScriptRoot $message;$r.ok=$true;return $r}
+            {$_ -in @('ai-test','ai-test-draft')} {
                 if($message.confirmed -ne $true){throw 'CONFIRM_REQUIRED'}
-                $profile=Resolve-AiProfile $PSScriptRoot ([string]$message.profileId) ([string]$message.model)
-                $r=Invoke-AiNode @{op='request';profile=$profile;text='请仅回复 OK';length='short';isTest=$true}
-                return @{ok=$true;text=$r.text}
+                $draft=$message.action -eq 'ai-test-draft'
+                if($draft){$profile=Resolve-AiDraft $PSScriptRoot $message.draft}else{$profile=Resolve-AiProfile $PSScriptRoot ([string]$message.profileId) ([string]$message.model);if($message.expectedRevision -and $profile.revision -cne $message.expectedRevision){throw 'CONFIG_CHANGED'}}
+                $watch=[Diagnostics.Stopwatch]::StartNew();$result=@{ok=$false;revision=$profile.revision;at=[DateTime]::UtcNow.ToString('o')}
+                try{$null=Invoke-AiNode @{op='request';profile=$profile;text='请仅回复 OK';length='short';isTest=$true};$result.ok=$true;$result.code='OK'}catch{$result.code=[string]$_.Exception.Message;if($result.code -notmatch '^[A-Z_]{1,60}$'){$result.code='NETWORK_ERROR'}}
+                $result.elapsedMs=$watch.ElapsedMilliseconds
+                if(-not $draft){Save-AiTestResult $PSScriptRoot $profile $result}
+                return $result
             }
             'ai-prepare' {
                 $profile=Resolve-AiProfile $PSScriptRoot ([string]$message.profileId) ([string]$message.model)

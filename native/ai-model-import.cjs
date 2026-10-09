@@ -37,13 +37,49 @@ async function readSource(source,home){
  for(const p of rows){const k=p.baseUrl+':'+p.credentialFingerprint;if(!cache.has(k)){try{cache.set(k,await queryModels(p))}catch{cache.set(k,[])}}const mapping=resolveModelId(p.model,cache.get(k));p.model=mapping.model;p.verified=mapping.verified;p.fingerprint=hash([p.sourceId,p.label,p.baseUrl,p.protocol,p.auth,p.model,p.secret]);}
  return rows;
 }
+
+function entries(p){return p.models||[{id:p.model,label:p.label,origins:p.origin?[p.origin]:[],locallyEdited:!!p.origin?.locallyEdited}];}
+function locate(settings,c){
+ for(const p of Object.values(settings.profiles))for(const m of entries(p))if(m.origins.some(o=>o.source===c.source&&o.sourceId===c.sourceId))return {p,m};
+ for(const p of Object.values(settings.profiles))for(const m of entries(p))if(p.baseUrl===c.baseUrl&&p.protocol===c.protocol&&p.auth===c.auth&&m.id===c.model&&m.origins.some(o=>o.credentialFingerprint===c.credentialFingerprint))return {p,m};
+ return {};
+}
 function compareImports(settings,candidates){
  return candidates.map(c=>{
-  const existing=Object.values(settings.profiles).find(p=>p.origin?.source===c.source&&p.origin?.sourceId===c.sourceId)||Object.values(settings.profiles).find(p=>p.baseUrl===c.baseUrl&&p.protocol===c.protocol&&p.model===c.model&&p.origin?.credentialFingerprint===c.credentialFingerprint);
+  const {p:existing,m}=locate(settings,c),origin=m?.origins.find(o=>o.source===c.source&&o.sourceId===c.sourceId)||m?.origins[0];
+  const connectionChange=!!existing&&(['baseUrl','protocol','auth','provider'].some(k=>existing[k]!==c[k])||origin?.credentialFingerprint!==c.credentialFingerprint);
   const ignored=settings.imports.ignored.includes(c.source+':'+c.sourceId);
-  const same=!!existing&&existing.origin?.fingerprint===c.fingerprint&&['label','baseUrl','protocol','auth','model'].every(k=>existing[k]===c[k])&&!existing.origin?.locallyEdited;
-  return {...c,candidateId:hash([c.source,c.sourceId]),targetId:existing?.profileId,targetRevision:existing?.revision,conflict:!!existing?.origin?.locallyEdited&&!same,change:existing?(same?'same':'update'):(ignored?'ignored':'add')};
+  const same=!!existing&&origin?.fingerprint===c.fingerprint&&!connectionChange&&m.id===c.model&&!m.locallyEdited&&!existing.locallyEdited;
+  return {...c,candidateId:hash([c.source,c.sourceId]),targetId:existing?.profileId,targetModelId:m?.id,targetRevision:existing?.revision,connectionChange,affectedModels:connectionChange?entries(existing).map(m=>m.id):[],conflict:!!existing&&(connectionChange||!!m.locallyEdited||!!existing.locallyEdited)&&!same,change:existing?(same?'same':'update'):(ignored?'ignored':'add')};
  });
 }
-function publicPreview(items){return items.map(p=>({candidateId:p.candidateId,label:p.label,model:p.model,change:p.change,conflict:p.conflict,verified:p.verified!==false}));}
-module.exports={readWorkBuddy,readCcSwitch,readSource,resolveModelId,compareImports,publicPreview};
+function applyCandidate(settings,c,ciphertext,targetId,matchingIds){
+ const {normalizeConfig}=require('./ai-config-model.cjs');const old=targetId?settings.profiles[targetId]:null;
+ if(targetId&&!old)throw Error('IMPORT_CHANGED');
+ const original=old&&locate({profiles:{[targetId]:old}},c).m;
+ const origin={source:c.source,sourceId:c.sourceId,fingerprint:c.fingerprint,credentialFingerprint:c.credentialFingerprint};
+ const sameConnection=old&&matchingIds.includes(targetId)&&['provider','baseUrl','protocol','auth'].every(k=>old[k]===c[k]);
+ let target=old;
+ if(old&&!sameConnection&&old.models.length>1){
+  const wasDefault=settings.defaultProfileId===old.profileId&&old.model===original?.id;
+  old.models=old.models.filter(m=>m!==original);if(!old.models.some(m=>m.id===old.model))old.model=old.models[0].id;old.revision=crypto.randomUUID();
+  target=null;if(wasDefault)settings.defaultProfileId=null;
+  target={...old,profileId:crypto.randomUUID(),models:[],label:c.label,model:c.model};
+  if(wasDefault){settings.defaultProfileId=target.profileId;settings.selectionRevision=crypto.randomUUID();}
+ }else if(!old){
+  target=Object.values(settings.profiles).find(p=>matchingIds.includes(p.profileId)&&!p.locallyEdited&&p.models.every(m=>m.origins.length&&!m.locallyEdited)&&['provider','baseUrl','protocol','auth'].every(k=>p[k]===c[k])&&JSON.stringify([...p.tags].sort())===JSON.stringify([...(c.tags||[])].sort()));
+ }
+ if(!target){if(Object.keys(settings.profiles).length>=200)throw Error('CONFIG_LIMIT');target={...c,profileId:crypto.randomUUID(),model:c.model,models:[],tags:c.tags||[],label:c.tags?.includes('SMEC')?'SMEC 网关':c.label};}
+ const previous=target.models.find(m=>m.id===c.model);
+ const connectionSame=target.ciphertext&&matchingIds.includes(target.profileId)&&['provider','baseUrl','protocol','auth'].every(k=>target[k]===c[k]);
+ if(!connectionSame){target.connectionRevision=crypto.randomUUID();for(const m of target.models)delete m.lastTest;}
+ if(original&&original.id!==c.model)target.models=target.models.filter(m=>m.id!==original.id);
+ const entry={id:c.model,label:previous?.locallyEdited?previous.label:c.label,origins:[...(previous?.origins||[]).filter(o=>!(o.source===c.source&&o.sourceId===c.sourceId)),origin],locallyEdited:false,...(connectionSame&&previous?.lastTest?{lastTest:previous.lastTest}:{})};
+ target.models=target.models.filter(m=>m.id!==c.model);target.models.push(entry);
+ for(const field of ['provider','protocol','baseUrl','auth'])target[field]=c[field];
+ if(!target.models.some(m=>m.id===target.model))target.model=c.model;
+ if(!connectionSame)target.ciphertext=ciphertext;target.revision=crypto.randomUUID();target.locallyEdited=false;
+ settings.profiles[target.profileId]=normalizeConfig(target);return target.profileId;
+}
+function publicPreview(items){return items.map(p=>({candidateId:p.candidateId,label:p.label,model:p.model,change:p.change,conflict:p.conflict,connectionChange:p.connectionChange,affectedModels:p.affectedModels||[],verified:p.verified!==false}));}
+module.exports={readWorkBuddy,readCcSwitch,readSource,resolveModelId,compareImports,publicPreview,applyCandidate};

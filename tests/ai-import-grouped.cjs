@@ -1,0 +1,17 @@
+'use strict';
+const assert=require('assert/strict'),crypto=require('crypto');
+const {applyCandidate,compareImports}=require('../native/ai-model-import.cjs');
+const {migrateSettings}=require('../native/ai-config-model.cjs');
+const s=migrateSettings(null).settings;
+const c={provider:'custom',protocol:'chat-completions',auth:'bearer',baseUrl:'https://example.test/v1',tags:['SMEC'],label:'A',model:'a',source:'workbuddy',sourceId:'a',fingerprint:'f1',credentialFingerprint:'k1'};
+const first=applyCandidate(s,c,'cipher',null,[]);s.defaultProfileId=first;
+applyCandidate(s,{...c,label:'B',model:'b',sourceId:'b',fingerprint:'f2'},'cipher2',null,[first]);
+assert.equal(s.profiles[first].models.length,2);assert.equal(s.profiles[first].model,'a');
+assert.equal(compareImports(s,[c])[0].change,'same');
+s.profiles[first].tags=['个人'];
+const change={...c,fingerprint:'f3',credentialFingerprint:'k2'};
+assert.ok(compareImports(s,[change])[0].connectionChange);
+const split=applyCandidate(s,change,'newcipher',first,[]);
+assert.notEqual(split,first);assert.equal(s.profiles[first].model,'b');assert.equal(s.profiles[first].ciphertext,'cipher');assert.equal(s.defaultProfileId,split);assert.deepEqual(s.profiles[split].tags,['个人']);
+assert.equal(compareImports(s,[change])[0].change,'same');
+console.log('PASS grouped import, repeat matching, partial credential split, tags and default continuity');

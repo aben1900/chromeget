@@ -7,6 +7,7 @@ async function dispatch(p){
  if(p.op==='import-read')return require('./ai-model-import.cjs').readSource(p.source,p.home);
  if(p.op==='import-compare')return require('./ai-model-import.cjs').compareImports(p.settings,p.candidates);
  if(p.op==='import-public')return require('./ai-model-import.cjs').publicPreview(p.items);
+ if(p.op==='import-apply-one'){const id=require('./ai-model-import.cjs').applyCandidate(p.settings,p.candidate,p.ciphertext,p.targetId,p.matchingIds||[]);return {settings:p.settings,profileId:id};}
  if(p.op==='upgrade')return require('./ai-model-registry.cjs').upgradeSettings(p.settings);
  if(p.op==='normalize'){if(p.key!==undefined&&!provider.hasKey(p.key))throw Error('KEY_NOT_CONFIGURED');return p.profile?provider.normalizeProfile(p.profile):provider.presets();}
  if(p.op==='cc-list')return require('./ai-ccswitch.cjs').listClaudeProviders(p.dbPath);

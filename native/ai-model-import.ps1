@@ -23,24 +23,25 @@ function Apply-AiImport([string]$root,$message) {
     if($pending){try{$ccCandidates=@(Invoke-AiNode @{op='import-read';source='ccswitch';home=$env:USERPROFILE})}catch{}}
     return Invoke-AiConfigLock $root {
         $s=Read-AiSettings $root
+
+        $selected=@();$revisions=@{}
         foreach($candidateId in @($message.candidateIds)){
             $items=@($preview.items|Where-Object {$_.candidateId -ceq $candidateId});if($items.Count -ne 1){throw 'IMPORT_CHANGED'};$item=$items[0]
             $matches=@($fresh|Where-Object {$_.sourceId -ceq $item.sourceId});if($matches.Count -ne 1 -or $matches[0].fingerprint -cne $item.fingerprint){throw 'IMPORT_CHANGED'}
-            if($item.change -eq 'same'){continue}
             if($item.conflict -and $candidateId -notin @($message.overwriteIds)){throw 'IMPORT_CONFLICT'}
             if($item.change -eq 'ignored' -and $candidateId -notin @($message.restoreIds)){throw 'IMPORT_CONFLICT'}
-            $old=$null;$target=[string]$item.targetId
-            if($target){$old=$s.profiles.$target;if(-not $old -or $old.revision -cne $item.targetRevision){throw 'IMPORT_CHANGED'}}else{
-                if(@($s.profiles.PSObject.Properties).Count -ge 200){throw 'CONFIG_LIMIT'}
-                $current=@(Invoke-AiNode @{op='import-compare';settings=$s;candidates=@($matches[0])})
-                if($current[0].targetId -or ($current[0].change -eq 'ignored' -and $item.change -ne 'ignored')){throw 'IMPORT_CHANGED'}
-                $target=[Guid]::NewGuid().ToString()
-            }
-            $p=Invoke-AiNode @{op='normalize';profile=$matches[0]};$p.profileId=$target;$p.revision=[Guid]::NewGuid().ToString()
-            if($old){Set-AiProperty $p 'tags' @($old.tags)}
-            Set-AiProperty $p 'ciphertext' (Protect-AiKey $matches[0].secret)
-            Set-AiProperty $p 'origin' @{source=$item.source;sourceId=$item.sourceId;fingerprint=$item.fingerprint;credentialFingerprint=$item.credentialFingerprint;locallyEdited=$false}
-            Set-AiProperty $s.profiles $target $p
+            if($item.targetId){$old=$s.profiles.([string]$item.targetId);if(-not $old -or $old.revision -cne $item.targetRevision){throw 'IMPORT_CHANGED'}}
+            $selected+=@{item=$item;candidate=$matches[0]}
+        }
+        foreach($pair in $selected){
+            $item=$pair.item;$candidate=$pair.candidate
+            if($item.change -eq 'same'){continue}
+            $matching=@()
+            foreach($entry in $s.profiles.PSObject.Properties){try{if($entry.Value.ciphertext -and (Unprotect-AiKey $entry.Value.ciphertext) -ceq $candidate.secret){$matching+=$entry.Name}}catch{}}
+            $current=@(Invoke-AiNode @{op='import-compare';settings=$s;candidates=@($candidate)})
+            if(-not $item.targetId -and $current[0].targetId){throw 'IMPORT_CHANGED'}
+            $applied=Invoke-AiNode @{op='import-apply-one';settings=$s;candidate=$candidate;ciphertext=(Protect-AiKey $candidate.secret);targetId=$item.targetId;matchingIds=@($matching)}
+            $s=$applied.settings
             $s.imports.ignored=@($s.imports.ignored|Where-Object {$_ -cne ($item.source+':'+$item.sourceId)})
         }
         Restore-AiLegacySelection $s $ccCandidates

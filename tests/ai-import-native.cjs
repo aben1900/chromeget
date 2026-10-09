@@ -28,8 +28,8 @@ $tagged=Save-AiSettings $PSScriptRoot @{profileId=$model.profileId;expectedRevis
 $model=$tagged.profiles.($model.profileId)
 & (Join-Path $PSScriptRoot 'bin/node.exe') (Join-Path $PSScriptRoot 'rotate.cjs')
 $changed=New-AiImportPreview $PSScriptRoot 'ccswitch'
-if($changed.items[0].conflict){throw 'tags created source conflict'}
-$reimported=Apply-AiImport $PSScriptRoot @{previewId=$changed.previewId;candidateIds=@($changed.items[0].candidateId)}
+if(-not $changed.items[0].connectionChange){throw 'credential change not disclosed'}
+$reimported=Apply-AiImport $PSScriptRoot @{previewId=$changed.previewId;candidateIds=@($changed.items[0].candidateId);overwriteIds=@($changed.items[0].candidateId)}
 $model=$reimported.profiles.($model.profileId)
 if(($model.tags -join ',') -cne '个人,常用'){throw 'reimport erased tags'}
 $null=Remove-AiModel $PSScriptRoot @{profileId=$model.profileId;expectedRevision=$model.revision}

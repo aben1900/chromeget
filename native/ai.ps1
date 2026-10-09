@@ -9,6 +9,7 @@ function Get-AiPublicProfile($profile) {
 function Invoke-AiAction($message,[string]$directory) {
     try {
         switch ([string]$message.action) {
+            'ai-models-discover' {Set-AiProperty $message.draft 'model' 'discovery';$profile=Resolve-AiDraft $PSScriptRoot $message.draft;return @{ok=$true;models=@(Invoke-AiNode @{op='models-discover';profile=$profile})}}
             'ai-settings-get' {$r=Get-AiPublicSettings $PSScriptRoot $message.legacySelection;$r.ok=$true;return $r}
             'ai-model-select' {$r=Select-AiModel $PSScriptRoot $message;$r.ok=$true;return $r}
             'ai-settings-save' {$r=Save-AiSettings $PSScriptRoot $message;$r.ok=$true;return $r}

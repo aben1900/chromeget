@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),{randomUUID}=require('node:crypto');
+let handler,click,local={},session={},saves=[],opened=[];
+const noop=()=>{},origin='chrome-extension://test/';
+const chrome={runtime:{id:'test',getURL:p=>origin+p,onMessage:{addListener:f=>handler=f},onInstalled:{addListener:noop},onStartup:{addListener:noop},sendNativeMessage(h,m,cb){if(m.action==='save')saves.push(structuredClone(m.record));cb(m.action==='library-duplicates'?{ok:true,matches:[]}:{ok:true,path:'test.json',storageFormat:'json',capabilities:['library-v1','bookmark-metadata-v1']});}},windows:{onRemoved:{addListener:noop}},action:{onClicked:{addListener:noop},setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{},setTitle:async()=>{}},contextMenus:{onClicked:{addListener:f=>click=f}},sidePanel:{open:async v=>opened.push(v.windowId)},storage:{local:{get:async()=>structuredClone(local),set:async v=>Object.assign(local,structuredClone(v))},session:{get:async k=>({[k]:structuredClone(session[k])}),set:async v=>Object.assign(session,structuredClone(v)),remove:async k=>delete session[k]}}};
+const context=vm.createContext({chrome,crypto:{randomUUID},console,URL,setTimeout,clearTimeout});context.importScripts=(...names)=>names.forEach(n=>vm.runInContext(fs.readFileSync('extension/'+n,'utf8'),context));vm.runInContext(fs.readFileSync('extension/background.js','utf8'),context);
+const request=(action,extra={})=>new Promise((resolve,reject)=>{if(handler({action,windowId:7,...extra},{id:'test',url:origin+'collect.html'},resolve)!==true)reject(Error('message rejected'));});
+const settle=()=>vm.runInContext('serial',context);
+(async()=>{
+ const tab={windowId:7,url:'https://source.example/list',title:'来源列表'};
+ click({menuItemId:'link',linkUrl:'https://target.example/article',pageUrl:tab.url},tab);await settle();
+ assert.equal(saves.length,0,'right-click URL must wait for metadata confirmation instead of saving immediately');assert.deepEqual(opened,[7]);let draft=session['collect-draft:7'];assert.equal(session['app-view:7'],'collect');assert.equal(draft.text,'https://target.example/article');assert.equal(draft.bookmarkTitle,'','a source-page title must not name a different target URL');assert.equal(draft.sourceUrl,tab.url);
+ let r=await request('collect-save',{id:draft.id,revision:draft.revision});assert.equal(r.ok,false);assert.match(r.error,/名称/);assert.equal(saves.length,0);
+ r=await request('collect-edit',{id:draft.id,text:draft.text,type:'内容',bookmarkTitle:'确认名称',note:'右键备注',author:'右键作者'});draft=r.draft;r=await request('collect-save',{id:draft.id,revision:draft.revision});assert.equal(r.state,'saved');assert.equal(saves[0].title,'确认名称');assert.equal(saves[0].note,'右键备注');assert.equal(saves[0].author,'右键作者');assert.equal(saves[0].id,draft.id);
+ click({menuItemId:'page',pageUrl:tab.url},tab);await settle();assert.equal(saves.length,1);draft=session['collect-draft:7'];assert.equal(draft.text,tab.url);assert.equal(draft.bookmarkTitle,'来源列表');assert.equal(draft.submissionState,'editing');
+ click({menuItemId:'collect',selectionText:'https://selected.example/',pageUrl:tab.url},tab);await settle();assert.equal(session['collect-draft:7'].text,'https://selected.example/');assert.equal(saves.length,1);
+ const previousId=session['collect-draft:7'].id;click({menuItemId:'link',selectionText:'not a URL',linkUrl:'https://ignored.example/'},tab);await settle();assert.equal(session['collect-draft:7'].id,previousId);assert.equal(saves.length,1);
+ console.log('PASS URL context menus require editable metadata confirmation, preserve source and keep explicit save ID');
+})().catch(e=>{console.error(e);process.exitCode=1});

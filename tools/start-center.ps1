@@ -8,7 +8,7 @@ $installRoot=Join-Path $env:LOCALAPPDATA 'JingcaiClipper'
 $script:job=$null;$script:actionButtons=@()
 function Quote-PS([string]$value){return "'"+$value.Replace("'","''")+"'"}
 function New-Label([string]$text,[int]$height=26){$c=New-Object Windows.Forms.Label;$c.Text=$text;$c.AutoSize=$false;$c.Width=630;$c.Height=$height;$c.Margin='0,4,0,2';return $c}
-function New-Button([string]$text,[int]$width=150){$c=New-Object Windows.Forms.Button;$c.Text=$text;$c.Width=$width;$c.Height=36;$c.FlatStyle='Flat';$c.FlatAppearance.BorderColor=[Drawing.ColorTranslator]::FromHtml('#CDDCD4');$c.BackColor=[Drawing.Color]::White;$c.Margin='0,0,10,0';return $c}
+function New-Button([string]$text,[int]$width=150){$c=New-Object Windows.Forms.Button;$c.Text=$text;$c.Width=$width;$c.Height=36;$c.FlatStyle='Flat';$c.FlatAppearance.BorderColor=[Drawing.ColorTranslator]::FromHtml('#D8D8D8');$c.BackColor=[Drawing.Color]::White;$c.Margin='0,0,10,0';return $c}
 function New-Row{ $p=New-Object Windows.Forms.FlowLayoutPanel;$p.Width=640;$p.Height=42;$p.WrapContents=$false;$p.Margin='0,3,0,3';return $p }
 function New-Page([string]$title){$page=New-Object Windows.Forms.TabPage;$page.Text=$title;$page.Padding='18,12,12,12';$page.BackColor=[Drawing.Color]::White;$flow=New-Object Windows.Forms.FlowLayoutPanel;$flow.Dock='Fill';$flow.FlowDirection='TopDown';$flow.WrapContents=$false;$flow.AutoScroll=$true;$page.Controls.Add($flow);$tabs.TabPages.Add($page);return $flow}
 function Open-Path([string]$path){if(Test-Path -LiteralPath $path){[Diagnostics.Process]::Start('explorer.exe','"'+$path+'"')|Out-Null}else{[Windows.Forms.MessageBox]::Show('目录尚未创建，请先完成安装。','精彩摘录')|Out-Null}}
@@ -92,16 +92,16 @@ function Update-ManagedOperation{
         if(Test-Path -LiteralPath $j.cancelPath){Remove-Item -LiteralPath $j.cancelPath -Force}
         $script:actionButtons|ForEach-Object {$_.Enabled=$true};$idInput.ReadOnly=$false;$folderInput.ReadOnly=$false
         Read-Installation
-        $stateLabel.Text=if($code -eq 0){$title+'完成。请在 Chrome 重新加载扩展，再点击“重新检测”验证连接。'}elseif($cancelled){'已取消，可关闭窗口或重新更新 / 修复。'}else{$title+'未完成，请查看下方日志；修正后可以重试。'}
+        $stateLabel.Text=if($code -eq 0){$title+'完成。请在 Chrome 重新加载扩展，再点击“检查是否可以使用”验证连接。'}elseif($cancelled){'已取消，可关闭窗口或重新更新 / 修复。'}else{$title+'未完成，请查看下方日志；修正后可以重试。'}
         if($script:closeAfterOperation){$form.Close()}
         elseif(-not $SelfTest -and $code -eq 0 -and $title -in @('安装','更新 / 修复')){Start-Diagnostics}
     }
 }
-$form=New-Object Windows.Forms.Form;$form.Text='精彩摘录 · 安装与管理';$form.Size=New-Object Drawing.Size(780,800);$form.MinimumSize=New-Object Drawing.Size(720,620);$form.Height=[Math]::Min(800,[Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height-40);$form.StartPosition='CenterScreen';$form.Font=New-Object Drawing.Font('Microsoft YaHei UI',10);$form.BackColor=[Drawing.ColorTranslator]::FromHtml('#F3F6F4');$form.AutoScaleMode='Dpi'
+$form=New-Object Windows.Forms.Form;$form.Text='精彩摘录 · 安装与管理';$form.Size=New-Object Drawing.Size(780,800);$form.MinimumSize=New-Object Drawing.Size(720,620);$form.Height=[Math]::Min(800,[Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height-40);$form.StartPosition='CenterScreen';$form.Font=New-Object Drawing.Font('Segoe UI',10);$form.BackColor=[Drawing.ColorTranslator]::FromHtml('#F7F7F7');$form.AutoScaleMode='Dpi'
 $layout=New-Object Windows.Forms.TableLayoutPanel;$layout.Dock='Fill';$layout.Padding='18,12,18,12';$layout.ColumnCount=1;$layout.RowCount=5
 foreach($spec in @(@('Absolute',50),@('Percent',100),@('Absolute',20),@('Absolute',100),@('Absolute',48))){$layout.RowStyles.Add((New-Object Windows.Forms.RowStyle($spec[0],$spec[1])))|Out-Null}
 $form.Controls.Add($layout)
-$heading=New-Label '精彩摘录   安装与管理' 50;$heading.Font=New-Object Drawing.Font('Microsoft YaHei UI',18,[Drawing.FontStyle]::Bold);$heading.ForeColor=[Drawing.ColorTranslator]::FromHtml('#18705A');$layout.Controls.Add($heading,0,0)
+$heading=New-Label '精彩摘录   安装与管理' 50;$heading.Font=New-Object Drawing.Font('Segoe UI',18,[Drawing.FontStyle]::Bold);$heading.ForeColor=[Drawing.ColorTranslator]::FromHtml('#242424');$layout.Controls.Add($heading,0,0)
 $tabs=New-Object Windows.Forms.TabControl;$tabs.Dock='Fill';$layout.Controls.Add($tabs,0,1)
 $main=New-Page '开始使用'
 $main.Controls.Add((New-Label '① 在 Chrome 加载扩展' 28))
@@ -119,7 +119,7 @@ $idInput=New-Object Windows.Forms.TextBox;$idInput.Width=630;$idInput.MaxLength=
 $main.Controls.Add((New-Label '摘录保存目录（下载目录在扩展内单独设置）'))
 $row=New-Row;$folderInput=New-Object Windows.Forms.TextBox;$folderInput.Width=485;$folderInput.Margin='0,4,10,0';$browse=New-Button '选择目录' 135;$row.Controls.AddRange(@($folderInput,$browse));$main.Controls.Add($row)
 $browse.Add_Click({$dialog=New-Object Windows.Forms.FolderBrowserDialog;$dialog.Description='选择摘录 JSON 保存位置';if(Test-Path -LiteralPath $folderInput.Text){$dialog.SelectedPath=$folderInput.Text};if($dialog.ShowDialog($form) -eq 'OK'){$folderInput.Text=$dialog.SelectedPath};$dialog.Dispose()})
-$row=New-Row;$installButton=New-Button '安装并连接 Chrome' 210;$installButton.BackColor=[Drawing.ColorTranslator]::FromHtml('#18705A');$installButton.ForeColor=[Drawing.Color]::White;$repairButton=New-Button '更新 / 修复' 150;$row.Controls.AddRange(@($installButton,$repairButton));$main.Controls.Add($row)
+$row=New-Row;$installButton=New-Button '安装并连接 Chrome' 210;$installButton.BackColor=[Drawing.ColorTranslator]::FromHtml('#242424');$installButton.ForeColor=[Drawing.Color]::White;$repairButton=New-Button '更新 / 修复' 150;$row.Controls.AddRange(@($installButton,$repairButton));$main.Controls.Add($row)
 $main.Controls.Add((New-Label '首次准备 Node.js、yt-dlp、aria2 和 FFmpeg；已校验文件会复用。进度条显示当前文件，更新前请暂停下载任务。' 48))
 $installButton.Add_Click({
     $id=$idInput.Text.Trim();$dir=$folderInput.Text.Trim().Trim('"')
@@ -129,7 +129,7 @@ $installButton.Add_Click({
 })
 $repairButton.Add_Click({Start-ManagedOperation '更新 / 修复' ('& '+(Quote-PS (Join-Path $root 'native\repair.ps1')))})
 $main.Controls.Add((New-Label '③ 在扩展中验证连接' 30))
-$main.Controls.Add((New-Label '本窗口更新本地程序。随后打开 chrome://extensions，点击“精彩摘录”卡片蓝色开关左边的圆形箭头 ⟳，再打开侧栏点击“重新检测”。' 65))
+$main.Controls.Add((New-Label '先用新版包覆盖原目录，保留 extension 路径。本窗口更新配套程序。随后打开 chrome://extensions，点击“精彩摘录”卡片蓝色开关左边的圆形箭头 ⟳，再打开侧栏点击“检查是否可以使用”。' 65))
 $row=New-Row;$diagnose=New-Button '检查本机环境' 160;$integrity=New-Button '完整校验引擎' 160;$row.Controls.AddRange(@($diagnose,$integrity));$main.Controls.Add($row)
 $diagnosticBox=New-Object Windows.Forms.TextBox;$diagnosticBox.Multiline=$true;$diagnosticBox.ReadOnly=$true;$diagnosticBox.Width=630;$diagnosticBox.Height=175;$diagnosticBox.ScrollBars='Vertical';$diagnosticBox.Text='尚未检查。安装或修复后会自动检查本机环境。';$main.Controls.Add($diagnosticBox)
 $diagnose.Add_Click({Start-Diagnostics})
@@ -155,7 +155,7 @@ $portable.Add_Click({
 })
 $unportable.Add_Click({Start-ManagedOperation '退出便携模式' ('& '+(Quote-PS (Join-Path $root 'native\portable.ps1'))+' -Unregister')})
 $advanced.Controls.Add((New-Label '解除连接后，扩展无法保存或下载，重新安装即可恢复。' 35))
-$uninstall=New-Button '解除本地连接（卸载）' 230;$uninstall.ForeColor=[Drawing.ColorTranslator]::FromHtml('#A43C30');$advanced.Controls.Add($uninstall)
+$uninstall=New-Button '解除本地连接（卸载）' 230;$uninstall.ForeColor=[Drawing.ColorTranslator]::FromHtml('#454545');$advanced.Controls.Add($uninstall)
 $uninstall.Add_Click({if([Windows.Forms.MessageBox]::Show('确定解除本地连接？个人文件和下载任务会保留；Chrome 扩展需要自行移除。','解除连接','YesNo','Warning') -eq 'Yes'){Start-ManagedOperation '解除连接' ('& '+(Quote-PS (Join-Path $root 'native\uninstall.ps1')))}})
 $progressRow=New-Object Windows.Forms.TableLayoutPanel;$progressRow.Dock='Fill';$progressRow.ColumnCount=2;$progressRow.RowCount=1
 [void]$progressRow.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle('Percent',100)));[void]$progressRow.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle('Absolute',110)))

@@ -1,15 +1,15 @@
-:root { font-family: "Microsoft YaHei", system-ui, sans-serif; color: #233c35; background: #f4f7f4; }
+:root { font-family: "Microsoft YaHei", system-ui, sans-serif; color: #363636; background: #f6f6f6; }
 * { box-sizing: border-box; }
 body { margin: 0; }
 main { padding: 26px; max-width: 760px; margin: auto; }
 h1 { font-size: 23px; margin: 0 0 10px; }
-.hint { color: #61736a; font-size: 13px; margin-bottom: 24px; }
+.hint { color: #6f6f6f; font-size: 13px; margin-bottom: 24px; }
 label { display: block; font-size: 13px; font-weight: 600; margin: 16px 0 8px; }
-input, textarea { width: 100%; border: 1px solid #becdc4; border-radius: 8px; background: white; padding: 11px; font: inherit; font-size: 14px; }
-input:focus, textarea:focus { outline: 2px solid #18705a; outline-offset: 2px; }
+input, textarea { width: 100%; border: 1px solid #c9c9c9; border-radius: 8px; background: white; padding: 11px; font: inherit; font-size: 14px; }
+input:focus, textarea:focus { outline: 2px solid #5c5c5c; outline-offset: 2px; }
 textarea { height: 210px; resize: vertical; line-height: 1.7; }
-#error { color: #b42318; font-size: 13px; min-height: 18px; }
+#error { color: #414141; font-size: 13px; min-height: 18px; }
 .actions { display: flex; justify-content: flex-end; gap: 10px; }
-button { padding: 10px 20px; border: 1px solid #becdc4; border-radius: 8px; background: white; cursor: pointer; font: inherit; font-size: 14px; }
-#save { background: #18705a; color: white; border-color: #18705a; }
+button { padding: 10px 20px; border: 1px solid #c9c9c9; border-radius: 8px; background: white; cursor: pointer; font: inherit; font-size: 14px; }
+#save { background: #5c5c5c; color: white; border-color: #5c5c5c; }
 button:disabled { opacity: .55; cursor: wait; }

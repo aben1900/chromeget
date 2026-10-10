@@ -129,8 +129,8 @@ const record = content => ({id:randomUUID(),time:'2026-09-30T07:20:08.000Z',type
   click({menuItemId:'download-link',selectionText:'  https://example.com/selected.zip?token=a%2Fb&x=1  ',linkUrl:'https://wrong.example/'},{windowId:42});await settle();
   assert.equal(session['download-link:42'].url,'https://example.com/selected.zip?token=a%2Fb&x=1');
   delete session['download-link:42'];delete session['app-view:42'];panels.length=0;
-  click({menuItemId:'link',selectionText:' www.example.com/file.zip ',linkUrl:'https://wrong.example/'},{});await settle();
-  assert.equal(sent.at(-1).record.content,'https://www.example.com/file.zip');assert.equal(sent.at(-1).record.type,'网页地址');sent.length=0;
+  click({menuItemId:'link',selectionText:' www.example.com/file.zip ',linkUrl:'https://wrong.example/'},{windowId:42,url:'https://source.example/'});await settle();
+  assert.equal(sent.length,0);assert.equal(session['collect-draft:42'].text,'https://www.example.com/file.zip');assert.equal(session['app-view:42'],'collect');assert.equal(panels.at(-1).windowId,42);delete session['collect-draft:42'];delete session['app-view:42'];panels.length=0;
   for(const selectionText of ['javascript:alert(1)','https://a.example/ https://b.example/','不是网址'])click({menuItemId:'download-link',selectionText,linkUrl:'https://wrong.example/'},{windowId:42});
   await settle();assert.equal(panels.length,0);assert.equal(session['download-link:42'],undefined);
   console.log('PASS selected URL menu actions, selection priority, query preservation, www normalization and invalid selection guard');
@@ -138,9 +138,9 @@ const record = content => ({id:randomUUID(),time:'2026-09-30T07:20:08.000Z',type
   const hovered=await new Promise(resolve=>onMessage({action:'page-video-download',mediaUrl:'blob:opaque'},{id:'test',frameId:0,url:'https://www.youtube.com/watch?v=d2UVNJSX7oA',tab:{windowId:55}},resolve));
   assert.equal(hovered.ok,true);assert.equal(session['app-view:55'],'video');assert.equal(session['video-url:55'],'https://www.youtube.com/watch?v=d2UVNJSX7oA');delete session['app-view:55'];delete session['video-url:55'];delete session['video-source:55'];panels.length=0;
   click({menuItemId:'comment',selectionText:'选中文字'},{});
-  click({menuItemId:'link',linkUrl:'https://example.com/target'},{});
-  click({menuItemId:'page',pageUrl:'https://example.com/page'},{});
-  await settle();assert.equal(sent.length,3);assert.equal(sent[1].record.content,'https://example.com/target');assert.equal(sent[2].record.type,'网页地址');assert.equal(store.pending.length,0);
+  click({menuItemId:'link',linkUrl:'https://example.com/target'},{windowId:42,url:'https://source.example/'});
+  click({menuItemId:'page',pageUrl:'https://example.com/page'},{windowId:43,url:'https://example.com/page',title:'网页名称'});
+  await settle();assert.equal(sent.length,1);assert.equal(sent[0].record.type,'评论');assert.equal(session['collect-draft:42'].text,'https://example.com/target');assert.equal(session['collect-draft:43'].bookmarkTitle,'网页名称');assert.equal(session['app-view:42'],'collect');assert.equal(session['app-view:43'],'collect');assert.equal(store.pending.length,0);for(const windowId of [42,43]){delete session['collect-draft:'+windowId];delete session['app-view:'+windowId];}panels.length=0;
   fail=true;click({menuItemId:'review',selectionText:'断线保留'},{});await settle();assert.equal(store.pending.length,1);const queuedId=store.pending[0].id;
   fail=false;await new Promise(resolve=>onMessage({action:'retry'},{id:'test',url:'chrome-extension://test/popup.html'},resolve));
   assert.equal(store.pending.length,0);assert.equal(sent.at(-1).record.id,queuedId);

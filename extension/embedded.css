@@ -1,4 +1,4 @@
-body{width:100%;min-width:0;margin:0;background:#f5f7f2}body>header,main>h1,main>h1+.hint,footer{display:none}
+body{width:100%;min-width:0;margin:0;background:#f6f6f6}body>header,main>h1,main>h1+.hint,footer{display:none}
 main{padding:14px 12px 20px;max-width:none}
 .toolbar,.actions{flex-wrap:wrap;gap:8px}.toolbar button{flex-shrink:0}
 #records{max-height:none}section{padding:14px}#library{margin-top:12px}#openVideoPanel{display:none}
@@ -11,5 +11,5 @@ body:not(:has(.video-page)) .label{font-size:12px}
 body:not(:has(.video-page)) .record{padding:12px 0}
 body:not(:has(.video-page)) main>details{font-size:12px;line-height:1.6;margin-top:16px}
 #path,#jsonPath{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
-button:focus-visible,summary:focus-visible{outline:2px solid #18705a;outline-offset:2px}
+button:focus-visible,summary:focus-visible{outline:2px solid #5c5c5c;outline-offset:2px}
 @media(max-width:340px){main{padding:12px 10px 16px}section{padding:12px}.toolbar button{flex-shrink:1}.toolbar.pagination{flex-wrap:nowrap}}

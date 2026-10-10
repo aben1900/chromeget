@@ -3,7 +3,7 @@
   let enabled=false,video=null,hideTimer;
   const host=document.createElement('div');host.id='jingcai-video-download';host.style.cssText='position:fixed;z-index:2147483647;display:none';
   const shadow=host.attachShadow({mode:'closed'}),style=document.createElement('style');
-  style.textContent='button{font:13px/1.4 system-ui,sans-serif;color:white;background:#2475e8;border:1px solid #74b1ff;border-radius:9px;box-shadow:0 4px 20px #0004;padding:9px 13px;cursor:pointer}button:focus-visible{outline:2px solid white}span{display:block;max-width:240px;color:white;background:#22364f;font:12px/1.5 system-ui;padding:8px;border-radius:6px;margin-top:5px}span:empty{display:none}';
+  style.textContent='button{font:13px/1.4 system-ui,sans-serif;color:white;background:#242424;border:1px solid #686868;border-radius:9px;box-shadow:0 4px 20px #0004;padding:9px 13px;cursor:pointer}button:focus-visible{outline:2px solid white}span{display:block;max-width:240px;color:white;background:#383838;font:12px/1.5 system-ui;padding:8px;border-radius:6px;margin-top:5px}span:empty{display:none}';
   const button=document.createElement('button');button.textContent='↓ 下载此视频';const status=document.createElement('span');status.setAttribute('role','status');shadow.append(style,button,status);document.documentElement.append(host);
   function hide(){host.style.display='none';video=null;status.textContent='';}
   function position(){if(!video?.isConnected){hide();return;}const r=video.getBoundingClientRect();if(r.width<120||r.height<70||r.bottom<0||r.top>innerHeight){hide();return;}host.style.top=Math.max(8,r.top+12)+'px';host.style.left=Math.max(8,Math.min(innerWidth-150,r.right-150))+'px';}

@@ -3,7 +3,18 @@ async function enqueueRecord(record){
   if(!pending.some(item=>item.id===record.id)){pending.push(record);await chrome.storage.local.set({pending});}
   await flush();
 }
-function newCollectDraft(text='',source={}){return {id:crypto.randomUUID(),revision:1,text,type:'内容',title:'',time:new Date().toISOString(),sourceUrl:source.url||'',sourceTitle:source.title||'',submissionState:'editing'};}
+function newCollectDraft(text='',source={}){return {id:crypto.randomUUID(),revision:1,text,type:'内容',title:'',bookmarkTitle:Collect.classify(text).url===Collect.classify(source.url).url&&source.url?String(source.title||'').slice(0,120):'',note:'',author:'',time:new Date().toISOString(),sourceUrl:source.url||'',sourceTitle:source.title||'',submissionState:'editing'};}
+function collectRecord(draft,choice){
+  const record={id:draft.id,time:draft.time,type:choice.kind==='url'?'网页地址':draft.type,content:choice.kind==='url'?choice.url:draft.text,sourceUrl:draft.sourceUrl,sourceTitle:draft.sourceTitle};
+  if(record.type==='提示词')record.title=draft.title;
+  if(choice.kind==='url'&&draft.bookmarkTitle!==undefined){record.title=draft.bookmarkTitle.trim();record.note=draft.note||'';record.author=(draft.author||'').trim();}
+  return record;
+}
+async function collectHost(record){
+  let host;try{host=await native({action:'status'});}catch(e){if(e.code!=='HOST_UNAVAILABLE')throw e;}
+  if(host&&record.type==='网页地址'&&record.title!==undefined&&!host.capabilities?.includes('bookmark-metadata-v1'))throw Error('网址名称、备注和作者需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”后重试');
+  return host;
+}
 async function collectionRequest(message){
   if(!Number.isInteger(message.windowId)||message.windowId<0)throw Error('无法确定收集窗口，请重新打开侧栏');
   const key=`collect-draft:${message.windowId}`;
@@ -15,6 +26,7 @@ async function collectionRequest(message){
     if(message.id&&draft&&message.id!==draft.id)throw Error('草稿已被其他操作更新，请重新打开收集页');
     if(!draft||draft.submissionState!=='editing')draft=newCollectDraft();
     draft={...draft,text:message.text,type:message.type,title:String(message.title||'').trim(),revision:draft.revision+1};
+    for(const field of ['bookmarkTitle','note','author'])if(message[field]!==undefined){if(typeof message[field]!=='string')throw Error('网址信息必须是文字');draft[field]=message[field];}
     if(message.sourceUrl!==undefined){draft.sourceUrl=Collect.classify(message.sourceUrl).url||'';draft.sourceTitle=String(message.sourceTitle||'').slice(0,500);}
     await chrome.storage.session.set({[key]:draft});return {ok:true,draft};
   }
@@ -29,18 +41,21 @@ async function collectionRequest(message){
   if(message.action==='collect-retry'){
     const state=await saved();if(state.state==='saved'||state.state==='editing')return state;
     const choice=Collect.classify(draft.text);
-    const record={id:draft.id,time:draft.time,type:choice.kind==='url'?'网页地址':draft.type,content:choice.kind==='url'?choice.url:draft.text,sourceUrl:draft.sourceUrl,sourceTitle:draft.sourceTitle};
-    if(record.type==='提示词')record.title=draft.title;
+    const record=collectRecord(draft,choice);
+    await collectHost(record);
     // Same immutable record ID is safe even if the original response was lost.
     await enqueueRecord(record);return saved();
   }
   if(message.action!=='collect-save')throw Error('不支持的收集操作');
   if(draft.submissionState!=='editing')return saved();
   const choice=Collect.classify(draft.text);if(choice.kind==='empty')throw Error('请先输入要保存的内容');
-  if(draft.type==='提示词'&&(!draft.title||draft.title.length>120||/[\r\n]/.test(draft.title)))throw Error('提示词标题需要 1–120 字的单行文字');
-  if(message.allowDuplicate!==true){let host;try{host=await native({action:'status'});}catch(e){if(e.code!=='HOST_UNAVAILABLE')throw e;}if(host?.capabilities?.includes('library-v1')){const check=await native({action:'library-duplicates',content:choice.kind==='url'?choice.url:draft.text,type:choice.kind==='url'?'网页地址':draft.type});if(check.matches?.length)return {ok:true,state:'duplicate',matches:check.matches};}}
+  if(choice.kind==='url'){
+    if(typeof draft.bookmarkTitle!=='string'||!draft.bookmarkTitle.trim()||draft.bookmarkTitle.trim().length>120||/[\r\n]/.test(draft.bookmarkTitle))throw Error('网址名称需要 1–120 字的单行文字');
+    if((draft.note||'').length>2000)throw Error('网址备注最多 2000 字');
+    if((draft.author||'').trim().length>120)throw Error('作者最多 120 字');
+  }else if(draft.type==='提示词'&&(!draft.title||draft.title.length>120||/[\r\n]/.test(draft.title)))throw Error('提示词标题需要 1–120 字的单行文字');
+  const record=collectRecord(draft,choice),host=await collectHost(record);
+  if(message.allowDuplicate!==true&&host?.capabilities?.includes('library-v1')){const check=await native({action:'library-duplicates',content:record.content,type:record.type});if(check.matches?.length)return {ok:true,state:'duplicate',matches:check.matches};}
   draft.submissionState='submitting';await chrome.storage.session.set({[key]:draft});
-  const record={id:draft.id,time:draft.time,type:choice.kind==='url'?'网页地址':draft.type,content:choice.kind==='url'?choice.url:draft.text,sourceUrl:draft.sourceUrl,sourceTitle:draft.sourceTitle};
-  if(record.type==='提示词')record.title=draft.title;
   await enqueueRecord(record);return saved();
 }

@@ -53,7 +53,7 @@ try {
         . (Join-Path $PSScriptRoot 'video.ps1')
         $response = Invoke-VideoAction $message
     } elseif ($message.action -eq 'status') {
-        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.31.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('ai-config-models-v2','ai-models-v1','ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.32.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('bookmark-metadata-v1','ai-config-models-v2','ai-models-v1','ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
     } elseif ($message.action -eq 'choose-json') {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -72,6 +72,12 @@ try {
         if ($r.id -notmatch '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$') { throw '记录编号无效。' }
         if ($r.type -notin @('评论', '评阅', '内容', '提示词', '网页地址')) { throw '不支持的类型。' }
         if ($r.type -eq '提示词' -and ($r.title -isnot [string] -or [string]::IsNullOrWhiteSpace($r.title) -or $r.title.Length -gt 120 -or $r.title -match '[\r\n]')) { throw '提示词需要 1–120 字的单行标题。' }
+        if ($r.type -eq '网页地址') {
+            # Older clients and journals may omit bookmark metadata entirely.
+            if ($null -ne $r.title -and ($r.title -isnot [string] -or [string]::IsNullOrWhiteSpace($r.title) -or $r.title.Trim().Length -gt 120 -or $r.title -match '[\r\n]')) { throw '网址名称需要 1–120 字的单行文字。' }
+            if ($null -ne $r.note -and ($r.note -isnot [string] -or $r.note.Length -gt 2000)) { throw '网址备注最多 2000 字。' }
+            if ($null -ne $r.author -and ($r.author -isnot [string] -or $r.author.Trim().Length -gt 120)) { throw '作者最多 120 字。' }
+        }
         if ($r.content -isnot [string] -or [string]::IsNullOrWhiteSpace($r.content)) { throw '不能保存空内容。' }
         $instant = [DateTimeOffset]::Parse($r.time, [Globalization.CultureInfo]::InvariantCulture)
       }
@@ -109,7 +115,7 @@ try {
         $page = @($ordered | Select-Object -Skip $offset -First 20 | ForEach-Object {
           $preview = [string]$_.content
           if ($preview.Length -gt 240) { $preview = $preview.Substring(0, 240) + '…' }
-          @{id=$_.id; time=$_.time; type=$_.type; title=$_.title; preview=$preview}
+          @{id=$_.id; time=$_.time; type=$_.type; title=$_.title; note=$_.note; author=$_.author; preview=$preview}
         })
         $response = @{ok=$true; records=$page; total=$records.Count; offset=$offset; journalPath=$journal}
       } elseif ($message.action -eq 'read') {
@@ -119,7 +125,7 @@ try {
         $content = [string]$entry.content
         if ($offset -gt $content.Length) { throw '内容位置无效。' }
         $count = [Math]::Min(12000, $content.Length - $offset)
-        $response = @{ok=$true; content=$content.Substring($offset,$count); nextOffset=($offset+$count); total=$content.Length}
+        $response = @{ok=$true; content=$content.Substring($offset,$count); nextOffset=($offset+$count); total=$content.Length; title=$entry.title; note=$entry.note; author=$entry.author}
       } else {
         if ($message.action -eq 'delete') {
           $beforeCount = $records.Count
@@ -127,7 +133,8 @@ try {
           Write-Atomic $journal (ConvertTo-Json -InputObject @($records) -Depth 25)
         } elseif (-not ($records | Where-Object { $_.id -eq $r.id })) {
             $entry = [PSCustomObject]@{id=$r.id; time=$instant.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss zzz'); type=$r.type; content=$r.content}
-            if ($r.type -eq '提示词') { $entry | Add-Member -NotePropertyName title -NotePropertyValue $r.title.Trim() }
+            if ($r.type -in @('提示词','网页地址') -and $null -ne $r.title) { $entry | Add-Member -NotePropertyName title -NotePropertyValue $r.title.Trim() }
+            if ($r.type -eq '网页地址' -and $null -ne $r.note) { $entry | Add-Member -NotePropertyName note -NotePropertyValue $r.note }
             foreach($field in @('sourceUrl','sourceTitle','author')) {
                 $value=[string]$r.$field
                 if($field -eq 'sourceUrl') {

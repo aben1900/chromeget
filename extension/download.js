@@ -1,4 +1,5 @@
 const $=id=>document.getElementById(id);
+let selectedFromList=false;
 let timer,downloadWindowId,recognitionTimer,recognitionId=0,prepared=null,probeBusy=false,submitBusy=false,directoryReady=false,queuedUrl='';
 async function send(action,extra={}){
   let timeout;const wait=action==='video-folder'?300000:action==='video-hf-info'?110000:action==='video-file-probe'?25000:25000;
@@ -22,7 +23,19 @@ function updateDirectory(path){$('directoryInput').value=path||'';$('directoryDi
 function resetInput(){
   clearTimeout(recognitionTimer);recognitionId++;prepared=null;probeBusy=false;queuedUrl='';$('fileName').value='';$('fileChecksum').value='';$('transferError').textContent='';$('transferStatus').textContent='';$('previewHint').textContent='';$('hfSection').hidden=true;$('hfUrl').value='';$('hfUrl').dispatchEvent(new Event('input'));displayPrepared();
 }
-function loadLink(url){if(!webpageUrl(url))return;$('fileUrl').value=url;resetInput();recognizeLink();}
+function loadLink(url,fromList=false){if(!webpageUrl(url))return;selectedFromList=fromList;$('backToFileList').hidden=!fromList;$('fileUrl').value=url;resetInput();recognizeLink();}
+function returnToFileList(){selectedFromList=false;$('backToFileList').hidden=true;$('fileUrl').value='';resetInput();$('linkResults').hidden=false;$('linkResults').scrollIntoView({block:'start'});$('linkList').querySelector('button')?.focus({preventScroll:true});}
+$('backToFileList').addEventListener('click',returnToFileList);
+function pageLinkType(link){
+ let u;try{u=new URL(link.url)}catch{return '类型待确认'}
+ let name=link.filename||u.pathname;try{name=decodeURIComponent(name)}catch{}
+ const suffix=(name.match(/\.([a-z0-9]+)$/i)||[])[1]?.toLowerCase();
+ const groups=[['PDF',['pdf']],['文档',['doc','docx','txt','md','rtf','epub']],['表格',['xls','xlsx','csv']],['演示文稿',['ppt','pptx']],['压缩包',['zip','rar','7z','gz','tar','bz2','xz']],['安装程序',['exe','msi','msix','dmg','pkg','apk']],['图片',['jpg','jpeg','png','gif','webp','svg','avif','heic']],['音频',['mp3','m4a','wav','flac','aac','ogg']],['视频文件',['mp4','mkv','webm','mov','avi']],['流媒体',['m3u8','mpd']],['模型文件',['gguf','safetensors','onnx','pt','pth']]];
+ for(const [label,extensions] of groups)if(extensions.includes(suffix))return label;
+ if(u.hostname==='huggingface.co')return /\/resolve\//.test(u.pathname)?'模型仓库文件':'模型仓库';
+ if(supportedVideoUrl(link.url))return '视频 / 图集';
+ return suffix? suffix.toUpperCase()+' 文件':'网页 / 类型待确认';
+}
 async function recognizeLink(){
   clearTimeout(recognitionTimer);const url=inputUrl();if(!url){$('previewHint').textContent=$('fileUrl').value.trim()?'这不是完整的网址，请复制以 https:// 或 http:// 开头的链接。':'';refreshDownloadButton();return;}
   const id=++recognitionId;probeBusy=false;prepared=null;$('hfSection').hidden=true;$('transferError').textContent='';$('previewHint').textContent='';
@@ -49,7 +62,7 @@ let downloadPageInitialized=false;
 function initializeDownloadPage(){if(downloadPageInitialized)return;downloadPageInitialized=true;
 chrome.windows.getCurrent().then(async w=>{
   downloadWindowId=w.id;const key=`download-link:${w.id}`;let changed=false;
-  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes[key]){changed=true;loadLink(changes[key].newValue.url);}});
+  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes[key]?.newValue){changed=true;loadLink(changes[key].newValue.url);}if(area==='session'&&changes[`download-return-list:${w.id}`]?.newValue&&$('linkList').children.length)returnToFileList();});
   const batchKey=`download-batch:${w.id}`;
   function loadBatch(urls){if(!Array.isArray(urls))return;$('batchUrls').value=urls.join('\n');$('batchSection').open=true;$('batchSection').scrollIntoView({block:'start'});}
   chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes[batchKey])loadBatch(changes[batchKey].newValue);});
@@ -64,7 +77,7 @@ $('fileDownload').addEventListener('click',async()=>{
   try{
     if(choice.kind==='video'||choice.kind==='webpage'){
       if(!Number.isInteger(downloadWindowId))downloadWindowId=(await chrome.windows.getCurrent()).id;
-      await chrome.storage.session.set({[`video-url:${downloadWindowId}`]:choice.url,[`app-view:${downloadWindowId}`]:'video'});return;
+      await chrome.storage.session.set({[`download-list-origin:${downloadWindowId}`]:selectedFromList?{url:choice.url}:null,[`video-url:${downloadWindowId}`]:choice.url,[`app-view:${downloadWindowId}`]:'video'});return;
     }
     if(!directoryReady)throw Error('请先选择保存文件夹。');
     await send('video-file-start',{url:choice.url,filename:$('fileName').value.trim()||(choice.name==='下载文件'?'':choice.name),genericFile:true,checksum:$('fileChecksum').value.trim(),confirmed:true});
@@ -76,10 +89,10 @@ $('pageLinks').addEventListener('click',()=>{
   const grant=chrome.permissions.request({origins:['http://*/*','https://*/*']});
   transferTask($('pageLinks'),async()=>{
     if(!await grant)throw Error('需要允许读取当前网页，才能帮你找到文件。');
-    $('linkResults').hidden=false;$('linkCount').textContent='正在查找网页中的链接…';
+    $('backToFileList').hidden=true;selectedFromList=false;$('linkResults').hidden=false;$('linkCount').textContent='正在查找网页中的链接…';
     const r=await send('download-page-links',{windowId:downloadWindowId});$('linkList').replaceChildren();
-    $('linkCount').textContent=r.links.length?'找到 '+r.links.length+' 个链接，点选一个预览。':'没有找到可用链接。试试右键网页中的下载按钮，复制链接后粘贴到上方。';
-    for(const link of r.links){const b=document.createElement('button');b.className='page-link';b.textContent=(link.download?'↓ ':'')+(link.text||link.url);b.title=link.url;b.addEventListener('click',()=>{loadLink(link.url);$('linkResults').hidden=true;if(link.filename)$('fileName').value=safeName(link.filename);});$('linkList').append(b);}
+    $('linkCount').textContent=r.links.length?'找到 '+r.links.length+' 个链接，点选预览。类型按网址或文件名推测。':'没有找到可用链接。试试右键网页中的下载按钮，复制链接后粘贴到上方。';
+    for(const link of r.links){const b=document.createElement('button');b.className='page-link';const type=document.createElement('span');type.className='page-link-type';type.textContent=pageLinkType(link);const label=document.createElement('span');label.textContent=(link.download?'↓ ':'')+(link.text||link.url);b.append(type,label);b.title=link.url;b.addEventListener('click',()=>{loadLink(link.url,true);$('linkResults').hidden=true;if(link.filename)$('fileName').value=safeName(link.filename);});$('linkList').append(b);}
   });
 });
 for(const [id,action] of [['folder','video-folder'],['saveFolder','video-set-folder']])$(id).addEventListener('click',()=>transferTask($(id),async()=>{

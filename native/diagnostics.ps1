@@ -39,7 +39,7 @@ function Get-SetupDiagnostics {
     finally{if($probe -and [IO.File]::Exists($probe)){[IO.File]::Delete($probe)}}
     $bin=[IO.Path]::Combine($HostRoot,'bin');$missing=@('node.exe','yt-dlp.exe','aria2c.exe','ffmpeg.exe','ffprobe.exe')|Where-Object{-not(Test-Path -LiteralPath ([IO.Path]::Combine($bin,$_)) -PathType Leaf)}
     $checks.Add(@{id='engines';state=$(if(@($missing).Count){'fail'}else{'pass'});message=$(if(@($missing).Count){'引擎需要修复：'+($missing -join '、')}else{'引擎文件齐全'})})
-    $integrity='pending';$integrityMessage='完整性尚未检查，点击完整校验'
+    $integrity='pending';$integrityMessage='可选：尚未核对下载组件文件，日常使用不必执行'
     if($FullIntegrity){
         try{
             $lockPath=Join-Path $HostRoot 'engines.lock.json'
@@ -53,7 +53,9 @@ function Get-SetupDiagnostics {
                     if($file.target -match '[\\/]' -or $file.target -eq '..'){throw 'Invalid file name'}
                     $entry=@($receipt.files|Where-Object name -eq $file.target)
                     if($entry.Count -ne 1 -or $entry[0].sha256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'Invalid receipt'}
-                    $actual=(Get-FileHash -LiteralPath (Join-Path $bin $file.target) -Algorithm SHA256).Hash
+                    $hashStream=[IO.File]::OpenRead((Join-Path $bin $file.target));$sha=[Security.Cryptography.SHA256]::Create()
+                    try{$actual=[BitConverter]::ToString($sha.ComputeHash($hashStream)).Replace('-','')}
+                    finally{$hashStream.Dispose();$sha.Dispose()}
                     if($actual -ne $entry[0].sha256 -or ($engine.kind -eq 'exe' -and $actual -ne $engine.sha256)){throw 'File changed'}
                 }
             }
@@ -62,5 +64,11 @@ function Get-SetupDiagnostics {
     }
     $checks.Add(@{id='integrity';state=$integrity;message=$integrityMessage})
     $checks.Add(@{id='browser';state='pending';message='请在 Chrome 扩展中验证实际连接'})
-    return @{ok=$true;checks=@($checks.ToArray());hostVersion='1.27.1';capabilities=@('setup-diagnostics','structured-errors')}
+    $hostVersion=''
+    try {
+        $hostSource=[IO.File]::ReadAllText((Join-Path $HostRoot 'host.ps1'))
+        $match=[regex]::Match($hostSource,"version='([0-9]+\.[0-9]+\.[0-9]+)'")
+        if($match.Success){$hostVersion=$match.Groups[1].Value}
+    } catch {}
+    return @{ok=$true;checks=@($checks.ToArray());hostVersion=$hostVersion;capabilities=@('setup-diagnostics','structured-errors')}
 }

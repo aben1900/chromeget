@@ -1,34 +1,4 @@
 const $ = id => document.getElementById(id);
-async function refresh() {
-  const result = await chrome.runtime.sendMessage({action: 'status'});
-  const data = await chrome.storage.local.get(['pending', 'lastError', 'lastSaved', 'path']);
-  const count = (data.pending || []).length;
-  $('hostInfo').textContent = result.ok ? `实际连接的本地程序：${result.version || '未知版本'} · ${result.storageFormat || '未知格式'}` : '本地程序尚未连接';
-  $('status').textContent = count ? `${count} 条待保存，尚未全部写入文件` : result.ok ? '本地保存程序已连接' : '本地保存程序未连接';
-  $('error').textContent = result.ok ? (result.storageFormat !== 'json' ? '本地保存程序需要更新为仅 JSON 版本，请运行本项目的“开始使用.cmd”。' : (data.lastError || '')) : `请运行“开始使用.cmd”完成本地程序安装。${result.error || ''}`;
-  const isJsonPath = value => typeof value === 'string' && /\.json$/i.test(value);
-  const savePath = [result.journalPath, result.path, ...(result.ok ? [] : [data.path])].find(isJsonPath);
-  $('path').textContent = savePath || '尚未获取 JSON 保存路径';
-  // Replace obsolete TXT cache only with a host-reported JSON path; never relabel a TXT path.
-  if (result.ok && savePath) await chrome.storage.local.set({path: savePath});
-  else if (data.path && !isJsonPath(data.path)) await chrome.storage.local.set({path: ''});
-  $('last').textContent = data.lastSaved ? new Date(data.lastSaved).toLocaleString() : '暂无记录';
-}
-$('extensionId').value = chrome.runtime.id;
-$('extensionId').addEventListener('click', event => event.target.select());
-$('retry').addEventListener('click', async () => {
-  $('retry').disabled = true;
-  $('status').textContent = '正在重试保存…';
-  try { await request('retry'); await refresh(); await loadRecords(0); }
-  catch(error) {
-    const {pending = []} = await chrome.storage.local.get('pending');
-    $('status').textContent = pending.length ? `${pending.length} 条待保存，尚未全部写入文件` : '待保存队列已清空';
-    if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;
-  }
-  finally { $('retry').disabled = false; }
-});
-refresh().catch(error => { $('status').textContent = '检查失败'; if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message; });
-
 let records = [], offset = 0, total = 0, busy = false, journalPath;
 const selected = new Set();
 async function request(action, extra = {}) {
@@ -69,6 +39,16 @@ function render() {
     const meta = document.createElement('p'); meta.className = 'record-meta';
     meta.textContent = `${record.type} · ${record.time}`;
     const content = document.createElement('pre'); content.textContent = record.preview;
+    const bookmarkMeta = document.createElement('div');
+    function renderBookmark(values) {
+      if(record.type!=='网页地址')return;
+      bookmarkMeta.replaceChildren();
+      for(const [label,value] of [['名称',values.title||record.title||'未命名'],['备注',values.note??record.note??''],['作者',values.author??record.author??'']]){
+        const field=document.createElement('p');field.className='record-meta';field.textContent=label+'：'+(value||'未填写');field.style.whiteSpace='pre-wrap';bookmarkMeta.append(field);
+      }
+    }
+    renderBookmark(record);
+    const contentLabel=document.createElement('p');contentLabel.className='record-meta';contentLabel.textContent='网址';contentLabel.hidden=record.type!=='网页地址';
     const more = document.createElement('button'); more.className = 'secondary'; more.textContent = '加载完整内容';
     let loaded = 0, loading = false;
     async function loadContent() {
@@ -77,6 +57,7 @@ function render() {
       try {
         const result = await request('read', {id: record.id, offset: loaded, journalPath});
         content.textContent = (loaded ? content.textContent : '') + result.content;
+        renderBookmark(result);
         loaded = result.nextOffset;
         more.hidden = loaded >= result.total;
         more.textContent = '继续显示内容';
@@ -85,7 +66,7 @@ function render() {
     }
     more.addEventListener('click', loadContent);
     detail.addEventListener('toggle', () => { if (detail.open && !loaded) loadContent(); });
-    detail.append(summary, meta, content, more); row.append(checkbox, detail); $('records').append(row);
+    detail.append(summary, meta, bookmarkMeta, contentLabel, content, more); row.append(checkbox, detail); $('records').append(row);
   }
   $('listStatus').textContent = total ? `共 ${total} 次保存 · 每项是一整次保存，点击展开原文` : '此 JSON 暂无保存记录，可选择其他 JSON 文件';
   $('pageInfo').textContent = total ? `${Math.floor(offset / 20) + 1} / ${Math.ceil(total / 20)}` : '0 / 0';
@@ -119,7 +100,6 @@ $('confirmButton').addEventListener('click', async () => {
   try {
     await request('delete', {ids: [...selected], journalPath});
     await loadRecords();
-    await refresh();
   } catch (error) { if(typeof Recovery!=='undefined')Recovery.setError($('listError'),error);else $('listError').textContent=error.message; }
   finally { busy = false; controls(); }
 });

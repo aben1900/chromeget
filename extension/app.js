@@ -19,7 +19,10 @@ for(const [view,button] of Object.entries(tabs)){
   button.addEventListener('keydown',event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const names=Object.keys(tabs),i=names.indexOf(view);const next=event.key==='Home'?names[0]:event.key==='End'?names.at(-1):names[(i+(event.key==='ArrowRight'?1:-1)+names.length)%names.length];tabs[next].focus();tabs[next].click();}});
 }
 chrome.windows.getCurrent().then(async current=>{
-  appWindowId=current.id;const key=`app-view:${current.id}`;let received=false;
+  appWindowId=current.id;
+  // Link results live in the current file-page iframe; reopening starts a fresh list.
+  await chrome.storage.session.set({[`download-list-origin:${current.id}`]:null,[`download-return-list:${current.id}`]:null});
+  const key=`app-view:${current.id}`;let received=false;
   chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes[key]){received=true;selectView(changes[key].newValue);}});
   const data=await chrome.storage.session.get(key);if(!received)selectView(data[key]||'collect');
 }).catch(report);

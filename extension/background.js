@@ -31,7 +31,7 @@ async function menus() {
 }
 async function badge() {
   const {pending = [], lastError = ''} = await chrome.storage.local.get(['pending', 'lastError']);
-  await chrome.action.setBadgeBackgroundColor({color: pending.length ? '#c2410c' : '#18705a'});
+  await chrome.action.setBadgeBackgroundColor({color: pending.length ? '#555555' : '#1d1d1f'});
   await chrome.action.setBadgeText({text: pending.length ? String(pending.length) : '✓'});
   await chrome.action.setTitle({title: pending.length ? `${pending.length} 条待保存：${lastError}` : '精彩摘录 · 已写入本地文件'});
 }
@@ -40,6 +40,7 @@ async function flush() {
   while (pending.length) {
     try {
       const status = await native({action: 'status'});
+      if(pending[0].type==='网页地址'&&(pending[0].title||pending[0].note||pending[0].author)&&!status.capabilities?.includes('bookmark-metadata-v1'))throw new Error('配套程序需要更新才能保存网址名称和备注。请运行“开始使用.cmd → 更新 / 修复”；这条记录已保留，更新后可补存。');
       if (status.storageFormat !== 'json') throw new Error(`实际连接的本地程序未声明 JSON 保存能力（版本：${status.version || '未知'}，路径：${status.hostPath || '未提供'}）。请运行本项目的“开始使用.cmd → 更新 / 修复”。`);
       let duplicate=false;
       if(status.capabilities?.includes('library-v1')){try{const check=await native({action:'library-duplicates',content:pending[0].content,type:pending[0].type});duplicate=check.matches?.length>0;}catch{}}
@@ -79,6 +80,15 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if(linkAction&&!chosenLink){
     chrome.action.setBadgeText({text:'!'}).catch(console.error);
     chrome.action.setTitle({title:'请选择一个完整的 HTTP/HTTPS 网址，再使用链接操作。'}).catch(console.error);
+    return;
+  }
+  if(['link','page'].includes(info.menuItemId)){
+    if(!Number.isInteger(tab?.windowId))return;
+    const url=info.menuItemId==='link'?chosenLink:Collect.classify(info.pageUrl||tab.url).url;
+    if(!url)return;
+    // Open in the user gesture, then let the collection page confirm editable bookmark metadata.
+    chrome.sidePanel.open({windowId:tab.windowId}).catch(console.error);
+    exclusive(async()=>{await chrome.storage.session.set({[`collect-draft:${tab.windowId}`]:newCollectDraft(url,tab),[`app-view:${tab.windowId}`]:'collect'});}).catch(console.error);
     return;
   }
   if(info.menuItemId==='download-link'){
@@ -132,24 +142,24 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if(['collect-load','collect-edit','collect-save','collect-state','collect-retry'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('collect.html')){
     exclusive(()=>collectionRequest(message)).then(reply,error=>reply(Recovery.response(error)));return true;
   }
+  if(message.action==='retry-pending' && sender.id===chrome.runtime.id && sender.url===chrome.runtime.getURL('app.html')){
+    exclusive(async()=>{await flush();const {pending=[],lastError=''}=await chrome.storage.local.get(['pending','lastError']);return {ok:!pending.length,pendingCount:pending.length,error:Recovery.redact(lastError)};}).then(reply,e=>reply(Recovery.response(e)));return true;
+  }
   if(message.action==='check-connection' && sender.id===chrome.runtime.id && ['app.html','collect.html'].some(p=>sender.url===chrome.runtime.getURL(p))){
     (async()=>{
-      let timer;const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Recovery.toError({code:'HOST_UNAVAILABLE',error:'连接检查超时，请重试'})),12000);});
+      let timer;const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Recovery.toError({code:'HOST_UNAVAILABLE',error:'检查超时，请重试'})),message.fullIntegrity===true?60000:12000);});
       try{
-        try{
-          const report=await Promise.race([native({action:'diagnostics',extensionId:chrome.runtime.id}),deadline]);
-          if(!Array.isArray(report.checks))throw Error('unsupported action');
-          return {...report,connected:true,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},...(report.checks||[]).filter(c=>c.id!=='browser')]};
-        }catch(e){
-          if(e.code==='HOST_UNAVAILABLE')throw e;
-          if(/不支持操作|unsupported action|unknown action/i.test(e.message)){
-            const host=await Promise.race([native({action:'status'}),deadline]);
-            return {ok:true,connected:true,hostVersion:host.version,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},{id:'version',state:'fail',message:'旧版程序不支持自检，请运行开始使用.cmd → 更新 / 修复'}]};
-          }
-          return {ok:true,connected:true,checks:[{id:'browser',state:'pass',message:'Chrome 已连接'},{id:'diagnostics',state:'fail',message:'本机检查未完成，请在管理中心检查或修复配置'}]};
-        }
-      }catch(e){return {...Recovery.response(e),connected:false,checks:[{id:'browser',state:'fail',message:'Chrome 尚未连接本地程序'}]};}finally{clearTimeout(timer);}
-    })().then(reply,e=>reply(Recovery.response(e)));return true;
+        const [diagnostics,status]=await Promise.allSettled([
+          Promise.race([native({action:'diagnostics',extensionId:chrome.runtime.id,fullIntegrity:message.fullIntegrity===true}),deadline]),
+          Promise.race([native({action:'status'}),deadline])
+        ]);
+        const host=status.status==='fulfilled'?status.value:null,report=diagnostics.status==='fulfilled'?diagnostics.value:null;
+        if(!host&&!report)return {...Recovery.response(status.reason||diagnostics.reason),connected:false,checks:[{id:'browser',state:'fail',message:'未连接配套程序'}]};
+        const checks=Array.isArray(report?.checks)?report.checks.filter(c=>c.id!=='browser'):[{id:'diagnostics',state:'pending',message:'配套程序尚不能完成检查，请更新'}];
+        if(!host)checks.push({id:'save',state:'fail',message:'无法读取保存设置'});
+        return {ok:true,connected:true,hostVersion:host?.version||'',hostPath:host?.hostPath||'',journalPath:host?.journalPath||host?.path||'',storageFormat:host?.storageFormat||'',capabilities:host?.capabilities||[],checks:[{id:'browser',state:'pass',message:'配套程序已连接'},...checks]};
+      }finally{clearTimeout(timer);}
+    })().then(reply,e=>reply({...Recovery.response(e),connected:false}));return true;
   }
   if(message.action==='page-video-download' && sender.id===chrome.runtime.id && Number.isInteger(sender.tab?.windowId) && sender.frameId===0 && webpageUrl(sender.url)){
     const requestedPage=supportedVideoUrl(message.pageUrl);

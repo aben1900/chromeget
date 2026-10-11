@@ -52,7 +52,8 @@ $jobs=Join-Path $HostRoot 'video-jobs'
 if(Test-Path -LiteralPath $jobs){foreach($file in Get-ChildItem -LiteralPath $jobs -Filter '*.json'){try{$job=Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8|ConvertFrom-Json}catch{continue};if($job.state -in @('running','queued','downloading','processing')){throw '请先暂停下载任务，再更新。'}}}
 $work=Join-Path ([IO.Path]::GetTempPath()) ('chromeget-update-'+[Guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($work)|Out-Null
 $sum=Invoke-WebRequest $release.sumUrl -UseBasicParsing -TimeoutSec 30
-$line=@(([string]$sum.Content -split '\r?\n')|Where-Object {$_ -match ('^[a-fA-F0-9]{64}\s+\*?'+[regex]::Escape($release.name)+'$')})
+$sumText=if($sum.Content -is [byte[]]){[Text.Encoding]::UTF8.GetString($sum.Content)}else{[string]$sum.Content}
+$line=@(($sumText -split '\r?\n')|Where-Object {$_ -match ('^[a-fA-F0-9]{64}\s+\*?'+[regex]::Escape($release.name)+'$')})
 if($line.Count -ne 1){throw 'SHA256 清单无效'}
 . (Join-Path $PSScriptRoot 'setup-download.ps1')
 $zip=Join-Path $work $release.name

@@ -3,7 +3,8 @@ async function togglePageTranslation(tab){
  if(!tab?.id||!/^https?:\/\//.test(tab.url||''))throw Error('此页面不支持网页翻译，请在普通网页使用');
  const key='page-translation:'+tab.id,token=crypto.randomUUID();
  const {translationDefaults={}}=await chrome.storage.local.get('translationDefaults');
- const prefs={route:translationDefaults.route==='bilibili'?'bilibili':'free',targetLanguage:translationDefaults.targetLanguage||'zh'};
+ const prefs={route:['bilibili','model'].includes(translationDefaults.route)?translationDefaults.route:'free',targetLanguage:translationDefaults.targetLanguage||'zh',profileId:translationDefaults.profileId,model:translationDefaults.model,expectedRevision:translationDefaults.expectedRevision};
+ if(prefs.route==='model'&&(!prefs.profileId||!prefs.model||!prefs.expectedRevision))throw Error('请在翻译设置中重新选择并保存网页翻译模型');
  await chrome.scripting.executeScript({target:{tabId:tab.id},files:['page-translation.js']});
  await chrome.storage.session.set({[key]:{token,url:tab.url,...prefs,characters:0}});
  try{const state=await chrome.tabs.sendMessage(tab.id,{action:'page-translation-toggle',token,...prefs});if(!state?.active)await chrome.storage.session.remove(key);await updatePageTranslationMenu(tab);return state;}catch(e){await chrome.storage.session.remove(key);throw e;}
@@ -21,6 +22,7 @@ function handlePageTranslation(m,s,reply){
   if(typeof m.text!=='string'||m.text.length>8000||session.characters+m.text.length>200000)throw Error('本页已达到翻译上限，请关闭后重新开启');
   session.characters+=m.text.length;await chrome.storage.session.set({[key]:session});
   const request={route:session.route,text:m.text,sourceLanguage:'auto',targetLanguage:session.targetLanguage};
+  if(session.route==='model')return native({action:'ai-translate',text:m.text,sourceLanguage:'auto',targetLanguage:session.targetLanguage,profileId:session.profileId,model:session.model,expectedRevision:session.expectedRevision,temporary:true,confirmed:true});
   if(session.route==='bilibili'){const host=await native({action:'status'});if(!host.capabilities?.includes('free-translation-native-v1'))throw Error('请更新本地程序后使用B站翻译');return native({...request,action:'ai-free-translate'});}
   return freeTranslate(request);
  })().then(reply,e=>reply({ok:false,error:e.message}));return true;

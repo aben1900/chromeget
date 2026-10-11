@@ -1,0 +1,9 @@
+(() => {
+ const {send,explain,modelChoice}=window.LibraryAiApi,select=document.getElementById('aiSummaryChoice');let profiles={},defaultId=null,epoch=0;
+ const models=p=>window.LibraryAiView.modelsOf(p).filter(m=>p.hasKey&&m.lastTest?.ok&&m.lastTest.revision===p.revision);
+ function selected(){let id=defaultId,model=profiles[id]?.model;const temporary=!!select.value;if(temporary)[id,model]=JSON.parse(select.value);const p=profiles[id];if(!p?.hasKey||!models(p).some(m=>m.id===model))throw Error('DEFAULT_MODEL_REQUIRED');return {...p,model,temporary};}
+ async function refresh(){const e=++epoch;select.disabled=true;try{const local=await chrome.storage.local.get('aiSelection');const r=await send('ai-settings-get',{legacySelection:local.aiSelection});if(e!==epoch)return;profiles=r.profiles||{};defaultId=r.defaultProfileId;const previous=select.value,p=profiles[defaultId];select.replaceChildren(new Option(p?'默认：'+p.label+' · '+modelChoice({id:p.model,label:p.model}):'未设置默认模型，请打开模型设置',''));for(const p of Object.values(profiles)){const group=document.createElement('optgroup');group.label=p.label;for(const m of models(p))group.append(new Option(modelChoice(m),JSON.stringify([p.profileId,m.id])));if(group.children.length)select.append(group);}if([...select.options].some(o=>o.value===previous))select.value=previous;select.disabled=false;window.dispatchEvent(new Event('ai-profile-changed'));}catch(err){if(e!==epoch)return;profiles={};select.replaceChildren(new Option('读取失败：'+explain(err),''));window.dispatchEvent(new Event('ai-profile-changed'));}}
+ select.addEventListener('change',()=>window.dispatchEvent(new Event('ai-profile-changed')));
+ chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.aiSettingsUpdated)refresh();});window.addEventListener('focus',refresh);
+ window.LibraryAi={send,explain,selected};refresh();
+})();

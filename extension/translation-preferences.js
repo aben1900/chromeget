@@ -1,0 +1,7 @@
+(()=>{
+ const $=id=>document.getElementById(id);$('defaultTranslationLanguage').replaceChildren(...[...$('targetLanguage').options].map(o=>o.cloneNode(true)));
+ let touched=false;for(const id of ['translationMode','targetLanguage'])$(id).addEventListener('change',()=>{touched=true;});
+ async function load(){try{const {translationDefaults={}}=await chrome.storage.local.get('translationDefaults');const route=translationDefaults.route==='bilibili'?'bilibili':'free',language=[...$('targetLanguage').options].some(o=>o.value===translationDefaults.targetLanguage)?translationDefaults.targetLanguage:'zh';$('defaultTranslationRoute').value=route;$('defaultTranslationLanguage').value=language;if(!touched){$('translationMode').value=route;$('targetLanguage').value=language;$('translationMode').dispatchEvent(new Event('change'));}const commands=await chrome.commands.getAll();$('translationShortcuts').textContent='快捷键：'+(commands.find(c=>c.name==='toggle-page-translation')?.shortcut||'未设置');}catch{$('translationPreferencesStatus').textContent='默认设置读取失败';}}
+ $('saveTranslationDefaults').onclick=async()=>{try{await chrome.storage.local.set({translationDefaults:{route:$('defaultTranslationRoute').value,targetLanguage:$('defaultTranslationLanguage').value}});$('translationPreferencesStatus').textContent='已保存，下次开启翻译时使用';}catch{$('translationPreferencesStatus').textContent='保存失败，请重试';}};
+ $('translationShortcuts').onclick=()=>chrome.tabs.create({url:'chrome://extensions/shortcuts'});load();
+})();

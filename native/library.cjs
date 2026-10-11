@@ -23,7 +23,7 @@ function name(value){if(typeof value!=='string'||!value.trim()||value.trim().len
 function metadata(directory){const p=path.join(directory,'资料库索引.json');if(!fs.existsSync(p))return {schemaVersion:1,tags:[],collections:[],annotations:{},downloads:{}};const s=readJson(p);if(s.schemaVersion!==1||!Array.isArray(s.tags)||!Array.isArray(s.collections)||!s.annotations||!s.downloads||Array.isArray(s.annotations)||Array.isArray(s.downloads))throw Error('资料库索引格式损坏，请从备份恢复，原始资料未改动');return s;}
 function load(ctx,s){const warnings=[],journal=path.join(ctx.directory,'摘录数据.json');let records=[];if(fs.existsSync(journal)){records=readJson(journal);if(!Array.isArray(records))throw Error('摘录数据格式损坏');const seen=new Set();for(const r of records){if(!r||!ID.test('clip:'+r.id)||typeof r.content!=='string'||typeof r.type!=='string'||seen.has(r.id))throw Error('摘录数据含无效或重复记录');seen.add(r.id);}}
  const jobs=path.join(ctx.root,'video-jobs');let changed=false;
- if(fs.existsSync(jobs))for(const filename of fs.readdirSync(jobs).filter(n=>/^[a-f0-9]{32}\.json$/.test(n))){try{const j=readJson(path.join(jobs,filename));if(j.state!=='completed')continue;const id='download:'+filename.slice(0,32);if(s.downloads[id])continue;
+ if(fs.existsSync(jobs))for(const filename of fs.readdirSync(jobs).filter(n=>/^[a-f0-9]{32}\.json$/.test(n))){try{const j=readJson(path.join(jobs,filename));if(j.state!=='completed')continue;const id='download:'+filename.slice(0,32);if(s.downloads[id]||s.deletedDownloads?.[id])continue;
  const directory=String(j.directory||'');if(!path.isAbsolute(directory))throw Error('无效目录');let paths=j.kind==='files'?j.expectedFiles:j.kind==='gallery'?j.savedFiles:[j.file];if(j.kind==='gallery'&&(!Array.isArray(paths)||!paths.length)){const manifest=path.join(directory,'图集信息.json');noLinks(manifest);if(fs.existsSync(manifest)){const images=readJson(manifest).images;if(Array.isArray(images))paths=images.map(i=>path.join(directory,String(i.file)));}}
  if(!Array.isArray(paths)||!paths.length){if(j.kind==='gallery')throw Error('旧图集缺少完整文件清单，请保留原目录，重新下载后可完整索引');continue;}
  const files=[...new Set(paths)].map(p=>fileInfo(p,directory));const rawSource=j.source||j.arguments?.at(-1)||'';const source=j.kind==='files'&&j.siteName!=='Hugging Face'?(sourceUrl(rawSource)?new URL(sourceUrl(rawSource)).origin:''):sourceUrl(rawSource);
@@ -47,10 +47,22 @@ async function dispatch(message,ctx){if(!ctx?.directory||!ctx.root)throw Error('
   if(message.revision&&message.revision!==revision)throw Error('资料已变化，请刷新列表后翻页');
   const query=String(message.query||'').toLocaleLowerCase();let filtered=items.filter(i=>(!message.type||i.type===message.type)&&(!message.source||i.source===message.source)&&(!message.tag||i.tags.includes(message.tag))&&(!message.collection||i.collections.includes(message.collection))&&[i.title,i.content,i.note,i.aiSummaryText,i.author,i.sourceUrl,i.sourceTitle,...i.tags,...i.collections,...i.files.map(f=>f.name)].join('\n').toLocaleLowerCase().includes(query));
   filtered.sort((a,b)=>(Date.parse(b.time)||0)-(Date.parse(a.time)||0)||a.id.localeCompare(b.id));const offset=Math.max(0,Math.trunc(Number(message.offset)||0));
-  return {ok:true,items:filtered.slice(offset,offset+40).map(summary),total:filtered.length,offset,revision,warnings:warnings.slice(0,50),warningCount:warnings.length,facets:{types:[...new Set(items.map(i=>i.type))].sort(),sources:[...new Set(items.map(i=>i.source))].sort(),tags:s.tags,collections:s.collections}};
+  return {ok:true,items:filtered.slice(offset,offset+10).map(summary),total:filtered.length,offset,revision,warnings:warnings.slice(0,50),warningCount:warnings.length,facets:{types:[...new Set(items.map(i=>i.type))].sort(),sources:[...new Set(items.map(i=>i.source))].sort(),tags:s.tags,collections:s.collections}};
  }
+ if(message.action==='library-image')return require('./library-image.cjs')(message,select(items,[message.id])[0],fileInfo);
  if(message.action==='library-read'){const item=select(items,[message.id])[0],offset=Math.max(0,Math.trunc(Number(message.offset)||0));if(offset>item.content.length)throw Error('正文位置无效');const content=item.content.slice(offset,offset+12000);const fileOffset=Math.max(0,Math.trunc(Number(message.fileOffset)||0));return {ok:true,item:{...summary(item),files:item.files.slice(fileOffset,fileOffset+200)},fileTotal:item.files.length,nextFileOffset:Math.min(fileOffset+200,item.files.length),content,total:item.content.length,nextOffset:offset+content.length};}
  if(message.action==='library-duplicates'){const fp=fingerprint(message.content,message.type);return {ok:true,matches:items.filter(i=>i.id.startsWith('clip:')&&fingerprint(i.content,i.type)===fp).slice(0,10).map(summary)};}
+ if(message.action==='library-delete'){
+  if(message.confirmed!==true)throw Error('请先确认删除范围');
+  if(!message.revision||message.revision!==revision)throw Error('资料已变化，请刷新列表后重新选择删除');
+  const chosen=select(items,message.ids),ids=new Set(chosen.map(i=>i.id));
+  const before=backup.readPair(ctx),next=backup.snapshotPair(before,ctx);
+  next.records=next.records.filter(r=>!ids.has('clip:'+r.id));
+  next.index.deletedDownloads=next.index.deletedDownloads||{};
+  for(const id of ids){delete next.index.annotations[id];if(id.startsWith('download:')){delete next.index.downloads[id];next.index.deletedDownloads[id]=true;}}
+  const clips=chosen.filter(i=>i.id.startsWith('clip:')).length;
+  return backup.commitPair(ctx,crypto.randomUUID(),before,next,{ok:true,deleted:chosen.length,clips,downloads:chosen.length-clips});
+ }
  if(message.action==='library-update'){const selected=select(items,message.ids);for(const key of ['tags','collections'])if(message[key]!==undefined){const chosen=names(message[key]);if(chosen.some(n=>!s[key].includes(n)))throw Error('分类已变化，请刷新后重试');}
   if(message.author!==undefined&&(typeof message.author!=='string'||message.author.length>120))throw Error('作者最多 120 字');
   for(const item of selected){const a=s.annotations[item.id]||{};for(const k of ['tags','collections','author'])if(message[k]!==undefined)a[k]=message[k];s.annotations[item.id]=a;}atomic(index,s);return {ok:true};

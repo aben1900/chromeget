@@ -44,7 +44,7 @@ async function recognizeLink(){
     prepared={url,kind:'model',name:uri.pathname.split('/').filter(Boolean).slice(0,2).join(' / '),hint:'勾选需要的模型文件，再确认下载。'};displayPrepared();$('hfSection').hidden=false;$('hfUrl').value=url;$('hfUrl').dispatchEvent(new Event('input'));inspectModelFiles();return;
   }
   if(supportedVideoUrl(url)||/\.(m3u8|mpd)(?:$|[?#])/i.test(url)){
-    prepared={url,kind:'video',name:websiteName(url)+' 的视频或图集',hint:'下一步将在“视频 / 图集”页选择画质或图片，不会直接开始下载。'};displayPrepared();return;
+    prepared={url,kind:'video',name:websiteName(url)+' 的视频或图集',hint:'下一步将在“视频/图集类”页选择画质或图片，不会直接开始下载。'};displayPrepared();return;
   }
   probeBusy=true;$('filePreview').hidden=true;$('previewHint').textContent='正在读取文件名和大小…';refreshDownloadButton();
   try{

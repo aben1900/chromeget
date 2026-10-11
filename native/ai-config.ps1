@@ -1,6 +1,6 @@
 ﻿function Set-AiNetworkEnvironment($info,$payload,[Net.IWebProxy]$systemProxy=$null) {
-    if($payload.op -notin @('request','models-discover')){return}
-    $uri=[Uri]$payload.profile.baseUrl
+    if($payload.op -notin @('request','models-discover','free-translate')){return}
+    $uri=if($payload.op -eq 'free-translate'){[Uri]'https://index-translate.bilibili.com/v1'}else{[Uri]$payload.profile.baseUrl}
     $info.EnvironmentVariables['NODE_USE_ENV_PROXY']='1'
     $bypass=[string]$info.EnvironmentVariables['NO_PROXY']
     $info.EnvironmentVariables['NO_PROXY']=(@($bypass,'localhost','127.0.0.1','::1')|Where-Object {$_}) -join ','
@@ -187,11 +187,15 @@ function Resolve-AiDraft([string]$root,$message) {
         Set-AiProperty $p 'secret' $secret;$p.hasKey=$true;return $p
     }
 }
-function Resolve-AiProfile([string]$root,[string]$profileId,[string]$model) {
+function Resolve-AiProfile([string]$root,[string]$profileId,[string]$model,[switch]$Temporary) {
     if($profileId.StartsWith('cc:')){return Invoke-AiNode @{op='cc-resolve';dbPath=(Join-Path $env:USERPROFILE '.cc-switch\cc-switch.db');id=$profileId.Substring(3);model=$model}}
     return Invoke-AiConfigLock $root {
         $s=Read-AiSettings $root;$saved=$s.profiles.$profileId;if(-not $saved){throw 'CONFIG_CHANGED'}
-        $p=Invoke-AiNode @{op='config-public';profile=$saved};if($model -and $model -cne $p.model){throw 'CONFIG_CHANGED'}
+        $p=Invoke-AiNode @{op='config-public';profile=$saved};if($Temporary){
+            $entry=@($saved.models|Where-Object {$_.id -ceq $model})
+            if($entry.Count -ne 1 -or -not $entry[0].lastTest.ok -or $entry[0].lastTest.connectionRevision -cne $saved.connectionRevision){throw 'MODEL_NOT_TESTED'}
+            $p.model=$model
+        }elseif($model -and $model -cne $p.model){throw 'CONFIG_CHANGED'}
         $secret=Unprotect-AiKey $saved.ciphertext;$p.hasKey=[bool]$secret;Set-AiProperty $p 'secret' $secret;return $p
     }
 }

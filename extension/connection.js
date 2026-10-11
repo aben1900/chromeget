@@ -6,7 +6,7 @@
  function render(){
   const r=report,connected=!!r?.connected,failed=(r?.checks||[]).filter(c=>c.state==='fail'),missing=connected&&!r.capabilities?.includes('bookmark-metadata-v1'),canAttemptSave=connected&&r.storageFormat==='json'&&!failed.some(c=>['directory','save','host'].includes(c.id)),saving=connected&&r.storageFormat==='json'&&!failed.some(c=>['directory','save','host'].includes(c.id))&&(r?.checks||[]).some(c=>c.id==='directory'&&c.state==='pass');
   $('nativeVersion').textContent=connected?(r.hostVersion?'v'+r.hostVersion:'版本未能读取'):'尚未连接';
-  $('versionRelationship').textContent=connected?(r.hostVersion===version?'扩展与配套程序版本一致。':r.hostVersion?'当前界面 v'+version+'，配套程序 v'+r.hostVersion+'。版本不同不一定影响全部功能；建议用同一安装包更新两部分。':'请更新配套程序后重新检查版本。'):'安装配套程序后，这里会显示实际连接的版本。';
+  $('versionRelationship').textContent=connected?'Chrome 已加载 v'+version+' · 磁盘扩展 '+(r.diskExtensionVersion?'v'+r.diskExtensionVersion:'未确认')+' · 本地程序 v'+r.hostVersion+(r.hostVersion===version&&r.diskExtensionVersion===version?' · 三个版本一致':r.diskExtensionVersion&&r.diskExtensionVersion!==version?' · 请重新加载扩展；若仍不同，请检查加载目录':' · 更新尚未完整确认，请运行统一更新后重新检查')+(r.extensionRoot?' · 安装目录：'+r.extensionRoot:''):'尚未连接本地程序';
   $('connectionSavePath').textContent=(/\.json$/i.test(r?.journalPath||'')?r.journalPath:'连接成功后显示实际 JSON 保存文件');
   let title,detail;
   if(!r){title='正在检查是否可以使用…';detail='正在联系电脑上的配套程序。';}

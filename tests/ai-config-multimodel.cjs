@@ -13,6 +13,12 @@ Save-AiTestResult $PSScriptRoot $p @{revision=$p.revision;ok=$true;code='OK';at=
 $next=Select-AiModel $PSScriptRoot @{profileId=$id;model='b';expectedRevision=$p.revision}
 if($next.profiles.$id.model -cne 'b' -or $next.selectionRevision -ceq $chosen.selectionRevision){throw 'selection not invalidated'}
 if($next.profiles.$id.lastTest){throw 'wrong test on b'}
+$temp=Resolve-AiProfile $PSScriptRoot $id 'a' -Temporary
+if($temp.model -cne 'a'){throw 'temporary selection missing'}
+$unchanged=Get-AiPublicSettings $PSScriptRoot
+if($unchanged.profiles.$id.model -cne 'b' -or $unchanged.selectionRevision -cne $next.selectionRevision){throw 'temporary selection changed default'}
+try{Resolve-AiProfile $PSScriptRoot $id 'b' -Temporary;throw 'untested accepted'}catch{if($_.Exception.Message -ne 'MODEL_NOT_TESTED'){throw}}
+try{Resolve-AiProfile $PSScriptRoot $id 'missing' -Temporary;throw 'missing accepted'}catch{if($_.Exception.Message -ne 'MODEL_NOT_TESTED'){throw}}
 Save-AiTestResult $PSScriptRoot $p @{revision=$p.revision;ok=$false;code='AUTH_FAILED'}
 $back=Select-AiModel $PSScriptRoot @{profileId=$id;model='a';expectedRevision=$next.profiles.$id.revision}
 if(-not $back.profiles.$id.lastTest.ok){throw 'a test lost or stale overwritten'}

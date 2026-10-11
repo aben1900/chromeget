@@ -1,0 +1,1 @@
+button.delete-icon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;min-width:32px;min-height:32px;padding:5px;flex:0 0 32px;border-radius:7px}button.delete-icon svg{width:20px;height:20px;pointer-events:none}button.delete-icon:focus-visible{outline:2px solid currentColor;outline-offset:2px}

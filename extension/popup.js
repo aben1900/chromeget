@@ -69,7 +69,7 @@ function render() {
     detail.append(summary, meta, bookmarkMeta, contentLabel, content, more); row.append(checkbox, detail); $('records').append(row);
   }
   $('listStatus').textContent = total ? `共 ${total} 次保存 · 每项是一整次保存，点击展开原文` : '此 JSON 暂无保存记录，可选择其他 JSON 文件';
-  $('pageInfo').textContent = total ? `${Math.floor(offset / 20) + 1} / ${Math.ceil(total / 20)}` : '0 / 0';
+  $('pageInfo').textContent = total ? `${Math.floor(offset / 10) + 1} / ${Math.ceil(total / 10)}` : '0 / 0';
   controls();
 }
 async function loadRecords(newOffset = offset) {
@@ -77,10 +77,10 @@ async function loadRecords(newOffset = offset) {
   try {
     let result = await request('list', {offset: newOffset});
     if (newOffset && newOffset >= result.total) {
-      newOffset = Math.max(0, Math.floor((result.total - 1) / 20) * 20);
+      newOffset = Math.max(0, Math.floor((result.total - 1) / 10) * 10);
       result = await request('list', {offset: newOffset});
     }
-    records = result.records; total = result.total; offset = newOffset; selected.clear(); render();
+    records = result.records.slice(0,10); total = result.total; offset = newOffset; selected.clear(); render();
     journalPath = result.journalPath; $('jsonPath').textContent = journalPath;
   } catch (error) { if(typeof Recovery!=='undefined')Recovery.setError($('listError'),error);else $('listError').textContent=error.message; $('listStatus').textContent = '读取失败，可点击刷新重试'; }
   finally { busy = false; controls(); }
@@ -104,8 +104,8 @@ $('confirmButton').addEventListener('click', async () => {
   finally { busy = false; controls(); }
 });
 $('reload').addEventListener('click', () => loadRecords());
-$('previous').addEventListener('click', () => loadRecords(Math.max(0, offset - 20)));
-$('next').addEventListener('click', () => loadRecords(offset + 20));
+$('previous').addEventListener('click', () => loadRecords(Math.max(0, offset - 10)));
+$('next').addEventListener('click', () => loadRecords(offset + 10));
 loadRecords();
 async function chooseJson(action) {
   busy = true; controls(); $('listError').textContent = '';
@@ -113,7 +113,7 @@ async function chooseJson(action) {
     const result = await request(action);
     if (result.cancelled) return;
     journalPath = result.journalPath; $('jsonPath').textContent = journalPath;
-    records = result.records; total = result.total; offset = 0; selected.clear();
+    records = result.records.slice(0,10); total = result.total; offset = 0; selected.clear();
     $('confirmDelete').hidden = true; render();
   } catch (error) { if(typeof Recovery!=='undefined')Recovery.setError($('listError'),error);else $('listError').textContent=error.message; }
   finally { busy = false; controls(); }

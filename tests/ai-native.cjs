@@ -27,6 +27,9 @@ function send(message,onSpawn){return new Promise((resolve,reject)=>{const p=spa
   const interrupted=send({action:'ai-generate',requestId:interruptedPlan.requestId,confirmed:true},p=>killed=p).catch(()=>null);await secondArrived;killed.kill();release();await interrupted;
   const jobRoot=path.join(root,'ai-jobs');const job=path.join(jobRoot,fs.readdirSync(jobRoot)[0],interruptedPlan.requestId+'.json');const state=JSON.parse(fs.readFileSync(job));assert.equal(state.state,'running');state.startedAt=Date.now()-91000;fs.writeFileSync(job,JSON.stringify(state));
   assert.equal((await send({action:'ai-status',requestId:interruptedPlan.requestId})).state,'unknown');assert.equal((await send({action:'ai-generate',requestId:interruptedPlan.requestId,confirmed:true})).state,'unknown');assert.equal(count,2);
-  console.log('PASS real native AI bridge: DPAPI, concurrent collection, deduplication and summary save');
+  let nextArrival=new Promise(r=>received=r);const testing=send({action:'ai-test',profileId:'openai',model:settings.profiles.openai.model,confirmed:true});await nextArrival;release();assert.equal((await testing).ok,true);
+  const before=await send({action:'ai-settings-get'});const alternate=await send({action:'ai-default-set',profileId:other.profileId,expectedSelectionRevision:before.selectionRevision});assert.equal(alternate.ok,true);
+  const temporary=await send({action:'ai-prepare',id:'clip:'+id,profileId:'openai',model:settings.profiles.openai.model,temporary:true,length:'short'});assert.equal(temporary.ok,true,JSON.stringify(temporary));nextArrival=new Promise(r=>received=r);const generated=send({action:'ai-generate',requestId:temporary.requestId,confirmed:true});await nextArrival;release();assert.equal((await generated).text,'生成摘要');assert.equal((await send({action:'ai-settings-get'})).defaultProfileId,other.profileId);
+  console.log('PASS temporary cross-profile generation preserves default; real native AI bridge: DPAPI, concurrent collection, deduplication and summary save');
  }finally{server.closeAllConnections();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1});

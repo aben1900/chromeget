@@ -53,7 +53,8 @@ try {
         . (Join-Path $PSScriptRoot 'video.ps1')
         $response = Invoke-VideoAction $message
     } elseif ($message.action -eq 'status') {
-        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.32.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('bookmark-metadata-v1','ai-config-models-v2','ai-models-v1','ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.33.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('free-translation-native-v1','ai-translation-v1','library-delete-v1','bookmark-metadata-v1','ai-config-models-v2','ai-models-v1','ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        try{$installedConfig=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'config.json') -Raw -Encoding UTF8|ConvertFrom-Json;$response.extensionRoot=$installedConfig.extensionRoot;if($installedConfig.extensionRoot){$response.diskExtensionVersion=(Get-Content -LiteralPath (Join-Path $installedConfig.extensionRoot 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json).version}}catch{}
     } elseif ($message.action -eq 'choose-json') {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -112,7 +113,7 @@ try {
         $offset = [Math]::Max(0, [int]$message.offset)
         $ordered = @($records)
         [Array]::Reverse($ordered)
-        $page = @($ordered | Select-Object -Skip $offset -First 20 | ForEach-Object {
+        $page = @($ordered | Select-Object -Skip $offset -First 10 | ForEach-Object {
           $preview = [string]$_.content
           if ($preview.Length -gt 240) { $preview = $preview.Substring(0, 240) + '…' }
           @{id=$_.id; time=$_.time; type=$_.type; title=$_.title; note=$_.note; author=$_.author; preview=$preview}

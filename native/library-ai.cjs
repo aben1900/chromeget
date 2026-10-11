@@ -18,11 +18,11 @@ function dispatch(m,ctx,items,index){
  if(m.action==='library-ai-recent'){if(m.id)itemFor(m.id);return {ok:true,requests:states().filter(s=>!m.id||(s.recordId===m.id&&s.state!=='prepared')).sort((a,b)=>b.createdAt-a.createdAt).slice(0,10).map(s=>{const {text,...rest}=publicState(s);return rest;})};}
  if(m.action==='library-ai-prepare'){
   const item=itemFor(m.id);validateInput(item.content);const p=normalizeProfile(m.profile);if(!p.hasKey)throw Error('KEY_NOT_CONFIGURED');if(!['short','standard','detailed'].includes(m.length))throw Error('CONFIG_INVALID');
-  const s={id:crypto.randomUUID(),recordId:item.id,profileId:p.profileId,profileRevision:p.revision,selectionRevision:m.selectionRevision,providerLabel:p.label,model:p.model,length:m.length,sourceHash:sourceHash(item),expectedSummaryRevision:index.annotations[item.id]?.summary?.revision||null,directoryHash,state:'prepared',createdAt:Date.now()};persist(s);
+  const s={id:crypto.randomUUID(),recordId:item.id,profileId:p.profileId,profileRevision:p.revision,selectionRevision:m.selectionRevision,temporary:m.temporary===true,providerLabel:p.label,model:p.model,length:m.length,sourceHash:sourceHash(item),expectedSummaryRevision:index.annotations[item.id]?.summary?.revision||null,directoryHash,state:'prepared',createdAt:Date.now()};persist(s);
   return {...publicState(s),characters:Array.from(item.content).length,bytes:Buffer.byteLength(item.content),profile:p,expiresAt:s.createdAt+900000};
  }
  const s=read(m.requestId);
- if(m.action==='library-ai-inspect')return {...publicState(s),profileRevision:s.profileRevision,selectionRevision:s.selectionRevision};
+ if(m.action==='library-ai-inspect')return {...publicState(s),profileRevision:s.profileRevision,selectionRevision:s.selectionRevision,temporary:s.temporary===true};
  if(m.action==='library-ai-status')return publicState(s);
  if(m.action==='library-ai-claim'){
   if(s.state!=='prepared')return publicState(s);if(Date.now()-s.createdAt>900000)throw Error('PREVIEW_EXPIRED');if(s.selectionRevision!==m.selectionRevision||s.profileRevision!==m.profileRevision)throw Error('CONFIG_CHANGED');

@@ -1,5 +1,5 @@
 const HOST = 'cn.jingcai.clipper';
-importScripts('recovery.js', 'collect-model.js', 'collect-service.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'sniffer.js', 'page-links.js', 'hover-control.js');
+importScripts('free-translation.js', 'recovery.js', 'collect-model.js', 'collect-service.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'sniffer.js', 'page-links.js', 'hover-control.js');
 const kinds = {comment: '评论', review: '评阅', content: '内容', prompt: '提示词', link: '网页地址', page: '网页地址'};
 let serial = Promise.resolve();
 function exclusive(fn) {
@@ -20,6 +20,8 @@ function native(message) {
 }
 async function menus() {
   await chrome.contextMenus.removeAll();
+  chrome.contextMenus.create({id:'translate',title:'精彩摘录 · 翻译',contexts:['selection']});
+  chrome.contextMenus.create({id:'translate-page',title:'精彩摘录 · 开启网页双语翻译',contexts:['page']});
   chrome.contextMenus.create({id:'collect',title:'精彩摘录 · 收集并预览',contexts:['selection','link','page']});
   for (const [id, title] of [['comment','保存为评论'], ['review','保存为评阅'], ['content','保存为内容'], ['prompt','保存为提示词']]) {
     chrome.contextMenus.create({id, title: `精彩摘录 · ${title}`, contexts: ['selection']});
@@ -71,6 +73,11 @@ function contextLinkUrl(info){
   return value;
 }
 chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if(info.menuItemId==='translate-page'){togglePageTranslation(tab).catch(pageTranslationFailure);return;}
+  if(info.menuItemId==='translate'){
+    const text=String(info.selectionText||'');if(!text.trim())return;
+    (async()=>{const id=crypto.randomUUID(),key='translation:'+id;await chrome.storage.session.set({[key]:{text,createdAt:Date.now()}});try{const parent=await chrome.windows.get(tab.windowId),width=Math.min(1100,parent.width),height=Math.min(760,parent.height);await chrome.windows.create({url:chrome.runtime.getURL('translate.html?id='+id),type:'popup',width,height,left:Math.round(parent.left+(parent.width-width)/2),top:Math.round(parent.top+(parent.height-height)/2)});}catch(e){await chrome.storage.session.remove(key);throw e;}})().catch(e=>{chrome.action.setTitle({title:'翻译窗口未能打开：'+e.message}).catch(console.error);});return;
+  }
   if(info.menuItemId==='collect'&&Number.isInteger(tab?.windowId)){
     chrome.sidePanel.open({windowId:tab.windowId}).catch(console.error);
     exclusive(async()=>{await chrome.storage.session.set({[`collect-draft:${tab.windowId}`]:newCollectDraft(info.selectionText||info.linkUrl||info.pageUrl||tab.url||'',tab),[`app-view:${tab.windowId}`]:'collect'});}).catch(console.error);return;
@@ -129,15 +136,23 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if(['page-translation-control','page-translation-status'].includes(message?.action))return handlePageTranslationControl(message,sender,reply);
+  if(['page-translation-text','page-translation-stop'].includes(message?.action))return handlePageTranslation(message,sender,reply);
+  if(message.action==='free-translate' && sender.id===chrome.runtime.id && sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL('translate.html') && (sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)){
+    (async()=>{if(message.route==='bilibili'){const host=await native({action:'status'});if(!host.capabilities?.includes('free-translation-native-v1'))throw Error('B站翻译需要更新本地程序：开始使用.cmd → 更新 / 修复，然后重新加载扩展');return native({...message,action:'ai-free-translate'});}return freeTranslate(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.message}));return true;
+  }
+  if(['ai-settings-get','ai-translate'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL('translate.html')&&(sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)){
+    (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('ai-translation-v1'))throw Error('翻译需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');return native(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.message}));return true;
+  }
   const aiActions=['ai-model-select','ai-models-discover','ai-model-delete','ai-default-set','ai-model-import-preview','ai-model-import-apply','ai-test-draft','ai-settings-get','ai-settings-save','ai-ccswitch-list','ai-test','ai-prepare','ai-generate','ai-status','ai-recent','ai-read','ai-save'];
-  if(aiActions.includes(message.action)&&sender.id===chrome.runtime.id&&sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL('library.html')&&(sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)){
+  if(aiActions.includes(message.action)&&sender.id===chrome.runtime.id&&['library.html','model-settings.html'].some(page=>sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL(page))&&(sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)){
     (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('ai-config-models-v2'))throw Error('模型管理需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');return native(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.message}));return true;
   }
   const backupActions=['library-backup-create','library-backup-list','library-backup-open','library-restore-choose','library-restore-preview','library-restore-apply','library-restore-result'];
-  const libraryActions=[...backupActions,'library-query','library-read','library-update','library-taxonomy','library-duplicates','library-open','library-export-prepare','library-export-start','library-export-status','library-export-recent','library-export-open'];
+  const libraryActions=[...backupActions,'library-query','library-image','library-read','library-delete','library-update','library-taxonomy','library-duplicates','library-open','library-export-prepare','library-export-start','library-export-status','library-export-recent','library-export-open'];
   if(libraryActions.includes(message.action)&&sender.id===chrome.runtime.id&&sender.url?.split('?')[0]===chrome.runtime.getURL('library.html')){
-    const run=async()=>{const host=await native({action:'status'});const capability=backupActions.includes(message.action)?'library-backup-v1':'library-v1';if(!host.capabilities?.includes(capability))throw Error('此功能需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');if(message.action==='library-restore-apply'){const {pending=[]}=await chrome.storage.local.get('pending');if(pending.length)throw Error('请先在侧栏重试并保存待处理记录，再恢复备份。');}return native(message);};
-    (message.action==='library-restore-apply'?exclusive(run):run()).then(reply,e=>reply(Recovery.response(e)));return true;
+    const run=async()=>{const host=await native({action:'status'});const capability=message.action==='library-delete'?'library-delete-v1':backupActions.includes(message.action)?'library-backup-v1':'library-v1';if(!host.capabilities?.includes(capability))throw Error('此功能需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');if(['library-restore-apply','library-delete'].includes(message.action)){const {pending=[]}=await chrome.storage.local.get('pending');if(pending.length)throw Error('请先在侧栏重试并保存待处理记录，再恢复备份或删除资料。');}return native(message);};
+    (['library-restore-apply','library-delete'].includes(message.action)?exclusive(run):run()).then(reply,e=>reply(Recovery.response(e)));return true;
   }
   if(['collect-load','collect-edit','collect-save','collect-state','collect-retry'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('collect.html')){
     exclusive(()=>collectionRequest(message)).then(reply,error=>reply(Recovery.response(error)));return true;
@@ -157,7 +172,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         if(!host&&!report)return {...Recovery.response(status.reason||diagnostics.reason),connected:false,checks:[{id:'browser',state:'fail',message:'未连接配套程序'}]};
         const checks=Array.isArray(report?.checks)?report.checks.filter(c=>c.id!=='browser'):[{id:'diagnostics',state:'pending',message:'配套程序尚不能完成检查，请更新'}];
         if(!host)checks.push({id:'save',state:'fail',message:'无法读取保存设置'});
-        return {ok:true,connected:true,hostVersion:host?.version||'',hostPath:host?.hostPath||'',journalPath:host?.journalPath||host?.path||'',storageFormat:host?.storageFormat||'',capabilities:host?.capabilities||[],checks:[{id:'browser',state:'pass',message:'配套程序已连接'},...checks]};
+        return {ok:true,connected:true,hostVersion:host?.version||'',diskExtensionVersion:host?.diskExtensionVersion||'',extensionRoot:host?.extensionRoot||'',hostPath:host?.hostPath||'',journalPath:host?.journalPath||host?.path||'',storageFormat:host?.storageFormat||'',capabilities:host?.capabilities||[],checks:[{id:'browser',state:'pass',message:'配套程序已连接'},...checks]};
       }finally{clearTimeout(timer);}
     })().then(reply,e=>reply({...Recovery.response(e),connected:false}));return true;
   }
@@ -288,3 +303,5 @@ chrome.windows.onRemoved.addListener(windowId => {
     if (keys.length) await chrome.storage.session.remove(keys);
   }).catch(console.error);
 });
+
+importScripts('page-translation-background.js');

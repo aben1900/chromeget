@@ -1,14 +1,6 @@
 (() => {
  const $=id=>document.getElementById(id);
- const messages={EXTENSION_RELOAD_REQUIRED:'扩展后台未返回响应。请点击“重新加载扩展”，再重新打开资料库。',KEY_NOT_CONFIGURED:'请填写真实 API Key，占位示例不可用。',KEY_DECRYPT_FAILED:'密钥无法解密，请重新填写并保存。',AUTH_FAILED:'密钥无效或无访问权限，请检查 API Key。',RATE_LIMITED:'请求速率受限，请稍后主动重试。',MODEL_UNAVAILABLE:'模型或接口不可用，请检查高级设置。',CONFIG_INVALID:'配置格式无效，请检查基础地址和模型。',CONFIG_CHANGED:'配置已变化，请重新准备摘要。',CC_CONFIG_UNAVAILABLE:'无法读取 CC-Switch Claude 配置，请检查本机配置。',INPUT_TOO_LARGE:'正文超过 24000 字或 96 KiB，本次未发送。',INPUT_UNSUPPORTED:'此类型暂不支持摘要。',INPUT_EMPTY:'原文为空。',SOURCE_CHANGED:'原文已变化，请重新打开资料并准备摘要。',SUMMARY_CONFLICT:'摘要已在其他操作中变化，草稿保留，请重新读取。',PREVIEW_EXPIRED:'预览已过期，请重新准备摘要。',ALREADY_RUNNING:'这条资料正在生成，请核对原请求结果。',NETWORK_TIMEOUT:'请求超时，结果尚未确认，请核对结果。',NETWORK_ERROR:'网络请求未完成，请核对结果，不会自动重发。',RESULT_UNKNOWN:'结果尚未确认，不会自动重发。',OUTPUT_INCOMPLETE:'模型输出不完整，本次未保存，请检查模型设置。',RESPONSE_INVALID:'模型没有返回可用的完整摘要。',RESPONSE_TOO_LARGE:'模型响应过大，本次未保存。',REQUEST_INVALID:'请求已失效，请重新打开资料核对。'};
- function explain(e){return messages[e?.message]||e?.message||'操作未完成，请检查本地程序连接。';}
- async function send(action,extra={}){
-  let r;try{r=await chrome.runtime.sendMessage({action,...extra});}catch(e){if(/Receiving end|context invalidated|message port closed|connection.*establish/i.test(e.message))throw Error('EXTENSION_RELOAD_REQUIRED');throw e;}
-  if(r===undefined||r===null)throw Error('EXTENSION_RELOAD_REQUIRED');
-  if(!r.ok){const e=Error(r.code||r.error||'本地程序未完成操作，请运行“开始使用.cmd → 更新 / 修复”。');e.result=r;throw e;}
-  return r;
- }
- Object.assign(messages,{QUOTA_EXCEEDED:'服务返回 API 额度不足。API Key 的额度与 ChatGPT / Codex 订阅余量独立，请检查该 Key 所属 API 账户的余额和用量限制。',REGION_UNSUPPORTED:'服务不支持当前请求所在地区。',PERMISSION_DENIED:'当前密钥没有访问权限，请检查项目和模型权限。',API_REQUEST_REJECTED:'接口拒绝请求参数，请检查协议、接口地址和模型 ID。',SERVICE_UNAVAILABLE:'模型服务暂时不可用，请稍后重试。',MODEL_NOT_TESTED:'请先测试该模型并保存，再设为默认。',DEFAULT_MODEL_REQUIRED:'请在模型管理中为一个已配置模型点击“设为默认”。',IMPORT_UNAVAILABLE:'未读取到可用配置。请检查 WorkBuddy 配置，或选择 CC-Switch 导入。',IMPORT_CHANGED:'来源或本地配置已变化，请重新读取再导入。',IMPORT_CONFLICT:'此项有本地修改，请明确勾选覆盖后再导入。',MODELS_UNAVAILABLE:'接口不支持读取模型清单。',CONFIG_LIMIT:'最多保存 200 份配置，每份最多 200 个模型。'});
+ const {send,explain,modelChoice,catalogGroups,catalogGroup,freePresets,presetFor}=window.LibraryAiApi;
  let profiles={},defaultId=null,selectionRevision='',connected=false,busy=false,dialogSession=0,dialogEditing=null,dialogBusy=false,preview=null,importSession=0,signature='';
  let view={query:'',tag:'',status:'',sort:'name-asc',defaultFirst:true,collapsedTags:[]};
  const {buildConfigView,modelsOf}=window.LibraryAiView;
@@ -17,8 +9,8 @@
  const dialog=$('aiModelDialog'),importDialog=$('aiImportDialog');
  function selected(){const p=profiles[defaultId];if(!connected||!p||!p.hasKey)throw Error('DEFAULT_MODEL_REQUIRED');return {...p};}
  function setStatus(text){$('aiSettingsStatus').textContent=text;}
- function controls(){$('aiDefaultModel').disabled=busy||!connected||!document.querySelectorAll('#aiDefaultModel option[data-passed]').length;for(const el of $('aiModelList').querySelectorAll('select'))el.disabled=busy;for(const id of ['aiAddModel','aiImportModels'])$(id).disabled=busy||!connected;$('aiReconnect').disabled=busy;for(const b of $('aiModelList').querySelectorAll('button'))b.disabled=busy;}
- function update(r){profiles=r.profiles||{};defaultId=r.defaultProfileId||null;selectionRevision=r.selectionRevision;connected=true;render();const next=JSON.stringify([defaultId,selectionRevision,Object.values(profiles).map(p=>[p.profileId,p.revision])]);if(next!==signature){signature=next;window.dispatchEvent(new Event('ai-profile-changed'));}}
+ function controls(){$('aiDefaultModel').disabled=busy||!connected||!document.querySelectorAll('#aiDefaultModel option[data-passed]').length;for(const el of $('aiModelList').querySelectorAll('select'))el.disabled=busy;for(const id of ['aiAddModel','aiImportModels'])$(id).disabled=busy||!connected;for(const b of $('aiFreePresets').querySelectorAll('button'))b.disabled=busy||!connected;$('aiReconnect').disabled=busy;for(const b of $('aiModelList').querySelectorAll('button'))b.disabled=busy;}
+ function update(r){profiles=r.profiles||{};defaultId=r.defaultProfileId||null;selectionRevision=r.selectionRevision;connected=true;render();const next=JSON.stringify([defaultId,selectionRevision,Object.values(profiles).map(p=>[p.profileId,p.revision])]);if(next!==signature){signature=next;chrome.storage.local.set({aiSettingsUpdated:Date.now()}).catch(()=>{});window.dispatchEvent(new Event('ai-profile-changed'));}}
  function button(text,fn){const b=document.createElement('button');b.type='button';b.textContent=text;b.addEventListener('click',fn);return b;}
  function statusOf(p){return !p.hasKey?'unconfigured':p.lastTest?.revision===p.revision?(p.lastTest.ok?'passed':'failed'):'untested';}
  function syncView(){
@@ -29,7 +21,7 @@
  }
  function saveView(){chrome.storage.local.set({aiModelView:view}).catch(()=>setStatus('筛选已生效，但未能记住本次选择。'));}
 
- function modelChoice(m){return '【'+catalogGroups[catalogGroup(m.id)]+'】'+(m.label===m.id?m.id:m.label+' · '+m.id)}
+
  function modelStatus(p,m){return !p.hasKey?'unconfigured':m.lastTest?.revision===p.revision?(m.lastTest.ok?'passed':'failed'):'untested'}
  const stateLabels={passed:'✓ 测试成功',failed:'✕ 测试失败',untested:'○ 未测试',unconfigured:'— 未配置密钥'};
  function renderDefault(){
@@ -76,15 +68,7 @@
  }
  $('aiAddEntry').onclick=()=>{const id=$('aiNewModelId').value.trim();if(!id||/[\x00-\x1f]/.test(id)||id.length>200){$('aiDialogStatus').textContent='请填写有效模型 ID。';return}if(draftModels.some(m=>m.id===id)){$('aiDialogStatus').textContent='该模型已在清单中。';return}if(draftModels.length>=200){$('aiDialogStatus').textContent='每份配置最多 200 个模型。';return}draftModels.push({id,label:$('aiNewModelLabel').value.trim()||id});renderEditorModels();$('aiNewModelId').value=$('aiNewModelLabel').value='';testReceipt=null;editorEpoch++;};
  let discoveredModels=[],discoveredSelection=new Map();
- const catalogGroups={balanced:'日常摘要 · 均衡',strong:'复杂分析 · 高能力参考',fast:'批量处理 · 轻量快速',special:'专用模型 · 非普通摘要',unknown:'未分类 · 请核对用途'};
- function catalogGroup(id){
-  const n=id.toLowerCase();
-  if(/embedding|moderation|whisper|tts|audio|realtime|transcrib|image|dall-e|sora|codex|deep-research|search|computer-use/.test(n))return 'special';
-  if(!/^(gpt-|o[134](?:-|$)|chatgpt-)/.test(n))return 'unknown';
-  if(/nano|mini|luna/.test(n))return 'fast';
-  if(/pro|astra|^o[134](?:-|$)|^gpt-[56]/.test(n)&&!/-sol/.test(n))return 'strong';
-  return 'balanced';
- }
+
  function renderDiscovered(){
   const query=$('aiCatalogSearch').value.trim().toLowerCase(),scope=$('aiCatalogScope').value,sort=$('aiCatalogSort').value;
   const rank=sort==='strength'?{strong:0,balanced:1,fast:2,unknown:3,special:4}:sort==='speed'?{fast:0,balanced:1,strong:2,unknown:3,special:4}:{balanced:0,fast:1,strong:2,unknown:3,special:4};
@@ -106,9 +90,9 @@
  $('aiDiscoverModels').onclick=async()=>{if(dialogBusy)return;const token=dialogSession,epoch=editorEpoch;dialogBusy=true;editorControls();$('aiDialogStatus').textContent='正在获取模型清单…';try{const r=await send('ai-models-discover',{draft:draft()});if(token!==dialogSession||epoch!==editorEpoch||!dialog.open)return;discoveredModels=r.models;discoveredSelection.clear();$('aiCatalogSearch').value='';$('aiCatalogScope').value=r.models.some(m=>!['unknown','special'].includes(catalogGroup(m.id)))?'text':'all';$('aiCatalogSort').value='summary';renderDiscovered();$('aiDiscovered').hidden=!r.models.length;$('aiDialogStatus').textContent=r.models.length?'选择需要加入的模型，不会改变当前模型。':'接口没有返回模型，可手动添加模型 ID。';}catch(e){if(token===dialogSession)$('aiDialogStatus').textContent=(String(e.code||e.message).includes('NETWORK_TIMEOUT')?'获取模型清单超时。请检查 Clash 是否运行、系统代理及接口地址；超时不代表 API Key 错误。':explain(e))+' 可手动添加模型 ID。';}finally{if(token===dialogSession){dialogBusy=false;editorControls();for(const check of $('aiDiscoveredList').querySelectorAll('input'))check.disabled=draftModels.some(m=>m.id===check.value);}}};
  $('aiApplyDiscovered').onclick=()=>{const add=[...discoveredSelection.values()].filter(c=>!draftModels.some(m=>m.id===c.id));if(draftModels.length+add.length>200){$('aiDialogStatus').textContent='每份配置最多 200 个模型。';return}for(const c of add)draftModels.push({id:c.id,label:c.label});renderEditorModels();$('aiDiscovered').hidden=true;testReceipt=null;editorEpoch++;};
  function protocolControls(){$('aiAuthLabel').hidden=$('aiProtocol').value!=='anthropic';if($('aiAuthLabel').hidden)$('aiAuth').value='bearer';}
- function openEditor(p){testReceipts=new Map();testResults=new Map(modelsOf(p||{}).filter(m=>m.lastTest?.revision===p?.revision).map(m=>[m.id,m.lastTest]));batch=null;$('aiBatchStatus').textContent='';dialogSession++;editorEpoch++;testReceipt=null;draftModels=modelsOf(p||{}).filter(m=>m.id).map(m=>({id:m.id,label:m.label}));dialogEditing=p?{...p}:null;dialogBusy=false;$('aiModelForm').reset();$('aiDialogTitle').textContent=p?'编辑配置':'添加配置';$('aiLabel').value=p?.label||'';$('aiTags').value=(p?.tags||[]).join(', ');$('aiProvider').value=p?.provider||'custom';$('aiBaseUrl').value=p?.baseUrl||'';renderEditorModels(p?.model);$('aiDiscovered').hidden=true;$('aiProtocol').value=p?.protocol||({openai:'responses',deepseek:'chat-completions',claude:'anthropic'}[p?.provider])||'chat-completions';$('aiAuth').value=p?.auth||'bearer';$('aiKey').value='';$('aiKeyState').textContent=p?.hasKey?'密钥已保存；留空保留，填写新值则替换。修改接口地址需要重新填写。':'填写真实 API Key 后即可测试；可先测试再保存。';$('aiDialogStatus').textContent='';editorControls();protocolControls();dialog.showModal();$('aiLabel').focus();}
+ function openEditor(p){testReceipts=new Map();testResults=new Map(modelsOf(p||{}).filter(m=>m.lastTest?.revision===p?.revision).map(m=>[m.id,m.lastTest]));batch=null;$('aiBatchStatus').textContent='';dialogSession++;editorEpoch++;testReceipt=null;draftModels=modelsOf(p||{}).filter(m=>m.id).map(m=>({id:m.id,label:m.label}));dialogEditing=p?{...p}:null;dialogBusy=false;$('aiModelForm').reset();$('aiDialogTitle').textContent=p?'编辑配置':'添加配置';$('aiLabel').value=p?.label||'';$('aiTags').value=(p?.tags||[]).join(', ');$('aiProvider').value=presetFor(p)||p?.provider||'custom';$('aiBaseUrl').value=p?.baseUrl||'';renderEditorModels(p?.model);$('aiDiscovered').hidden=true;$('aiProtocol').value=p?.protocol||({openai:'responses',deepseek:'chat-completions',claude:'anthropic'}[p?.provider])||'chat-completions';$('aiAuth').value=p?.auth||'bearer';$('aiKey').value='';$('aiKeyState').textContent=p?.hasKey?'密钥已保存；留空保留，填写新值则替换。修改接口地址需要重新填写。':'填写真实 API Key 后即可测试；可先测试再保存。';$('aiDialogStatus').textContent='';editorControls();protocolControls();syncPresetInfo();dialog.showModal();$('aiLabel').focus();}
  function editorControls(){for(const el of $('aiModelForm').querySelectorAll('input,select,button'))if(!['aiCancelDialog','aiCloseDialog','aiStopTests'].includes(el.id))el.disabled=dialogBusy;$('aiStopTests').hidden=!batch;$('aiStopTests').disabled=!!batch?.stop;}
- function draft(){return {...(dialogEditing?{profileId:dialogEditing.profileId,expectedRevision:dialogEditing.revision}:{}),label:$('aiLabel').value.trim(),models:draftModels.map(m=>({...m})),testReceipts:[...testReceipts.values()],...(testReceipt?{testReceipt}:{}),tags:$('aiTags').value.split(/[,，;；]/).map(t=>t.trim()).filter(Boolean),provider:$('aiProvider').value,baseUrl:$('aiBaseUrl').value.trim(),model:$('aiModel').value.trim(),protocol:$('aiProtocol').value,auth:$('aiAuth').value,...($('aiKey').value?{key:$('aiKey').value}:{})};}
+ function draft(){return {...(dialogEditing?{profileId:dialogEditing.profileId,expectedRevision:dialogEditing.revision}:{}),label:$('aiLabel').value.trim(),models:draftModels.map(m=>({...m})),testReceipts:[...testReceipts.values()],...(testReceipt?{testReceipt}:{}),tags:$('aiTags').value.split(/[,，;；]/).map(t=>t.trim()).filter(Boolean),provider:freePresets[$('aiProvider').value]?.provider||$('aiProvider').value,baseUrl:$('aiBaseUrl').value.trim(),model:$('aiModel').value.trim(),protocol:$('aiProtocol').value,auth:$('aiAuth').value,...($('aiKey').value?{key:$('aiKey').value}:{})};}
  function rememberTest(model,r){if(!r)return;testReceipt=null;if(r.testReceipt)testReceipts.set(model,r.testReceipt);else testReceipts.delete(model);testResults.set(model,{ok:!!r.ok,code:r.code||'RESULT_UNKNOWN',unconfirmed:!r.testReceipt});renderEditorModels();editorControls();}
  $('aiStopTests').onclick=()=>{if(batch){batch.stop=true;$('aiBatchStatus').textContent+=' · 正在停止，等待当前请求结束…';editorControls()}};
  $('aiTestAll').onclick=async()=>{
@@ -120,16 +104,42 @@
    if(token===dialogSession){$('aiBatchStatus').textContent=(state.stop?'已停止':'测试完成')+' · '+completed+' / '+ids.length+'，成功 '+passed+'，失败 '+(completed-passed);$('aiDialogStatus').textContent='点击保存，保留本次各模型测试结果。';}
   }finally{if(token===dialogSession){batch=null;dialogBusy=false;editorControls()}}
  };
- async function editorAction(save){if(dialogBusy||!$('aiModelForm').reportValidity())return;const token=dialogSession;dialogBusy=true;editorControls();$('aiDialogStatus').textContent=save?'正在保存…':'正在测试连接…';try{const d=draft();const r=await send(save?'ai-settings-save':'ai-test-draft',save?d:{draft:d,confirmed:true});if(token!==dialogSession||!dialog.open)return;if(save){update(r);$('aiKey').value='';dialog.close();setStatus('模型已保存。可在列表中设为默认，用于智能摘要。')}else {testReceipt=r.testReceipt||null;rememberTest(d.model,r);$('aiDialogStatus').textContent='连接测试成功。保存后可在列表设为默认。';}}catch(e){if(token===dialogSession&&dialog.open){if(!save)rememberTest($('aiModel').value,e.result||{ok:false,code:e.message});$('aiDialogStatus').textContent=explain(e);}}finally{if(token===dialogSession){dialogBusy=false;editorControls();}}}
+ async function editorAction(save){if(dialogBusy||!$('aiModelForm').reportValidity())return;const token=dialogSession;dialogBusy=true;editorControls();$('aiDialogStatus').textContent=save?'正在保存…':'正在测试连接…';try{const d=draft();const r=await send(save?'ai-settings-save':'ai-test-draft',save?d:{draft:d,confirmed:true});if(token!==dialogSession||!dialog.open)return;if(save){update(r);$('aiKey').value='';dialog.close();setStatus('模型已保存。可设为默认，或在翻译、摘要中选择。')}else {testReceipt=r.testReceipt||null;rememberTest(d.model,r);$('aiDialogStatus').textContent='连接测试成功。保存后可在列表设为默认。';}}catch(e){if(token===dialogSession&&dialog.open){if(!save)rememberTest($('aiModel').value,e.result||{ok:false,code:e.message});$('aiDialogStatus').textContent=explain(e);}}finally{if(token===dialogSession){dialogBusy=false;editorControls();}}}
  dialog.addEventListener('close',()=>{if(batch)batch.stop=true;batch=null;dialogSession++;$('aiKey').value='';dialogEditing=null;dialogBusy=false;});
  $('aiCloseDialog').onclick=$('aiCancelDialog').onclick=()=>dialog.close();$('aiModelForm').onsubmit=e=>{e.preventDefault();editorAction(true)};$('aiTest').onclick=()=>editorAction(false);
- $('aiProvider').onchange=()=>{const presets={openai:{baseUrl:'https://api.openai.com/v1',model:'gpt-4.1-mini',protocol:'responses',label:'OpenAI'},deepseek:{baseUrl:'https://api.deepseek.com',model:'deepseek-flash',protocol:'chat-completions',label:'DeepSeek'},claude:{baseUrl:'https://api.anthropic.com',model:'',protocol:'anthropic',label:'Anthropic'}};const p=presets[$('aiProvider').value];if(p){$('aiBaseUrl').value=p.baseUrl;draftModels=p.provider==='deepseek'||$('aiProvider').value==='deepseek'?[{id:'deepseek-flash',label:'deepseek-flash'},{id:'deepseek-v4-pro',label:'deepseek-v4-pro'}]:p.model?[{id:p.model,label:p.model}]:[];renderEditorModels(p.model);$('aiProtocol').value=p.protocol;if(!$('aiLabel').value)$('aiLabel').value=p.label;$('aiAuth').value=p.protocol==='anthropic'?'x-api-key':'bearer'}$('aiKey').value='';protocolControls();};
- $('aiProtocol').onchange=protocolControls;$('aiModelForm').addEventListener('input',e=>{testReceipt=null;editorEpoch++;if(['aiKey','aiBaseUrl','aiProvider','aiProtocol','aiAuth'].includes(e.target.id)){testReceipts.clear();testResults.clear();renderEditorModels();}$('aiDialogStatus').textContent='配置有改动，可测试后保存。'});
+ function syncPresetInfo(){
+  const p=freePresets[$('aiProvider').value];const active=p&&$('aiBaseUrl').value.trim().replace(/\/+$/,'')===p.baseUrl&&$('aiProtocol').value===p.protocol;
+  $('aiPresetInfo').hidden=!active;if(active){$('aiPresetKeyLink').href=p.keyUrl;$('aiPresetKeyLink').textContent='获取 '+p.label.split(' · ')[0]+' API Key ↗';}else $('aiPresetKeyLink').removeAttribute('href');
+ }
+ function openFreePreset(id){
+  const preset=freePresets[id];if(!preset||busy||!connected)return;
+  // Reuse one unambiguous account, preserving its key, default model and existing catalog.
+  const matches=Object.values(profiles).filter(p=>presetFor(p)===id&&p.auth==='bearer');
+  const existing=matches.length===1?matches[0]:null;openEditor(existing);$('aiProvider').value=id;
+  if(existing){for(const model of preset.models)if(!draftModels.some(m=>m.id===model.id)&&draftModels.length<200)draftModels.push({...model});renderEditorModels(existing.model);}
+  else{$('aiLabel').value=preset.label;$('aiTags').value=preset.tags.join(', ');$('aiProvider').onchange();}
+  syncPresetInfo();$('aiKey').focus();
+ }
+ for(const [id,preset] of Object.entries(freePresets)){const b=button(preset.label.split(' · ')[0],()=>openFreePreset(id));b.dataset.freePreset=id;b.disabled=true;b.title=preset.models.map(m=>m.id).join(' / ');$('aiFreePresets').append(b);}
+ $('aiProvider').onchange=()=>{
+  const presets={...freePresets,openai:{baseUrl:'https://api.openai.com/v1',model:'gpt-4.1-mini',protocol:'responses',label:'OpenAI'},deepseek:{baseUrl:'https://api.deepseek.com',model:'deepseek-flash',protocol:'chat-completions',label:'DeepSeek'},claude:{baseUrl:'https://api.anthropic.com',model:'',protocol:'anthropic',label:'Anthropic'}};
+  const presetId=$('aiProvider').value,p=presets[presetId];
+  if(p){
+   $('aiBaseUrl').value=p.baseUrl;
+   draftModels=p.models?p.models.map(m=>({...m})):presetId==='deepseek'?[{id:'deepseek-flash',label:'deepseek-flash'},{id:'deepseek-v4-pro',label:'deepseek-v4-pro'}]:p.model?[{id:p.model,label:p.model}]:[];
+   renderEditorModels(p.model);$('aiProtocol').value=p.protocol;
+   if(!$('aiLabel').value||Object.values(presets).some(v=>v.label===$('aiLabel').value))$('aiLabel').value=p.label;
+   $('aiAuth').value=p.protocol==='anthropic'?'x-api-key':'bearer';
+  }
+  const tags=$('aiTags').value.split(/[,，;；]/).map(t=>t.trim()).filter(t=>t&&t!=='免费预设');
+  if(freePresets[presetId]&&tags.length<10)tags.push('免费预设');$('aiTags').value=tags.join(', ');
+  $('aiKey').value='';testReceipt=null;editorEpoch++;testReceipts.clear();testResults.clear();renderEditorModels($('aiModel').value);
+  $('aiDiscovered').hidden=true;discoveredSelection.clear();$('aiKeyState').textContent=dialogEditing?.hasKey&&dialogEditing.baseUrl===$('aiBaseUrl').value?'留空保留已保存的密钥。':'请填写此服务的 API Key。';protocolControls();syncPresetInfo();
+ };
+ $('aiProtocol').onchange=()=>{protocolControls();syncPresetInfo()};$('aiModelForm').addEventListener('input',e=>{testReceipt=null;editorEpoch++;if(['aiKey','aiBaseUrl','aiProvider','aiProtocol','aiAuth'].includes(e.target.id)){testReceipts.clear();testResults.clear();renderEditorModels();}syncPresetInfo();$('aiDialogStatus').textContent='配置有改动，可测试后保存。'});
  $('aiAddModel').onclick=()=>openEditor(null);$('aiImportModels').onclick=()=>{preview=null;$('aiImportList').replaceChildren();$('aiApplyImport').disabled=true;$('aiImportStatus').textContent='选择配置来源，读取后勾选需要导入的模型。';importDialog.showModal()};$('aiCloseImport').onclick=()=>importDialog.close();importDialog.addEventListener('close',()=>{importSession++;preview=null;});
  async function readImport(source){const token=++importSession;preview=null;$('aiApplyImport').disabled=true;$('aiImportList').replaceChildren();$('aiImportStatus').textContent='正在读取模型…';try{const p=await send('ai-model-import-preview',{source});if(token!==importSession||!importDialog.open)return;preview=p;for(const item of p.items){const label=document.createElement('label'),check=document.createElement('input'),text=document.createElement('span');check.type='checkbox';check.value=item.candidateId;check.disabled=item.change==='same';check.checked=item.change==='add';text.textContent=(item.connectionChange?'连接参数变化；部分模型更新将独立保存。 ':'')+item.label+' · '+item.model+' · '+(item.conflict?'勾选将覆盖你的修改':item.change==='same'?'已导入':item.change==='ignored'?'勾选恢复已删除模型':item.change==='update'?'可更新':'可导入')+(item.verified?'':' · 模型 ID 待验证');label.append(check,text);$('aiImportList').append(label)}$('aiApplyImport').disabled=!p.items.length;$('aiImportStatus').textContent='共 '+p.items.length+' 个模型。';}catch(e){if(token===importSession)$('aiImportStatus').textContent=explain(e);}}
  $('aiImportWorkBuddy').onclick=()=>readImport('workbuddy');$('aiImportCc').onclick=()=>readImport('ccswitch');$('aiApplyImport').onclick=async()=>{if(!preview)return;const token=importSession,p=preview,ids=[...$('aiImportList').querySelectorAll('input:checked')].map(e=>e.value);$('aiApplyImport').disabled=true;try{const r=await send('ai-model-import-apply',{previewId:p.previewId,candidateIds:ids,overwriteIds:p.items.filter(i=>i.conflict&&ids.includes(i.candidateId)).map(i=>i.candidateId),restoreIds:p.items.filter(i=>i.change==='ignored'&&ids.includes(i.candidateId)).map(i=>i.candidateId)});update(r);if(token===importSession){importDialog.close();setStatus('模型已导入。请选择默认模型，或逐个测试连接。')}}catch(e){if(token===importSession){$('aiImportStatus').textContent=explain(e);$('aiApplyImport').disabled=false;}}};
- $('aiOpenSettings').onclick=()=>{$('aiSettings').open=true;$('aiSettings').scrollIntoView({block:'start'});};
- $('aiChooseRecord').onclick=()=>{$('aiUse').click();};
- $('aiReconnect').onclick=()=>run(connect);$('aiReloadExtension').onclick=()=>chrome.runtime.reload();$('aiUse').onclick=()=>{$('aiSettings').open=false;$('query').focus();$('searchForm').scrollIntoView({block:'start'});$('status').textContent='选择一条文字摘录，点击“生成摘要”。';};
+ $('aiReconnect').onclick=()=>run(connect);$('aiReloadExtension').onclick=()=>chrome.runtime.reload();
  window.LibraryAi={send,selected,explain};run(connect);
 })();

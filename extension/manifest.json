@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "精彩摘录",
   "description": "收藏内容，下载视频、图集与 Hugging Face 模型文件；支持后台任务、并行下载和续传。",
-  "version": "1.32.0",
+  "version": "1.33.0",
   "minimum_chrome_version": "116",
   "permissions": [
     "tabs",
@@ -12,7 +12,8 @@
     "nativeMessaging",
     "sidePanel",
     "webRequest",
-    "scripting"
+    "scripting",
+    "activeTab"
   ],
   "host_permissions": [
     "https://*.bilibili.com/*",
@@ -22,7 +23,8 @@
     "https://*.youtube.com/*",
     "https://*.youtu.be/*",
     "https://*.x.com/*",
-    "https://*.twitter.com/*"
+    "https://*.twitter.com/*",
+    "https://edge.microsoft.com/*"
   ],
   "side_panel": {
     "default_path": "app.html"
@@ -36,5 +38,13 @@
   "optional_host_permissions": [
     "http://*/*",
     "https://*/*"
-  ]
+  ],
+  "commands": {
+    "toggle-page-translation": {
+      "suggested_key": {
+        "default": "Alt+Shift+T"
+      },
+      "description": "切换当前网页双语翻译 / 恢复原文"
+    }
+  }
 }

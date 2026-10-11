@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>精彩摘录</title><link rel="stylesheet" href="popup.css"><link rel="stylesheet" href="embedded.css"><link rel="stylesheet" href="interface.css"><link rel="stylesheet" href="recovery.css"><link rel="stylesheet" href="theme.css"></head>
-<body><main><section id="library"><div class="toolbar section-heading"><h2>已保存内容</h2><button id="reload" class="secondary">刷新</button></div>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>精彩摘录</title><link rel="stylesheet" href="popup.css"><link rel="stylesheet" href="embedded.css"><link rel="stylesheet" href="interface.css"><link rel="stylesheet" href="recovery.css"><link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="delete-icons.css"></head>
+<body><main><section id="library"><div class="toolbar section-heading"><h2>已保存内容</h2><button id="reload" class="secondary refresh-icon" title="刷新" aria-label="刷新"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div>
 <details><summary>查看其他摘录文件</summary><p class="label">这里只切换查看内容，不改变新摘录的保存位置。</p><div class="toolbar equal-actions"><button id="chooseJson" class="secondary">选择 JSON 文件</button><button id="defaultJson" class="secondary">当前保存目录</button></div>
 <p class="label">正在查看的数据文件</p><p id="jsonPath">正在读取…</p></details>
 <p id="listStatus" role="status">正在加载…</p>
@@ -8,4 +8,4 @@
 <div id="confirmDelete" hidden><p id="confirmText"></p><div class="toolbar"><button id="cancelDelete" class="secondary">取消</button><button id="confirmButton" class="danger">确认删除</button></div></div>
 <p id="listError" role="alert"></p><div id="records"></div>
 <div class="toolbar pagination"><button id="previous" class="secondary" disabled>上一页</button><span id="pageInfo"></span><button id="next" class="secondary" disabled>下一页</button></div></section>
-</main><script src="recovery.js"></script><script src="popup.js"></script><script src="video-url.js"></script><script src="recovery-page.js"></script></body></html>
+</main><script src="recovery.js"></script><script src="popup.js"></script><script src="video-url.js"></script><script src="recovery-page.js"></script><script src="delete-icons.js"></script></body></html>

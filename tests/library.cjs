@@ -6,7 +6,7 @@ const {dispatch}=require('../native/library.cjs');
  const records=Array.from({length:55},(_,i)=>({id:i===54?id:randomUUID(),type:'内容',time:'2026-10-08 10:00:00 +08:00',content:i===54?'目标内容\r\n第二行':'记录'+i,sourceUrl:'https://example.com/p?a=1',author:''}));
  fs.writeFileSync(path.join(directory,'摘录数据.json'),JSON.stringify(records));
  fs.writeFileSync(path.join(jobs,jid+'.json'),JSON.stringify({state:'completed',kind:'files',createdAt:'2026-10-08T02:00:00Z',title:'资料',directory,file,expectedFiles:[file],source:'https://example.com/a?token=secret'}));
- let r=await request({action:'library-query'});assert.equal(r.total,56);assert.equal(r.items.length,40);assert.ok(r.items.every(x=>!('content'in x)));
+ let r=await request({action:'library-query'});assert.equal(r.total,56);assert.equal(r.items.length,10);const second=await request({action:"library-query",offset:10,revision:r.revision});assert.equal(second.items.length,10);assert.ok(second.items.every(item=>!r.items.some(first=>first.id===item.id)));const last=await request({action:"library-query",offset:50,revision:r.revision});assert.equal(last.items.length,6);assert.ok(r.items.every(x=>!('content'in x)));
  r=await request({action:'library-query',query:'目标'});assert.equal(r.total,1);const rid='clip:'+id;
  await request({action:'library-taxonomy',kind:'tags',operation:'create',name:'研究'});await request({action:'library-taxonomy',kind:'collections',operation:'create',name:'项目'});
  await request({action:'library-update',ids:[rid],tags:['研究'],collections:['项目'],author:'作者'});

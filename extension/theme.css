@@ -28,33 +28,6 @@ section,.video-page .video-card,.video-page .login-card,.item,.export-item,aside
 .video-page .source-label,.easy-download #transferStatus,.video-page #status{color:#404040}
 .recovery-card{background:#f4f4f4;color:#363636;border-color:#d6d6d6;font-family:inherit}
 .recovery-card button{background:#fff;color:#343434;border-color:#ccc}
-.video-page .monitor-card{background:#fafafa;color:#303030;border:1px solid #dedede;border-radius:11px;box-shadow:none}
-.state-chip{background:#ebebeb;color:#555}
-.state-chip.completed{background:#e5e5e5;color:#303030}
-.state-chip.failed{background:#e0e0e0;color:#202020;font-weight:650}
-.state-chip.paused{background:#ededed;color:#555}
-.state-chip.completed::before{content:"✓ ";font-weight:700}
-.state-chip.failed::before{content:"! ";font-weight:750}
-.state-chip.paused::before{content:"Ⅱ ";font-weight:650}
-.monitor-percent{color:#303030}
-.monitor-track{height:7px;background:#e6e6e6}
-.monitor-track>span,.segment-meter>span{background:#4c4c4c}
-.monitor-track.indeterminate>span{background:#959595}
-.monitor-stats{border-bottom-color:#e4e4e4}
-.video-page .monitor-amount,.monitor-stats span,.video-page .monitor-note,.video-page .monitor-time,.task-batch>span,.task-batch-panel{color:#757575}
-.monitor-card .task-actions button{background:#fff;color:#454545;border-color:#d8d8d8}
-.segment-panel{background:#f1f1f1;color:#383838;border-color:#d5d5d5;border-radius:9px;box-shadow:none;padding:11px}
-.segment-caption{border-bottom-color:#dedede}
-.segment-caption strong,.video-page .segment-panel .segment-name,.segment-value,.complete .segment-value,.segment-footer strong{color:#333}
-.segment-caption>span,.segment-meta,.segment-index,.video-page .segment-explanation,.video-page .segment-empty,.segment-footer{color:#6a6a6a}
-.segment-panel .segment-rows{scrollbar-color:#b7b7b7 transparent}
-.segment-panel .segment-meter{height:6px;background:#ddd;border:0;box-shadow:none}
-.segment-panel .segment-meter>span{background:#626262;box-shadow:none}
-.segment-footer{border-top-color:#d8d8d8}
-.task-log-details>summary{color:#6a6a6a}
-.video-page .task-log-details .monitor-log{background:#f2f2f2;color:#454545;border-color:#ddd}
-.video-page .task-loading{background:#f5f5f5;color:#454545;border-color:#ddd}
-.task-spinner{border-color:#d3d3d3;border-top-color:#5b5b5b}
 .model-badge{background:#363636;color:#fff}
 .model-row.is-default,.config-row.is-default{background:#f2f2f2;box-shadow:inset 3px 0 #4b4b4b}
 .model-status.passed,.model-status.failed,.model-status.untested,.model-status.unconfigured{color:#3f3f3f;background:#f1f1f1;border-color:#cecece}
@@ -70,3 +43,5 @@ dialog::backdrop{background:#00000055;backdrop-filter:blur(3px)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 
 .page-link{display:flex;align-items:baseline;gap:8px;text-align:left}.page-link-type{flex:0 0 auto;font-size:12px;font-weight:600;background:#ededed;border-radius:5px;padding:2px 5px}.page-link>span:last-child{min-width:0;overflow-wrap:anywhere}.bookmark-note{white-space:pre-wrap;overflow-wrap:anywhere}#backToFileList{margin:0 0 10px}
+
+button.refresh-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:36px;min-width:36px;height:36px;min-height:36px;padding:7px;line-height:1}button.refresh-icon svg{display:block;pointer-events:none}button.refresh-icon[aria-busy="true"] svg{animation:refresh-rotate 1s linear infinite}@keyframes refresh-rotate{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){button.refresh-icon[aria-busy="true"] svg{animation:none}}

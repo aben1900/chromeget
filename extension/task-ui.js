@@ -117,7 +117,7 @@ function setTaskListLoading(loading){
   byId('tasksList').inert=loading;
   byId('tasksSummary').hidden=loading;
   byId('refreshTasks').disabled=loading;
-  byId('refreshTasks').textContent=loading?'加载中…':'刷新任务';
+  const refresh=byId('refreshTasks');refresh.setAttribute('aria-label',loading?'正在加载任务':'刷新任务');refresh.title=loading?'正在加载任务':'刷新任务';refresh.setAttribute('aria-busy',String(loading));
   for(const id of ['tasksPrevious','tasksNext'])byId(id).inert=loading;
   document.querySelectorAll('.task-batch-panel').forEach(panel=>panel.inert=loading);
 }

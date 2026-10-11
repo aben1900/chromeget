@@ -1,6 +1,7 @@
 'use strict';
 const provider=require('./ai-provider.cjs');
 async function dispatch(p){
+ if(p.op==='free-translate'){if(p.message?.route!=='bilibili')throw Error('CONFIG_INVALID');try{return await require('./free-translation.cjs').freeTranslate(p.message,(url,options)=>fetch(url,{...options,headers:{...options.headers,'User-Agent':'Chromeget-Translation/1.0'}}));}catch(e){if(/412/.test(e.message))throw Error('TRANSLATION_BLOCKED');if(/频繁/.test(e.message))throw Error('RATE_LIMITED');if(/超时/.test(e.message))throw Error('NETWORK_TIMEOUT');if(/不完整/.test(e.message))throw Error('OUTPUT_INCOMPLETE');throw Error('NETWORK_ERROR');}}
  if(p.op==='models-discover')return require('./ai-model-discovery.cjs').discoverModels(p.profile);
  if(p.op==='config-migrate')return require('./ai-config-model.cjs').migrateSettings(p.settings,p.credentialGroups);
  if(p.op==='config-public')return require('./ai-config-model.cjs').publicConfig(p.profile);
@@ -13,9 +14,9 @@ async function dispatch(p){
  if(p.op==='normalize'){if(p.key!==undefined&&!provider.hasKey(p.key))throw Error('KEY_NOT_CONFIGURED');return p.profile?provider.normalizeProfile(p.profile):provider.presets();}
  if(p.op==='cc-list')return require('./ai-ccswitch.cjs').listClaudeProviders(p.dbPath);
  if(p.op==='cc-resolve')return require('./ai-ccswitch.cjs').resolveClaudeProvider(p.dbPath,p.id,p.model);
- if(p.op==='request')return require('./ai-transport.cjs').requestSummary(p.profile,p.text,p.length,{isTest:p.isTest===true});
+ if(p.op==='request')return require('./ai-transport.cjs').requestSummary(p.profile,p.text,p.length,{isTest:p.isTest===true,translation:p.translation||null});
  throw Error('CONFIG_INVALID');
 }
-const codes=new Set(['QUOTA_EXCEEDED','REGION_UNSUPPORTED','PERMISSION_DENIED','API_REQUEST_REJECTED','SERVICE_UNAVAILABLE','MODELS_UNAVAILABLE','CONFIG_LIMIT','IMPORT_CHANGED','IMPORT_UNAVAILABLE','CONFIG_INVALID','KEY_NOT_CONFIGURED','CC_CONFIG_UNAVAILABLE','INPUT_EMPTY','INPUT_TOO_LARGE','AUTH_FAILED','RATE_LIMITED','MODEL_UNAVAILABLE','NETWORK_TIMEOUT','NETWORK_ERROR','RESPONSE_INVALID','RESPONSE_TOO_LARGE','OUTPUT_INCOMPLETE']);
+const codes=new Set(['TRANSLATION_BLOCKED','IP_ACCESS_DENIED','QUOTA_EXCEEDED','REGION_UNSUPPORTED','PERMISSION_DENIED','API_REQUEST_REJECTED','SERVICE_UNAVAILABLE','MODELS_UNAVAILABLE','CONFIG_LIMIT','IMPORT_CHANGED','IMPORT_UNAVAILABLE','CONFIG_INVALID','KEY_NOT_CONFIGURED','CC_CONFIG_UNAVAILABLE','INPUT_EMPTY','INPUT_TOO_LARGE','AUTH_FAILED','RATE_LIMITED','MODEL_UNAVAILABLE','NETWORK_TIMEOUT','NETWORK_ERROR','RESPONSE_INVALID','RESPONSE_TOO_LARGE','OUTPUT_INCOMPLETE']);
 if(require.main===module){let input='';process.stdin.setEncoding('utf8');process.stdin.on('data',b=>{input+=b;if(Buffer.byteLength(input)>1048576)process.exit(1);});process.stdin.on('end',async()=>{try{const result=await dispatch(JSON.parse(input.replace(/^\uFEFF/,'')));console.log(JSON.stringify({ok:true,result}));}catch(e){console.log(JSON.stringify({ok:false,code:codes.has(e.message)?e.message:'CONFIG_INVALID'}));}});}
 module.exports={dispatch};

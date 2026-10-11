@@ -128,6 +128,9 @@ $installButton.Add_Click({
     Start-ManagedOperation '安装' ('& '+(Quote-PS (Join-Path $root 'native\install.ps1'))+' -ExtensionId '+(Quote-PS $id)+' -Directory '+(Quote-PS $dir))
 })
 $repairButton.Add_Click({Start-ManagedOperation '更新 / 修复' ('& '+(Quote-PS (Join-Path $root 'native\repair.ps1')))})
+$row=New-Row;$checkRelease=New-Button '检查新版本' 150;$applyRelease=New-Button '下载并统一更新' 190;$row.Controls.AddRange(@($checkRelease,$applyRelease));$main.Controls.Add($row)
+$checkRelease.Add_Click({Start-ManagedOperation '检查新版本' ('& '+(Quote-PS (Join-Path $root 'tools\update-release.ps1')))})
+$applyRelease.Add_Click({Start-ManagedOperation '统一更新' ('& '+(Quote-PS (Join-Path $root 'tools\update-release.ps1'))+' -Apply')})
 $main.Controls.Add((New-Label '③ 在扩展中验证连接' 30))
 $main.Controls.Add((New-Label '先用新版包覆盖原目录，保留 extension 路径。本窗口更新配套程序。随后打开 chrome://extensions，点击“精彩摘录”卡片蓝色开关左边的圆形箭头 ⟳，再打开侧栏点击“检查是否可以使用”。' 65))
 $row=New-Row;$diagnose=New-Button '检查本机环境' 160;$integrity=New-Button '完整校验引擎' 160;$row.Controls.AddRange(@($diagnose,$integrity));$main.Controls.Add($row)
@@ -164,7 +167,7 @@ $cancelButton=New-Button '取消操作' 100;$cancelButton.Dock='Fill';$cancelBut
 $layout.RowStyles[2].Height=34;$layout.Controls.Add($progressRow,0,2)
 $logBox=New-Object Windows.Forms.TextBox;$logBox.Multiline=$true;$logBox.ReadOnly=$true;$logBox.ScrollBars='Vertical';$logBox.Dock='Fill';$logBox.BackColor=[Drawing.Color]::White;$logBox.Font=New-Object Drawing.Font('Consolas',9);$layout.Controls.Add($logBox,0,3)
 $stateLabel=New-Label '' 46;$stateLabel.Dock='Fill';$layout.Controls.Add($stateLabel,0,4)
-$script:actionButtons=@($installButton,$repairButton,$browse,$engineButton,$portable,$unportable,$uninstall,$diagnose,$integrity)
+$script:actionButtons=@($checkRelease,$applyRelease,$installButton,$repairButton,$browse,$engineButton,$portable,$unportable,$uninstall,$diagnose,$integrity)
 $timer=New-Object Windows.Forms.Timer;$timer.Interval=150;$timer.Add_Tick({Update-ManagedOperation})
 $form.Add_FormClosing({param($sender,$eventArgs);if($script:job){$eventArgs.Cancel=$true;if($cancelButton.Enabled){if([Windows.Forms.MessageBox]::Show('是否取消安装准备并关闭？已有下载任务不会停止；正在写入的步骤完成后退出。','取消并关闭','YesNo','Question') -eq 'Yes'){$script:closeAfterOperation=$true;Request-SetupCancellation}}else{$script:closeAfterOperation=$true;$stateLabel.Text='已安排完成当前操作后自动关闭。'}}})
 if($SelfTest){

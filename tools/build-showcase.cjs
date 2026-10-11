@@ -19,6 +19,9 @@ function build(){
   const html=template.replace('__SHOWCASE_DATA__',JSON.stringify(data).replace(/</g,'\\u003c'));
   const output=path.join(root,'功能介绍.html');
   if(!fs.existsSync(output)||fs.readFileSync(output,'utf8')!==html){const temp=output+'.tmp';fs.writeFileSync(temp,html);fs.renameSync(temp,output);}
+  // Extension pages require external executable scripts under the default CSP.
+  let bundledScript='';const bundled=html.replace(/<script>([\s\S]*?)<\/script>/g,(_,script)=>{bundledScript+=script+'\n';return '<script src="showcase-page.js"></script>';});
+  for(const [name,content] of [['功能介绍.html',bundled],['showcase-page.js',bundledScript]]){const target=path.join(root,'extension',name);if(!fs.existsSync(target)||fs.readFileSync(target,'utf8')!==content)fs.writeFileSync(target,content);}
   return data;
 }
 if(require.main===module){const data=build();console.log('功能介绍.html 已同步 · 扩展 '+data.version+' / 本地程序 '+data.nativeVersion);}

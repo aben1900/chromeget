@@ -28,12 +28,26 @@ function Invoke-AiAction($message,[string]$directory) {
                 if(-not $draft){Save-AiTestResult $PSScriptRoot $profile $result}else{$result.testReceipt=Save-AiDraftTest $PSScriptRoot $profile $result}
                 return $result
             }
+            'ai-free-translate' {return (Invoke-AiNode @{op='free-translate';message=$message})}
+            'ai-translate' {
+                if($message.confirmed -ne $true){throw 'CONFIRM_REQUIRED'}
+                $settings=Get-AiPublicSettings $PSScriptRoot
+                $id=if($message.temporary -eq $true){[string]$message.profileId}else{[string]$settings.defaultProfileId}
+                if(-not $id){throw 'DEFAULT_MODEL_REQUIRED'}
+                if($message.temporary -ne $true -and $message.profileId -cne $id){throw 'CONFIG_CHANGED'}
+                $profile=Resolve-AiProfile $PSScriptRoot $id ([string]$message.model) -Temporary
+                if($message.expectedRevision -cne $profile.revision){throw 'CONFIG_CHANGED'}
+                $r=Invoke-AiNode @{op='request';profile=$profile;text=$message.text;length='standard';translation=@{sourceLanguage=$message.sourceLanguage;targetLanguage=$message.targetLanguage}}
+                return @{ok=$true;text=$r.text;model=$profile.model;provider=$profile.label}
+            }
             'ai-prepare' {
                 $settings=Get-AiPublicSettings $PSScriptRoot
-                if(-not $settings.defaultProfileId){throw 'DEFAULT_MODEL_REQUIRED'}
-                if($message.profileId -and $message.profileId -cne $settings.defaultProfileId){throw 'CONFIG_CHANGED'}
-                $profile=Resolve-AiProfile $PSScriptRoot ([string]$settings.defaultProfileId) ([string]$message.model)
-                return Invoke-LibraryAction @{action='library-ai-prepare';id=$message.id;profile=(Get-AiPublicProfile $profile);length=$message.length;selectionRevision=$settings.selectionRevision} $directory
+                $temporary=$message.temporary -eq $true
+                if(-not $temporary -and -not $settings.defaultProfileId){throw 'DEFAULT_MODEL_REQUIRED'}
+                if(-not $temporary -and $message.profileId -and $message.profileId -cne $settings.defaultProfileId){throw 'CONFIG_CHANGED'}
+                $id=if($temporary){[string]$message.profileId}else{[string]$settings.defaultProfileId}
+                $profile=Resolve-AiProfile $PSScriptRoot $id ([string]$message.model) -Temporary:$temporary
+                return Invoke-LibraryAction @{action='library-ai-prepare';temporary=$temporary;id=$message.id;profile=(Get-AiPublicProfile $profile);length=$message.length;selectionRevision=$settings.selectionRevision} $directory
             }
             'ai-generate' {
                 if($message.confirmed -ne $true){throw 'CONFIRM_REQUIRED'}
@@ -41,8 +55,8 @@ function Invoke-AiAction($message,[string]$directory) {
                 if(-not $state.ok -or $state.state -ne 'prepared'){return $state}
                 $snapshot=Invoke-AiConfigLock $PSScriptRoot {
                     $settings=Get-AiPublicSettings $PSScriptRoot
-                    if(-not $state.selectionRevision -or $state.selectionRevision -cne $settings.selectionRevision -or $state.profileId -cne $settings.defaultProfileId){throw 'CONFIG_CHANGED'}
-                    $profile=Resolve-AiProfile $PSScriptRoot ([string]$state.profileId) ([string]$state.model)
+                    if(-not $state.selectionRevision -or $state.selectionRevision -cne $settings.selectionRevision -or (-not $state.temporary -and $state.profileId -cne $settings.defaultProfileId)){throw 'CONFIG_CHANGED'}
+                    $profile=Resolve-AiProfile $PSScriptRoot ([string]$state.profileId) ([string]$state.model) -Temporary:($state.temporary -eq $true)
                     $claim=Invoke-LibraryAction @{action='library-ai-claim';requestId=$message.requestId;profileRevision=$profile.revision;selectionRevision=$settings.selectionRevision} $directory
                     return @{profile=$profile;claim=$claim}
                 }

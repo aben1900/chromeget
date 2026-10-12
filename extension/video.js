@@ -49,7 +49,7 @@ function controls() {
   $('website').textContent=source||'';$('website').title=source||'';
   const name=platform==='x'?'X':platform==='youtube'?'YouTube':platform==='toutiao'?'头条':platform==='xiaohongshu'?'小红书':platform==='bilibili'?'B 站':'';
   $('browserCookies').textContent=name?'一键获取本浏览器的'+name+'登录态':'先填写视频网址，再获取登录态';
-  for(const id of ['inspect','inspectGallery','folder','saveFolder','cookies','clearCookies','browserCookies','extractUrl'])$(id).disabled=busy;
+  for(const id of ['inspect','inspectGallery','folder','cookies','clearCookies','browserCookies','extractUrl'])$(id).disabled=busy;
   $('inspect').textContent=activeOperation==='inspect'?'正在获取视频…':'获取视频';
   $('inspect').setAttribute('aria-busy',String(activeOperation==='inspect'));
   $('inspectGallery').textContent=activeOperation==='inspect-gallery'?'正在获取图集…':'获取图集';
@@ -252,7 +252,7 @@ $('download').addEventListener('click',async()=>{
   }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;poll();}
   finally{busy=false;controls();}
 });
-for(const [id,action] of [['folder','video-folder'],['saveFolder','video-set-folder'],['cookies','video-cookies'],['clearCookies','video-clear-cookies']]){
+for(const [id,action] of [['folder','video-folder'],['cookies','video-cookies'],['clearCookies','video-clear-cookies']]){
   $(id).addEventListener('click',async()=>{
     busy=true;controls();$('error').textContent='';
     mediaStatus(id==='folder'?'正在打开系统目录选择框…':id==='cookies'?'正在打开 Cookie 文件选择框…':'正在保存设置…');

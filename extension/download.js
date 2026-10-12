@@ -89,9 +89,9 @@ $('pageLinks').addEventListener('click',()=>{
   const grant=chrome.permissions.request({origins:['http://*/*','https://*/*']});
   transferTask($('pageLinks'),async()=>{
     if(!await grant)throw Error('需要允许读取当前网页，才能帮你找到文件。');
-    $('backToFileList').hidden=true;selectedFromList=false;$('linkResults').hidden=false;$('linkCount').textContent='正在查找网页中的链接…';
+    $('backToFileList').hidden=true;selectedFromList=false;$('linkResults').hidden=false;$('linkCount').textContent='正在查找网页中的文件链接…';
     const r=await send('download-page-links',{windowId:downloadWindowId});$('linkList').replaceChildren();
-    $('linkCount').textContent=r.links.length?'找到 '+r.links.length+' 个链接，点选预览。类型按网址或文件名推测。':'没有找到可用链接。试试右键网页中的下载按钮，复制链接后粘贴到上方。';
+    $('linkCount').textContent=r.links.length?'找到 '+r.links.length+' 个文件候选，点选预览确认。已过滤普通网页链接。':'没有找到明确的文件链接。无后缀或动态下载链接，可右键网页下载按钮复制后粘贴到上方识别。';
     for(const link of r.links){const b=document.createElement('button');b.className='page-link';const type=document.createElement('span');type.className='page-link-type';type.textContent=pageLinkType(link);const label=document.createElement('span');label.textContent=(link.download?'↓ ':'')+(link.text||link.url);b.append(type,label);b.title=link.url;b.addEventListener('click',()=>{loadLink(link.url,true);$('linkResults').hidden=true;if(link.filename)$('fileName').value=safeName(link.filename);});$('linkList').append(b);}
   });
 });

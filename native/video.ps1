@@ -358,7 +358,10 @@ function Invoke-VideoActionCore($message) {
     return @{ok=$true; id=$id; directory=$settings.directory}
 }
 function Assert-GalleryImage([string]$url,[string]$sourceKind='xiaohongshu',[bool]$resolveDns=$false) {
-    if($sourceKind -eq 'webpage'){return Assert-GalleryWebUrl $url $resolveDns}
+    if($sourceKind -eq 'webpage'){
+        if($url -clike 'data:*'){$null=Read-GalleryInlineSvg $url;return $url}
+        return Assert-GalleryWebUrl $url $resolveDns
+    }
     $uri=$null
     if(-not [Uri]::TryCreate($url,[UriKind]::Absolute,[ref]$uri) -or $uri.Scheme -ne 'https' -or $uri.Port -ne 443 -or $uri.UserInfo -or $uri.Host -notmatch '(^|\.)xhscdn\.com$'){throw '图集图片地址无效。'}
     return $uri.AbsoluteUri
@@ -423,7 +426,9 @@ function Invoke-GalleryDownload($job,$jobPath,$logPath) {
             $number=if($item.originalIndex){[int]$item.originalIndex}else{$index}
             $response=$null;$temp=Join-Path $job.directory ('{0:D3}.{1}.part' -f $number,[Guid]::NewGuid().ToString('N'));$converted=$temp+'.converted'
             try {
-                if($job.sourceKind -eq 'webpage'){
+                if($job.sourceKind -eq 'webpage' -and $url -clike 'data:*'){
+                    $bytes=Read-GalleryInlineSvg $url
+                }elseif($job.sourceKind -eq 'webpage'){
                     $null=Invoke-GalleryNetwork $url 'webpage' 'GET' $temp
                     $bytes=[IO.File]::ReadAllBytes($temp)
                 }else{

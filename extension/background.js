@@ -192,7 +192,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     })().then(reply,e=>reply({ok:false,error:e.message}));return true;
   }
 
-  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-gallery-image-info','video-page-media','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','video-sniff-start','video-sniff-list','video-sniff-stop','video-sniff-download','download-page-links','hover-download-set'].includes(message.action)) {
+  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-gallery-image-info','video-page-media','video-image-preview','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','video-sniff-start','video-sniff-list','video-sniff-stop','video-sniff-download','download-page-links','hover-download-set'].includes(message.action)) {
     (async()=>{
       if(message.action==='hover-download-set')return setHoverDownload(message.enabled===true,message.windowId);
       if(message.action==='download-page-links')return downloadPageLinks(message.windowId);
@@ -212,6 +212,11 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(message.action==='video-pause' && !host.capabilities?.includes('task-progress'))throw Error(`当前连接的本地程序未声明暂停能力（版本：${host.version || '未知'}；路径：${host.hostPath || '未提供'}）。请运行“开始使用.cmd → 更新 / 修复”，然后在 chrome://extensions 重新加载精彩摘录并重新打开侧边栏。更新扩展本身不会更新本地程序。`);
       if((message.action==='video-file-probe'||message.genericMedia||message.maxActive!==undefined) && !host.capabilities?.includes('download-suite'))throw Error('请更新本地程序以使用探测、队列或通用流媒体功能。');
       if((message.action==='video-gallery-image-info'||message.imageFormat&&message.imageFormat!=='original')&&!host.capabilities?.includes('gallery-image-options-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用图片信息和格式转换。');
+      if(['video-image-preview','video-page-media'].includes(message.action)&&!host.capabilities?.includes('gallery-image-types-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用全部图片类型获取。');
+      if(message.action==='video-image-preview'){
+        const url=webpageUrl(message.url);if(!url||!/\.(jpe?g|gif|png|bmp|svg|webp|ico|tiff?|avif)$/i.test(new URL(url).pathname))throw Error('请填写支持的图片文件网址。');
+        return native({action:'video-gallery-preview',url,title:new URL(url).pathname.split('/').pop(),images:[{url,width:0,height:0}]});
+      }
       if(message.action==='video-page-media'){
         if(!host.capabilities?.includes('webpage-gallery-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用网页图片获取。');
         const captured=await collectPageMedia(message.windowId,message.url);

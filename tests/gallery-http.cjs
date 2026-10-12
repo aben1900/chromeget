@@ -13,6 +13,14 @@ function fixture(routes,addresses=['93.184.216.34']){
 }
 async function reject(fn){await assert.rejects(fn)}
 (async()=>{
+ for(const [mime,want] of [['image/jpeg','jpeg'],['image/gif','gif'],['image/png','png'],['image/bmp','bmp'],['image/svg+xml','svg'],['image/webp','webp'],['image/x-icon','ico'],['image/vnd.microsoft.icon','ico'],['image/tiff','tiff'],['image/avif','avif']]){
+  const url='https://public.example/wrong.jpg?fmt=png';const f=fixture({[url]:{headers:{'content-type':mime+'; charset=utf-8','content-length':'100'}}});
+  const metadata=await fetchImage({url,sourceKind:'webpage',method:'HEAD'},f);assert.equal(metadata.format,want,'MIME must override path and query');
+ }
+ for(const [url,want] of [['https://public.example/picture.TIF?cache=123','tiff'],['https://public.example/picture.jpg?fmt=avif','avif'],['https://public.example/picture.svg?cache=123','svg']]){
+  const f=fixture({[url]:{headers:{}}});const metadata=await fetchImage({url,sourceKind:'webpage',method:'HEAD'},f);assert.equal(metadata.format,want,'Missing MIME should retain URL type hint');
+ }
+ {const url='https://public.example/picture.constructor';const f=fixture({[url]:{headers:{'content-type':'__proto__'}}});assert.equal((await fetchImage({url,sourceKind:'webpage',method:'HEAD'},f)).format,'','Unrecognized MIME and extension remain unknown')}
  let f=fixture({'https://public.example/image':{status:302,headers:{location:'https://cdn.example/a.png'}},'https://cdn.example/a.png':{headers:{'content-type':'image/png','content-length':'4'},body:[137,80,78,71]}});
  const dest=path.join(root,'image');const result=await fetchImage({url:'https://public.example/image',sourceKind:'webpage',method:'GET',destination:dest},f);
  assert.equal(result.format,'png');assert.equal(result.bytes,4);assert.equal(fs.readFileSync(dest).length,4);assert.equal(f.calls.length,2);assert.equal(f.resolutions,2);assert.equal(f.calls[0].address,'93.184.216.34');assert.equal(f.calls[1].address,'93.184.216.34');assert.ok(!f.calls.some(x=>x.headers.Cookie||x.headers.Authorization));

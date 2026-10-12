@@ -25,15 +25,18 @@ function Read-GalleryDraft($message,[string]$jobs) {
     $draft=Read-VideoJson (Join-Path $jobs ($message.draftId+'.gallery.json'))
     if(@($draft.images).Count -lt 1 -or @($draft.images).Count -gt 100){throw '图集图片数量无效。'}
     if([DateTime]::Parse($draft.created).ToUniversalTime().AddMinutes(30) -lt (Get-Date).ToUniversalTime()){throw '图片链接可能已过期，请重新获取图集后确认。'}
-    foreach($item in $draft.images){$null=Assert-GalleryImage $item.url $draft.sourceKind}
+    $inlineSize=0
+    foreach($item in $draft.images){$null=Assert-GalleryImage $item.url $draft.sourceKind;if($item.url -clike 'data:*'){$inlineSize+=$item.url.Length}}
+    if($inlineSize -gt 524288){throw '内联 SVG 总大小超过限制。'}
     return $draft
 }
 function Save-WebGalleryPreview($message,$jobs,$directory) {
     $url=Assert-GalleryWebUrl ([string]$message.url)
     if(@($message.images).Count -gt 100){throw '每次最多获取 100 张网页图片。'}
-    $seen=@{};$images=@(foreach($item in @($message.images)){
-        try{$imageUrl=Assert-GalleryWebUrl ([string]$item.url)}catch{continue}
+    $inlineSize=0;$seen=@{};$images=@(foreach($item in @($message.images)){
+        try{$imageUrl=Assert-GalleryImage ([string]$item.url) 'webpage'}catch{continue}
         if($seen.ContainsKey($imageUrl)){continue};$seen[$imageUrl]=$true
+        if($imageUrl -clike 'data:*'){if($inlineSize+$imageUrl.Length -gt 524288){continue};$inlineSize+=$imageUrl.Length}
         $width=0;$height=0
         if([int]::TryParse([string]$item.width,[ref]$width)){$width=[Math]::Min(100000,[Math]::Max(0,$width))}
         if([int]::TryParse([string]$item.height,[ref]$height)){$height=[Math]::Min(100000,[Math]::Max(0,$height))}
@@ -112,7 +115,7 @@ function Invoke-GalleryHead([string]$url,[string]$sourceKind) {
         $response=Invoke-GalleryRequest $client $url 'HEAD' $sourceKind
         $null=$response.EnsureSuccessStatusCode()
         $type=[string]$response.Content.Headers.ContentType.MediaType
-        $format=switch($type.ToLowerInvariant()){'image/jpeg'{'jpeg'}'image/png'{'png'}'image/webp'{'webp'}'image/gif'{'gif'}default{''}}
+        $format=Get-GalleryMetadataFormat $type $url
         $bytes=$response.Content.Headers.ContentLength
         if($null -eq $bytes -or $bytes -lt 0){$bytes=$null}
         return @{format=$format;bytes=$bytes}
@@ -123,9 +126,58 @@ function Get-GalleryImageInfo($message,[string]$jobs) {
     if(($index -isnot [int] -and $index -isnot [long]) -or $index -lt 0 -or $index -ge @($draft.images).Count){throw '图片编号无效。'}
     $item=$draft.images[$index]
     $url=Assert-GalleryImage $item.url $draft.sourceKind
-    $metadata=@{format='';bytes=$null}
-    try{$metadata=Invoke-GalleryHead $url $draft.sourceKind}catch{}
-    return @{ok=$true;format=$metadata.format;bytes=$metadata.bytes;width=$item.width;height=$item.height}
+    $metadata=@{format=(Get-GalleryMetadataFormat '' $url);bytes=$null}
+    if($url -clike 'data:*'){$metadata=@{format='svg';bytes=(Read-GalleryInlineSvg $url).Length}}
+    else{try{$head=Invoke-GalleryHead $url $draft.sourceKind;$metadata.bytes=$head.bytes;if($head.format){$metadata.format=$head.format}}catch{}}
+    return @{ok=$true;format=$metadata.format;bytes=$metadata.bytes;width=$item.width;height=$item.height;canConvert=($metadata.format -ne 'svg')}
+}
+function Get-GalleryMetadataFormat([string]$mime,[string]$url='') {
+    $types=@{'image/jpeg'='jpeg';'image/jpg'='jpeg';'image/pjpeg'='jpeg';'image/png'='png';'image/gif'='gif';'image/webp'='webp';'image/bmp'='bmp';'image/x-ms-bmp'='bmp';'image/svg+xml'='svg';'image/x-icon'='ico';'image/vnd.microsoft.icon'='ico';'image/tiff'='tiff';'image/x-tiff'='tiff';'image/avif'='avif'}
+    $type=($mime -split ';',2)[0].Trim().ToLowerInvariant()
+    if($types.ContainsKey($type)){return $types[$type]}
+    $uri=$null;if(-not [Uri]::TryCreate($url,[UriKind]::Absolute,[ref]$uri)){return ''}
+    $aliases=@{'jpg'='jpeg';'jpeg'='jpeg';'gif'='gif';'png'='png';'bmp'='bmp';'svg'='svg';'webp'='webp';'ico'='ico';'tif'='tiff';'tiff'='tiff';'avif'='avif'}
+    foreach($part in $uri.Query.TrimStart('?') -split '&'){
+        $pair=$part -split '=',2
+        if($pair.Count -eq 2 -and $pair[0] -match '^(fmt|format|fm|ext)$'){$value=[Uri]::UnescapeDataString($pair[1]).ToLowerInvariant();if($aliases.ContainsKey($value)){return $aliases[$value]}}
+    }
+    $ext=[IO.Path]::GetExtension($uri.AbsolutePath).TrimStart('.').ToLowerInvariant()
+    if($aliases.ContainsKey($ext)){return $aliases[$ext]};return ''
+}
+function Read-GallerySvgDocument([byte[]]$bytes,[int]$limit=33554432) {
+    if($bytes.Length -gt $limit){throw 'SVG 内容超过大小限制。'}
+    $settings=New-Object Xml.XmlReaderSettings
+    $settings.DtdProcessing=[Xml.DtdProcessing]::Prohibit;$settings.XmlResolver=$null
+    $settings.MaxCharactersInDocument=$limit;$settings.MaxCharactersFromEntities=1024
+    $stream=[IO.MemoryStream]::new($bytes);$reader=$null
+    try{
+        $reader=[Xml.XmlReader]::Create($stream,$settings)
+        $document=New-Object Xml.XmlDocument;$document.XmlResolver=$null;$document.PreserveWhitespace=$true
+        $document.Load($reader)
+        if($document.DocumentElement.LocalName -cne 'svg' -or $document.DocumentElement.NamespaceURI -cne 'http://www.w3.org/2000/svg'){throw '内容不是 SVG 图片。'}
+        return ,$document
+    }finally{if($reader){$reader.Dispose()};$stream.Dispose()}
+}
+function Read-GalleryInlineSvg([string]$url) {
+    if($url.Length -gt 174790 -or $url -cnotmatch '^data:image/svg\+xml;base64,([A-Za-z0-9+/]*={0,2})$'){throw '内联 SVG 地址无效。'}
+    try{$bytes=[Convert]::FromBase64String($Matches[1])}catch{throw '内联 SVG 编码无效。'}
+    if($url -cne ('data:image/svg+xml;base64,'+[Convert]::ToBase64String($bytes))){throw '内联 SVG 编码无效。'}
+    $document=Read-GallerySvgDocument $bytes 131072
+    $elements='svg,g,defs,symbol,use,path,rect,circle,ellipse,line,polyline,polygon,text,tspan,title,desc,linearGradient,radialGradient,stop,clipPath,mask,pattern' -split ','
+    $attributes='id,x,y,x1,y1,x2,y2,cx,cy,r,rx,ry,width,height,viewBox,preserveAspectRatio,d,points,transform,fill,fill-opacity,fill-rule,stroke,stroke-width,stroke-opacity,stroke-linecap,stroke-linejoin,stroke-miterlimit,stroke-dasharray,stroke-dashoffset,opacity,color,clip-path,clip-rule,mask,vector-effect,gradientUnits,gradientTransform,spreadMethod,offset,stop-color,stop-opacity,fx,fy,fr,patternUnits,patternContentUnits,patternTransform,clipPathUnits,maskUnits,maskContentUnits,text-anchor,dominant-baseline,font-family,font-size,font-style,font-weight,letter-spacing,word-spacing,dx,dy,rotate,textLength,lengthAdjust,href' -split ','
+    if($document.SelectNodes('//processing-instruction()').Count){throw '内联 SVG 包含活动内容。'}
+    foreach($node in $document.SelectNodes('//*')){
+        if($node.NamespaceURI -cne 'http://www.w3.org/2000/svg' -or $node.LocalName -cnotin $elements){throw '内联 SVG 包含不支持的元素。'}
+        foreach($attribute in $node.Attributes){
+            if($attribute.Name -ceq 'xmlns' -and $attribute.Value -ceq 'http://www.w3.org/2000/svg'){continue}
+            if($attribute.NamespaceURI -or $attribute.Name -cnotin $attributes){throw '内联 SVG 包含不支持的属性。'}
+            $value=$attribute.Value
+            if($value -match '@import|[\\\x00-\x1f<>]' -or ($attribute.Name -ceq 'href' -and $value -cnotmatch '^#[A-Za-z_][\w.:-]*$')){throw '内联 SVG 包含外部或活动内容。'}
+            $withoutLocalUrls=[regex]::Replace($value,'(?i)url\(\s*#[A-Za-z_][\w.:-]*\s*\)','')
+            if($withoutLocalUrls -match '(?i)url\s*\('){throw '内联 SVG 包含外部资源。'}
+        }
+    }
+    return ,$bytes
 }
 function Get-GalleryImageFormat($format) {
     if($null -eq $format -or [string]$format -eq ''){return 'original'}
@@ -138,6 +190,16 @@ function Get-GalleryImageExtension([byte[]]$bytes) {
     if([BitConverter]::ToString($bytes,0,8) -eq '89-50-4E-47-0D-0A-1A-0A'){return 'png'}
     if([Text.Encoding]::ASCII.GetString($bytes,0,4) -eq 'RIFF' -and [Text.Encoding]::ASCII.GetString($bytes,8,4) -eq 'WEBP'){return 'webp'}
     if([Text.Encoding]::ASCII.GetString($bytes,0,6) -in @('GIF87a','GIF89a')){return 'gif'}
+    if($bytes[0] -eq 0x42 -and $bytes[1] -eq 0x4d -and $bytes.Length -ge 26){return 'bmp'}
+    if([BitConverter]::ToString($bytes,0,4) -in @('49-49-2A-00','4D-4D-00-2A','49-49-2B-00','4D-4D-00-2B')){return 'tiff'}
+    if([BitConverter]::ToString($bytes,0,4) -eq '00-00-01-00' -and [BitConverter]::ToUInt16($bytes,4) -gt 0 -and $bytes.Length -ge 22){return 'ico'}
+    if([Text.Encoding]::ASCII.GetString($bytes,4,4) -eq 'ftyp'){
+        $boxSize=[long]$bytes[0]*16777216+[long]$bytes[1]*65536+[long]$bytes[2]*256+$bytes[3]
+        if($boxSize -ge 16 -and $boxSize -le $bytes.Length -and $boxSize -le 4096){
+            for($offset=8;$offset+4 -le $boxSize;$offset+=4){if($offset -eq 12){continue};if([Text.Encoding]::ASCII.GetString($bytes,$offset,4) -in @('avif','avis')){return 'avif'}}
+        }
+    }
+    try{$null=Read-GallerySvgDocument $bytes;return 'svg'}catch{}
     throw '服务器未返回支持的图片格式。'
 }
 function Read-GalleryImageBody($response) {
@@ -159,6 +221,7 @@ function Convert-GalleryImage([string]$source,[string]$destination,[string]$form
     if($format -eq 'original'){throw '原图无需转换。'}
     if(Test-Path -LiteralPath $destination){throw '目标图片已存在，已保留原文件。'}
     if((Get-Item -LiteralPath $source).Length -gt 33554432){throw '单张图片超过 32 MB 转换限制。'}
+    if((Get-GalleryImageExtension ([IO.File]::ReadAllBytes($source))) -eq 'svg'){throw 'SVG 仅支持下载原图。'}
     $process=$null
     $arguments=@('-hide_banner','-loglevel','error','-nostdin','-n','-max_alloc','268435456','-threads','1','-max_pixels','40000000','-protocol_whitelist','file,pipe','-i',$source,'-frames:v','1','-threads','1')
     if($format -eq 'jpeg'){$arguments+=@('-filter_complex','[0:v]split[fg][bg];[bg]lutrgb=r=255:g=255:b=255,lut=a=255[white];[white][fg]overlay=format=auto,format=yuvj444p[out]','-map','[out]','-c:v','mjpeg','-q:v','2')}

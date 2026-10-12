@@ -58,3 +58,13 @@ main.video-page{max-width:720px;display:flex;flex-direction:column;gap:12px}
 @media(max-width:330px){#galleryGrid{grid-template-columns:minmax(0,1fr)}}
 
 .page-media-videos{display:grid;gap:6px}.page-media-videos button{text-align:left;overflow-wrap:anywhere}
+
+/* Type filter: counts refer to the acquired list; selection acts on visible images. */
+.gallery-type-filter{position:relative;align-self:flex-start;z-index:6}
+.video-page .gallery-type-toggle,.gallery-type-toggle{font:14px/1.4 system-ui,sans-serif;padding:6px 10px;min-height:32px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#333;text-align:left;cursor:pointer}
+.gallery-type-menu{position:absolute;top:calc(100% + 5px);left:0;min-width:166px;max-height:min(380px,65vh);overflow:auto;background:#fff;padding:5px;border:1px solid #ddd;border-radius:8px;box-shadow:0 6px 20px #0002;z-index:8}
+.video-page .gallery-type-menu button,.gallery-type-menu button{display:block;width:100%;padding:7px 10px;min-height:0;border:0;border-radius:4px;text-align:left;background:#fff;color:#444;font:14px/1.4 system-ui,sans-serif;white-space:nowrap;cursor:pointer}
+.gallery-type-menu button[aria-checked=true]{color:#111;font-weight:600}.gallery-type-menu button:not(:disabled):hover,.gallery-type-menu button:focus-visible{background:#eee}.gallery-type-menu button:disabled{opacity:1;color:#aaa;cursor:default}.gallery-type-menu button:disabled:hover{background:#fff}
+#galleryGrid .gallery-preview-fallback{display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;box-sizing:border-box;padding:16px;text-align:center;font-size:13px;line-height:1.6;color:#777;background:#f6f6f6;border-radius:6px}.gallery-filter-empty{grid-column:1/-1;padding:20px 8px;color:#777;font-size:13px}
+
+.gallery-type-progress{margin-left:8px;font-size:11px;color:#888;white-space:nowrap}

@@ -14,7 +14,14 @@ function validateUrl(value,sourceKind){
  if(net.isIP(host))assertPublic(host);else if(!host.includes('.')||/(^|\.)(localhost|local|internal|lan|home|test|invalid|onion)$/.test(host))throw new Error('不允许访问本机或内网地址。');
  url.hash='';return url;
 }
-function format(headers){return ({'image/jpeg':'jpeg','image/png':'png','image/webp':'webp','image/gif':'gif'})[String(headers['content-type']||'').split(';')[0].trim().toLowerCase()]||''}
+function format(headers,url){
+ const mime=String(headers['content-type']||'').split(';')[0].trim().toLowerCase();
+ const types={'image/jpeg':'jpeg','image/jpg':'jpeg','image/pjpeg':'jpeg','image/png':'png','image/webp':'webp','image/gif':'gif','image/bmp':'bmp','image/x-ms-bmp':'bmp','image/svg+xml':'svg','image/x-icon':'ico','image/vnd.microsoft.icon':'ico','image/tiff':'tiff','image/x-tiff':'tiff','image/avif':'avif'};
+ if(Object.hasOwn(types,mime))return types[mime];
+ const aliases={jpg:'jpeg',jpeg:'jpeg',gif:'gif',png:'png',bmp:'bmp',svg:'svg',webp:'webp',ico:'ico',tif:'tiff',tiff:'tiff',avif:'avif'};
+ for(const [key,value] of url.searchParams)if(/^(fmt|format|fm|ext)$/i.test(key)&&Object.hasOwn(aliases,value.toLowerCase()))return aliases[value.toLowerCase()];
+ const ext=/\.([a-z0-9]+)$/i.exec(url.pathname)?.[1]?.toLowerCase();return Object.hasOwn(aliases,ext)?aliases[ext]:'';
+}
 function proxyAgent(proxyValue,url,signal){
  const proxy=new URL(proxyValue);if(!['http:','https:'].includes(proxy.protocol)||proxy.username||proxy.password)throw new Error('系统代理配置不受支持。');
  const secure=url.protocol==='https:';const host=url.hostname.replace(/^\[|\]$/g,'');const authority=url.hostname+':'+(url.port||(secure?443:80));
@@ -59,7 +66,7 @@ async function fetchImage(input,deps={}){
     url=validateUrl(new URL(response.headers.location,url).href,input.sourceKind);continue;
    }
    if(status<200||status>=300){response.destroy();throw new Error('图片服务器未返回成功响应。')}
-   const length=Number(response.headers['content-length']);const bytes=Number.isSafeInteger(length)&&length>=0?length:null;const info={ok:true,format:format(response.headers),bytes};
+   const length=Number(response.headers['content-length']);const bytes=Number.isSafeInteger(length)&&length>=0?length:null;const info={ok:true,format:format(response.headers,url),bytes};
    if(input.method==='HEAD'){response.destroy();return info}
    if(bytes>LIMIT){response.destroy();throw new Error('单张图片超过 32 MB 限制。')}
    try{file=await fs.promises.open(input.destination,'wx');created=true}catch(error){response.destroy();throw error}

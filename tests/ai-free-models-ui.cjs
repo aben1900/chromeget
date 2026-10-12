@@ -13,8 +13,8 @@ const fs=require('fs'),assert=require('assert/strict'),{chromium}=require('playw
   for(const file of ['library.css','theme.css','model-navigation.css'])await page.addStyleTag({path:'extension/'+file});
   await page.evaluate(()=>{window.chrome={runtime:{sendMessage:m=>window.request(m)},storage:{local:{get:async()=>({}),set:async()=>{}}}}});
   for(const file of ['library-ai-api.js','library-ai-view.js','library-ai-settings.js'])await page.addScriptTag({path:'extension/'+file});
-  const quick=id=>page.locator('[data-free-preset="'+id+'"]');
-  await quick('zhipu-free').click();
+  assert.equal(await page.getByRole('region',{name:'免费模型快捷配置'}).count(),0);
+  await page.click('#aiAddModel');await page.selectOption('#aiProvider','zhipu-free');
   assert.equal(await page.inputValue('#aiBaseUrl'),'https://open.bigmodel.cn/api/paas/v4');
   assert.equal(await page.inputValue('#aiModel'),'glm-4-flash-250414');
   assert.equal(await page.locator('#aiModelsEditor .catalog-entry').count(),2);
@@ -32,12 +32,11 @@ const fs=require('fs'),assert=require('assert/strict'),{chromium}=require('playw
   const saved=sent.findLast(m=>m.action==='ai-settings-save');assert.deepEqual(saved.testReceipts,['receipt-THUDM/GLM-4-9B-0414']);
   assert.equal(saved.provider,'custom');assert.equal(settings.defaultProfileId,'original');assert.equal(await page.inputValue('#aiKey'),'');
   assert.equal(await page.locator('#aiDefaultModel option[data-passed]').count(),2,'tested free model becomes selectable alongside existing default');
-  await quick('siliconflow-free').click();assert.match(await page.textContent('#aiKeyState'),/已保存/);await page.click('#aiSaveSettings');await page.waitForSelector('#aiModelDialog:not([open])',{state:'attached'});
+  await page.locator('[data-model-id="saved"]').getByRole('button',{name:'编辑',exact:true}).click();assert.match(await page.textContent('#aiKeyState'),/已保存/);await page.click('#aiSaveSettings');await page.waitForSelector('#aiModelDialog:not([open])',{state:'attached'});
   assert.equal(sent.at(-1).profileId,'saved','existing free profile is reused');assert.ok(!('key' in sent.at(-1)),'saved key is preserved, not exposed');assert.equal(Object.keys(settings.profiles).length,2);
-  // Mixed paid/free profiles must not be silently reused as a free preset.
-  settings.profiles.saved.models.push({id:'Pro/paid-model',label:'paid'});await page.click('#aiReconnect');await quick('siliconflow-free').click();assert.equal(await page.textContent('#aiDialogTitle'),'添加配置');
+  await page.click('#aiAddModel');await page.selectOption('#aiProvider','siliconflow-free');assert.equal(await page.textContent('#aiDialogTitle'),'添加配置');
   await page.fill('#aiBaseUrl','https://example.test/v1');assert.equal(await page.locator('#aiPresetInfo').isVisible(),false);await page.click('#aiCancelDialog');
   assert.deepEqual(errors,[]);assert.equal(sent.some(m=>m.action==='ai-default-set'),false);
-  console.log('PASS free presets UI: no automatic calls, responsive layout, key isolation, test/save, default preservation, deduplication and mixed-profile isolation');
+  console.log('PASS settings without quick-preset panel: manual presets, responsive layout, key isolation, test/save, editing and default preservation');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

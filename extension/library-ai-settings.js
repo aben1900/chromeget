@@ -9,7 +9,7 @@
  const dialog=$('aiModelDialog'),importDialog=$('aiImportDialog');
  function selected(){const p=profiles[defaultId];if(!connected||!p||!p.hasKey)throw Error('DEFAULT_MODEL_REQUIRED');return {...p};}
  function setStatus(text){$('aiSettingsStatus').textContent=text;}
- function controls(){$('aiDefaultModel').disabled=busy||!connected||!document.querySelectorAll('#aiDefaultModel option[data-passed]').length;for(const el of $('aiModelList').querySelectorAll('select'))el.disabled=busy;for(const id of ['aiAddModel','aiImportModels'])$(id).disabled=busy||!connected;for(const b of $('aiFreePresets').querySelectorAll('button'))b.disabled=busy||!connected;$('aiReconnect').disabled=busy;for(const b of $('aiModelList').querySelectorAll('button'))b.disabled=busy;}
+ function controls(){$('aiDefaultModel').disabled=busy||!connected||!document.querySelectorAll('#aiDefaultModel option[data-passed]').length;for(const el of $('aiModelList').querySelectorAll('select'))el.disabled=busy;for(const id of ['aiAddModel','aiImportModels'])$(id).disabled=busy||!connected;$('aiReconnect').disabled=busy;for(const b of $('aiModelList').querySelectorAll('button'))b.disabled=busy;}
  function update(r){profiles=r.profiles||{};defaultId=r.defaultProfileId||null;selectionRevision=r.selectionRevision;connected=true;render();const next=JSON.stringify([defaultId,selectionRevision,Object.values(profiles).map(p=>[p.profileId,p.revision])]);if(next!==signature){signature=next;chrome.storage.local.set({aiSettingsUpdated:Date.now()}).catch(()=>{});window.dispatchEvent(new Event('ai-profile-changed'));}}
  function button(text,fn){const b=document.createElement('button');b.type='button';b.textContent=text;b.addEventListener('click',fn);return b;}
  function statusOf(p){return !p.hasKey?'unconfigured':p.lastTest?.revision===p.revision?(p.lastTest.ok?'passed':'failed'):'untested';}
@@ -111,16 +111,6 @@
   const p=freePresets[$('aiProvider').value];const active=p&&$('aiBaseUrl').value.trim().replace(/\/+$/,'')===p.baseUrl&&$('aiProtocol').value===p.protocol;
   $('aiPresetInfo').hidden=!active;if(active){$('aiPresetKeyLink').href=p.keyUrl;$('aiPresetKeyLink').textContent='获取 '+p.label.split(' · ')[0]+' API Key ↗';}else $('aiPresetKeyLink').removeAttribute('href');
  }
- function openFreePreset(id){
-  const preset=freePresets[id];if(!preset||busy||!connected)return;
-  // Reuse one unambiguous account, preserving its key, default model and existing catalog.
-  const matches=Object.values(profiles).filter(p=>presetFor(p)===id&&p.auth==='bearer');
-  const existing=matches.length===1?matches[0]:null;openEditor(existing);$('aiProvider').value=id;
-  if(existing){for(const model of preset.models)if(!draftModels.some(m=>m.id===model.id)&&draftModels.length<200)draftModels.push({...model});renderEditorModels(existing.model);}
-  else{$('aiLabel').value=preset.label;$('aiTags').value=preset.tags.join(', ');$('aiProvider').onchange();}
-  syncPresetInfo();$('aiKey').focus();
- }
- for(const [id,preset] of Object.entries(freePresets)){const b=button(preset.label.split(' · ')[0],()=>openFreePreset(id));b.dataset.freePreset=id;b.disabled=true;b.title=preset.models.map(m=>m.id).join(' / ');$('aiFreePresets').append(b);}
  $('aiProvider').onchange=()=>{
   const presets={...freePresets,openai:{baseUrl:'https://api.openai.com/v1',model:'gpt-4.1-mini',protocol:'responses',label:'OpenAI'},deepseek:{baseUrl:'https://api.deepseek.com',model:'deepseek-flash',protocol:'chat-completions',label:'DeepSeek'},claude:{baseUrl:'https://api.anthropic.com',model:'',protocol:'anthropic',label:'Anthropic'}};
   const presetId=$('aiProvider').value,p=presets[presetId];

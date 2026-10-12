@@ -1,5 +1,5 @@
 (() => {
- const icons={open:'<path d="M14 3h7v7M21 3l-10 10M10 4H4v16h16v-6"/>',download:'<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>'};
+ const icons={open:'<path d="M14 3h7v7M21 3l-10 10M10 4H4v16h16v-6"/>',download:'<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',remove:'<path d="M5 5l14 14M19 5 5 19"/>'};
  const formats={jpeg:'JPG',gif:'GIF',png:'PNG',bmp:'BMP',svg:'SVG',webp:'WEBP',ico:'ICO',tiff:'TIFF',avif:'AVIF'};
  function normalize(value){const name=String(value||'').toLowerCase();return ({jpg:'jpeg',tif:'tiff'})[name]||(formats[name]?name:'');}
  function imageType(info){
@@ -8,24 +8,26 @@
   try{return normalize(new URL(info.url).pathname.match(/\.([a-z]+)$/i)?.[1]);}catch{return '';}
  }
  function render(container,images,options){
-  let busy=false,disposed=false,openMenu=null,running=0,filter='any',filterOpen=false,initialized=false;const waiting=[],items=[],checks=[],blobUrls=[];
+  let busy=false,disposed=false,openMenu=null,running=0,filterOpen=false,initialized=false;const filters=new Set(),waiting=[],items=[],checks=[],blobUrls=[];
   let filterButton,filterMenu,filterProgress;const filterChoices=[];
   const make=(tag,cls,text)=>{const el=document.createElement(tag);if(cls)el.className=cls;if(text)el.textContent=text;return el;};
   function closeMenu(){if(!openMenu)return;openMenu.menu.remove();openMenu.button.setAttribute('aria-expanded','false');openMenu=null;}
-  function queueMetadata(item){if(item.requested||disposed)return;item.requested=true;waiting.push(item);pump();}
+  function queueMetadata(item){if(item.removed||item.requested||disposed)return;item.requested=true;waiting.push(item);pump();}
   async function pump(){if(disposed||running>=3||!waiting.length)return;const item=waiting.shift();running++;pump();try{const data=await options.metadata(item.index);if(!disposed){item.info={...item.info,...data,format:normalize(data.format)||item.info.format};showInfo(item);}}catch{if(!disposed){item.info.bytes=null;showInfo(item);}}finally{item.resolved=true;running--;if(!disposed)refreshFilter();pump();}}
-  const visibleIndexes=()=>items.filter(item=>filter==='any'||imageType(item.info)===filter).map(item=>item.index);
+  const remainingItems=()=>items.filter(item=>!item.removed);
+  const visibleIndexes=()=>remainingItems().filter(item=>!filters.size||filters.has(imageType(item.info))).map(item=>item.index);
   function closeFilter(focus=false){filterOpen=false;if(filterMenu)filterMenu.hidden=true;if(filterButton){filterButton.setAttribute('aria-expanded','false');if(focus)filterButton.focus();}}
   function refreshFilter(notify=true){
    if(!initialized)return;
-   const counts={any:items.length};for(const item of items){const type=imageType(item.info);if(type)counts[type]=(counts[type]||0)+1;item.figure.hidden=filter!=='any'&&type!==filter;}
-   for(const choice of filterChoices){const count=counts[choice.value]||0;choice.button.textContent=(choice.value===filter?'✓ ':'　 ')+choice.label+' ('+count+')';choice.button.setAttribute('aria-label',choice.label+' ('+count+')');choice.button.disabled=busy||!count;choice.button.setAttribute('aria-checked',String(filter===choice.value));}
-   if(filterProgress){const resolved=items.filter(item=>item.resolved).length;filterProgress.textContent=resolved<items.length?'确认类型 '+resolved+'/'+items.length:'';filterProgress.hidden=resolved===items.length;}
-   if(filterButton)filterButton.textContent='Type · '+(filter==='any'?'Any':formats[filter])+' ('+(counts[filter]||0)+') ⌄';
-   empty.hidden=visibleIndexes().length>0;
+   const remaining=remainingItems(),counts={any:remaining.length};for(const item of remaining){const type=imageType(item.info);if(type)counts[type]=(counts[type]||0)+1;item.figure.hidden=filters.size>0&&!filters.has(type);}
+   for(const choice of filterChoices){const count=counts[choice.value]||0,selected=choice.value==='any'?!filters.size:filters.has(choice.value);choice.button.textContent=(selected?'✓ ':'　 ')+choice.label+' ('+count+')';choice.button.setAttribute('aria-label',choice.label+' ('+count+')');choice.button.disabled=busy||(!count&&!selected);choice.button.setAttribute('aria-checked',String(selected));}
+   if(filterProgress){const resolved=remaining.filter(item=>item.resolved).length;filterProgress.textContent=resolved<remaining.length?'确认类型 '+resolved+'/'+remaining.length:'';filterProgress.hidden=resolved===remaining.length;}
+   if(filterButton){const labels=Object.keys(formats).filter(type=>filters.has(type)).map(type=>formats[type]);filterButton.textContent='Type · '+(labels.length?labels.slice(0,2).join('、')+(labels.length>2?' 等 '+labels.length+' 种':''):'Any')+' ('+visibleIndexes().length+') ⌄';filterButton.title='多选图片类型：'+(labels.join('、')||'Any（全部）')+'；类型未知的图片保留在 Any 中';}
+   empty.hidden=visibleIndexes().length>0;empty.textContent=remaining.length?'所选类型暂无图片，请选择其他类型。':'图集中已无图片，可重新获取或添加截图。';
    if(notify)options.onFilterChange?.();
   }
-  function setFilter(value){if(value!=='any'&&!formats[value])return;filter=value;closeMenu();closeFilter();refreshFilter();}
+  function setFilter(value){if(value!=='any'&&!formats[value])return;filters.clear();if(value!=='any')filters.add(value);closeMenu();closeFilter();refreshFilter();}
+  function toggleFilter(value){if(busy)return;if(value==='any')filters.clear();else if(filters.has(value))filters.delete(value);else filters.add(value);closeMenu();refreshFilter();}
   function showInfo(item){
    const info=item.info,w=item.img.naturalWidth||Number(info.width),h=item.img.naturalHeight||Number(info.height);
    item.format.textContent=formats[imageType(info)]||'类型未知';
@@ -49,28 +51,29 @@
   for(const [index,info]of images.entries()){
    const figure=make('figure','gallery-item'),header=make('div','gallery-card-header'),actions=make('div','gallery-card-actions'),badges=make('div','gallery-badges');
    const check=make('input');check.type='checkbox';check.checked=true;check.id='gallery-image-'+index;check.setAttribute('aria-label','选择第 '+(index+1)+' 张图片');checks.push(check);
-   const open=iconButton('新标签页打开图片','open'),download=iconButton('下载为','download');download.setAttribute('aria-haspopup','menu');download.setAttribute('aria-expanded','false');
-   const format=make('span','gallery-format'),dimensions=make('span','gallery-dimensions'),bytes=make('span','gallery-bytes');badges.append(format,dimensions,bytes);actions.append(check,open,download);header.append(actions,badges);
+   const open=iconButton('新标签页打开图片','open'),download=iconButton('下载为','download'),remove=iconButton('从图集中移除','remove');remove.title='从本次图集中移除，不删除已下载文件';download.setAttribute('aria-haspopup','menu');download.setAttribute('aria-expanded','false');
+   const format=make('span','gallery-format'),dimensions=make('span','gallery-dimensions'),bytes=make('span','gallery-bytes');badges.append(format,dimensions,bytes);actions.append(check,open,download,remove);header.append(actions,badges);
    const label=make('label','gallery-image-label');label.htmlFor=check.id;const img=make('img');img.alt='第 '+(index+1)+' 张图片';img.loading='lazy';img.referrerPolicy='no-referrer';img.src=info.url;
    const fallback=make('span','gallery-preview-fallback','预览不可用，可下载原图');fallback.hidden=true;
    label.append(img,fallback);const caption=make('figcaption','','第 '+(index+1)+' 张'),status=make('div','gallery-image-status');status.setAttribute('role','status');figure.append(header,label,caption,status);figure.dataset.selected='true';
-   const item={index,info:{...info},figure,img,check,open,download,format,dimensions,bytes,status};items.push(item);
+   const item={index,info:{...info},removed:!!info.excluded,figure,img,check,open,download,remove,format,dimensions,bytes,status};items.push(item);
+   remove.onclick=()=>{if(busy||item.removed)return;closeMenu();item.removed=true;check.checked=false;observer?.unobserve(figure);const pending=waiting.indexOf(item);if(pending>=0)waiting.splice(pending,1);figure.remove();options.onRemove?.(index);refreshFilter();};
    check.onchange=()=>{figure.dataset.selected=String(check.checked);options.onSelection(index,check.checked);};
    open.onclick=()=>{try{let url=info.url;if(/^data:image\/(svg\+xml|png);base64,/.test(url)){if(!item.openUrl){const bytes=Uint8Array.from(atob(url.split(',')[1]),c=>c.charCodeAt(0));item.openUrl=URL.createObjectURL(new Blob([bytes],{type:url.slice(5,url.indexOf(';'))}));blobUrls.push(item.openUrl);}url=item.openUrl;}Promise.resolve(options.open(url)).catch(()=>{status.textContent='无法打开图片，请重试';});}catch{status.textContent='无法打开图片，请重试';}};
    download.onclick=()=>downloadMenu(item);img.onload=()=>{img.hidden=false;fallback.hidden=true;showInfo(item);};img.onerror=()=>{img.hidden=true;fallback.hidden=false;fallback.textContent=imageType(item.info)==='tiff'?'浏览器无法预览 TIFF，可下载原图':'预览不可用，可下载原图';};showInfo(item);
   }
-  const empty=make('p','gallery-filter-empty','此类型暂无图片，请选择其他类型。');empty.hidden=true;container.replaceChildren(...items.map(x=>x.figure),empty);
+  const empty=make('p','gallery-filter-empty','此类型暂无图片，请选择其他类型。');empty.hidden=true;container.replaceChildren(...remainingItems().map(x=>x.figure),empty);
   if(options.filterContainer){
    options.filterContainer.classList.add('gallery-type-filter');filterButton=make('button','gallery-type-toggle');filterButton.type='button';filterButton.setAttribute('aria-label','Type 图片类型过滤');filterButton.setAttribute('aria-haspopup','menu');filterButton.setAttribute('aria-expanded','false');filterMenu=make('div','gallery-type-menu');filterMenu.setAttribute('role','menu');filterMenu.setAttribute('aria-label','图片类型');filterMenu.hidden=true;
-   for(const [value,label]of [['any','Any'],...Object.entries(formats)]){const button=make('button');button.type='button';button.setAttribute('role','menuitemradio');button.onclick=()=>{setFilter(value);filterButton.focus();};filterMenu.append(button);filterChoices.push({value,label,button});}
-   filterButton.onclick=()=>{if(busy)return;closeMenu();filterOpen=!filterOpen;filterMenu.hidden=!filterOpen;filterButton.setAttribute('aria-expanded',String(filterOpen));if(filterOpen)filterChoices.find(c=>c.value===filter)?.button.focus();};filterButton.title='按类型筛选；类型未知的图片保留在 Any 中';filterProgress=make('span','gallery-type-progress');filterProgress.setAttribute('role','status');options.filterContainer.replaceChildren(filterButton,filterProgress,filterMenu);
+   for(const [value,label]of [['any','Any'],...Object.entries(formats)]){const button=make('button');button.type='button';button.setAttribute('role','menuitemcheckbox');button.onclick=()=>toggleFilter(value);filterMenu.append(button);filterChoices.push({value,label,button});}
+   filterButton.onclick=()=>{if(busy)return;closeMenu();filterOpen=!filterOpen;filterMenu.hidden=!filterOpen;filterButton.setAttribute('aria-expanded',String(filterOpen));if(filterOpen)filterChoices.find(c=>c.button.getAttribute('aria-checked')==='true'&&!c.button.disabled)?.button.focus();};filterProgress=make('span','gallery-type-progress');filterProgress.setAttribute('role','status');options.filterContainer.replaceChildren(filterButton,filterProgress,filterMenu);
   }
   initialized=true;refreshFilter(false);
-  for(const item of items){if(observer)observer.observe(item.figure);else queueMetadata(item);if(options.filterContainer||!imageType(item.info))queueMetadata(item);}
+  for(const item of remainingItems()){if(observer)observer.observe(item.figure);else queueMetadata(item);if(options.filterContainer||!imageType(item.info))queueMetadata(item);}
   function outside(e){if(openMenu&&!openMenu.menu.contains(e.target)&&!openMenu.button.contains(e.target))closeMenu();if(filterOpen&&!options.filterContainer.contains(e.target))closeFilter();}
   function keyboard(e){if(e.key==='Escape'){if(openMenu){const button=openMenu.button;closeMenu();button.focus();e.preventDefault();}else if(filterOpen){closeFilter(true);e.preventDefault();}}else if(filterOpen&&['ArrowDown','ArrowUp','Home','End'].includes(e.key)){const buttons=filterChoices.map(c=>c.button).filter(b=>!b.disabled),i=buttons.indexOf(document.activeElement);const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next]?.focus();e.preventDefault();}}
   document.addEventListener('click',outside);document.addEventListener('keydown',keyboard);
-  return {checks,getVisibleIndexes:visibleIndexes,setFilter,setBusy(value){busy=value;if(busy){closeMenu();closeFilter();}if(filterButton)filterButton.disabled=busy;for(const item of items){item.check.disabled=busy;item.download.disabled=busy;item.figure.dataset.selected=String(item.check.checked);}refreshFilter(false);},destroy(){disposed=true;waiting.length=0;observer?.disconnect();closeMenu();closeFilter();for(const url of blobUrls)URL.revokeObjectURL(url);document.removeEventListener('click',outside);document.removeEventListener('keydown',keyboard);}};
+  return {checks,getCount:()=>remainingItems().length,getVisibleIndexes:visibleIndexes,setFilter,setBusy(value){busy=value;if(busy){closeMenu();closeFilter();}if(filterButton)filterButton.disabled=busy;for(const item of items){item.check.disabled=busy;item.download.disabled=busy;item.remove.disabled=busy;item.figure.dataset.selected=String(item.check.checked);}refreshFilter(false);},destroy(){disposed=true;waiting.length=0;observer?.disconnect();closeMenu();closeFilter();for(const url of blobUrls)URL.revokeObjectURL(url);document.removeEventListener('click',outside);document.removeEventListener('keydown',keyboard);}};
  }
  window.GalleryCards={render};
 })();

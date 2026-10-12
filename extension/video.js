@@ -64,7 +64,7 @@ function controls() {
   galleryView?.setBusy(busy);
   $('pageMediaCard').hidden=pageMediaUrl!==$('url').value.trim()||!$('pageVideos').childElementCount;
   for(const button of $('pageVideos').querySelectorAll('button'))button.disabled=busy;
-  if(galleryActive){$('galleryCount').textContent='共 '+galleryDraft.images.length+' 张 · 显示 '+visibleGalleryIndexes().length+' 张 · 已选 '+visibleSelection.length+' 张';$('confirmGallery').textContent='确认下载所选 '+visibleSelection.length+' 张图片';}
+  if(galleryActive){$('galleryCount').textContent='共 '+(galleryView?.getCount()??galleryDraft.images.length)+' 张 · 显示 '+visibleGalleryIndexes().length+' 张 · 已选 '+visibleSelection.length+' 张';$('confirmGallery').textContent='确认下载所选 '+visibleSelection.length+' 张图片';}
   const audio=$('mediaMode').value==='audio';$('audioOptions').hidden=!audio;$('videoQuality').hidden=audio;$('height').disabled=busy||audio||!parsedUrl;$('mediaMode').disabled=busy;$('audioFormat').disabled=busy;
   const duplicate=taskActive && runningSelection?.url===parsedUrl && runningSelection?.height===Number($('height').value)&&(runningSelection?.mediaMode||'video')===($('mediaMode').value||'video')&&(runningSelection?.audioFormat||'best')===($('audioFormat').value||'best');
   $('download').disabled=busy || duplicate || !parsedUrl || parsedUrl!==$('url').value.trim();
@@ -94,6 +94,7 @@ function showGallery(data,selection=null){
   galleryView=GalleryCards.render($('galleryGrid'),data.images,{
     filterContainer:$('galleryTypeFilter'),onFilterChange:controls,
     onSelection(index,checked){if(checked)gallerySelected.add(index);else gallerySelected.delete(index);controls();},
+    onRemove(index){data.images[index]={...data.images[index],excluded:true};gallerySelected.delete(index);controls();},
     open:url=>chrome.tabs.create({url}),
     metadata:index=>data.images[index].captured?Promise.resolve(data.images[index]):send('video-gallery-image-info',{draftId:data.draftId,index}),
     onDownload:(index,imageFormat)=>startGallery([index],imageFormat,false)

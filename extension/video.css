@@ -5,6 +5,7 @@ main.video-page{max-width:720px;display:flex;flex-direction:column;gap:12px}
 .video-page input,.video-page select{width:100%;min-width:0;height:40px;padding:9px 11px;border:1px solid #cacaca;border-radius:8px;background:#ffffff;color:inherit;font:inherit;font-size:13px}
 .video-page input:focus,.video-page select:focus{outline:2px solid #5c5c5c;outline-offset:2px}
 .video-page .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}
+.video-page .media-acquisition-actions{grid-template-columns:1.2fr 1fr 1fr;gap:6px}.video-page .media-acquisition-actions button{padding:8px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .video-page button{min-width:0;min-height:38px;padding:8px 10px;font-size:13px;line-height:1.4;border-radius:8px;overflow-wrap:anywhere}
 .video-page button:disabled{cursor:default;opacity:.5}
 .video-page #download{background:#5c5c5c;border-color:#5c5c5c;color:#ffffff;font-weight:600;min-height:42px}
@@ -12,7 +13,8 @@ main.video-page{max-width:720px;display:flex;flex-direction:column;gap:12px}
 .video-page p{margin:0;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 .video-page .hint{margin:0;color:#777777;font-size:12px;line-height:1.6}
 .video-page .source-label{font-size:12px;color:#555555}
-.video-page #title{font-weight:500;padding-top:10px;border-top:1px solid #f0f0f0}
+.video-page .media-summary{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;line-height:1.6}.video-page .media-summary>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.video-page .media-summary>span:empty{display:none}.video-page .media-summary #status{flex:0 1 auto;max-width:55%;font-size:12px}.video-page .media-summary #status:only-child,.video-page .media-summary:not(:has(#website:not(:empty),#title:not(:empty))) #status{max-width:100%}.video-page .media-summary #website{flex:0 1 auto;color:#777}.video-page .media-summary #title{flex:1 1 auto;color:#555;font-weight:400;padding:0;border:0}.video-page .media-summary>span:not(:empty)~span:not(:empty){border-left:1px solid #ddd;padding-left:6px}
+.video-page .media-quality-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.media-quality-field{display:flex;flex-direction:column;gap:8px;min-width:0}.media-quality-field[hidden]{display:none}
 .video-page #status{font-weight:600;font-size:13px}
 .video-page #error{min-height:0;color:#414141;white-space:pre-wrap}
 .video-page #progress{margin:0;padding:10px;background:#f6f6f6;border-radius:8px;font:11px/1.6 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:96px;overflow:auto}

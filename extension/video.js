@@ -52,6 +52,7 @@ function controls() {
   for(const id of ['browserCookies','cookies','clearCookies'])$(id).disabled=busy || !platform;
   const galleryActive=galleryDraft && parsedUrl===$('url').value.trim();
   $('galleryCard').hidden=!galleryActive;
+  $('captureGalleryImage').disabled=busy||!galleryActive;
   $('qualityCard').hidden=!!galleryActive;
   $('download').hidden=!!galleryActive;
   const visibleSelection=selectedGalleryIndexes();
@@ -84,17 +85,35 @@ $('openRecent').addEventListener('click',async()=>{
   } catch(error) { if(typeof Recovery!=='undefined')Recovery.setError($('locationStatus'),error);else $('locationStatus').textContent=error.message; }
   finally { $('openRecent').disabled=false; }
 });
-function showGallery(data){
-  galleryDraft=data;gallerySelected=new Set(data.images.map((_,index)=>index));
+function showGallery(data,selection=null){
+  galleryView?.destroy();galleryView=null;
+  galleryDraft=data;gallerySelected=selection||new Set(data.images.map((_,index)=>index));
   $('galleryDestination').textContent='保存至：'+data.directory+'（原格式保留；转换图片存入对应格式子文件夹）';
   galleryView=GalleryCards.render($('galleryGrid'),data.images,{
     filterContainer:$('galleryTypeFilter'),onFilterChange:controls,
     onSelection(index,checked){if(checked)gallerySelected.add(index);else gallerySelected.delete(index);controls();},
     open:url=>chrome.tabs.create({url}),
-    metadata:index=>send('video-gallery-image-info',{draftId:data.draftId,index}),
+    metadata:index=>data.images[index].captured?Promise.resolve(data.images[index]):send('video-gallery-image-info',{draftId:data.draftId,index}),
     onDownload:(index,imageFormat)=>startGallery([index],imageFormat,false)
   });galleryChecks=galleryView.checks;
+  galleryChecks.forEach((check,index)=>{check.checked=gallerySelected.has(index);});galleryView.setBusy(busy);
 }
+$('captureGalleryImage').addEventListener('click',async()=>{
+  if(busy||!galleryDraft)return;
+  busy=true;controls();$('error').textContent='';$('status').textContent='请在网页上拖动框选，再确认截图；Esc 取消。';
+  const original=galleryDraft,originalUrl=parsedUrl,selected=new Set(gallerySelected);
+  try{
+    const result=await GalleryCapture.capture((await chrome.windows.getCurrent()).id);
+    if(result.cancelled){$('status').textContent='已取消截图';return;}
+    if(galleryDraft!==original||$('url').value.trim()!==originalUrl)throw Error('当前图集已变化，请重新截图。');
+    const saved=await send('video-gallery-capture',{draftId:original.draftId,png:result.png});
+    if(galleryDraft!==original||$('url').value.trim()!==originalUrl)throw Error('当前图集已变化，请重新截图。');
+    const image={...saved.image,url:result.png,captured:true};
+    showGallery({...original,draftId:saved.draftId,images:[image,...original.images]},new Set([0,...[...selected].map(index=>index+1)]));
+    $('galleryGrid').scrollTop=0;$('status').textContent='截图已放到图集第一张并选中，可预览或选择格式下载。';
+  }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;$('status').textContent='截图未添加';}
+  finally{busy=false;controls();}
+});
 async function inspectVideo(options={}) {
   if(busy)return;
   busy=true;parsedUrl='';galleryDraft=null;galleryView?.destroy();galleryView=null;galleryChecks=[];pageMediaUrl='';$('pageVideos').replaceChildren();controls();$('error').textContent='';$('status').textContent='正在解析…';

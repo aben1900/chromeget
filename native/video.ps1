@@ -154,6 +154,7 @@ function Invoke-VideoActionCore($message) {
     $jobs = Join-Path $PSScriptRoot 'video-jobs'
     [IO.Directory]::CreateDirectory($jobs) | Out-Null
     if ($message.action -eq 'video-gallery-preview') { return Save-WebGalleryPreview $message $jobs $(if($settings.autoClassify){Join-Path $settings.directory '图片'}else{$settings.directory}) }
+    if ($message.action -eq 'video-gallery-capture') { return Save-GalleryCapture $message $jobs $(if($settings.autoClassify){Join-Path $settings.directory '图片'}else{$settings.directory}) }
     if ($message.action -eq 'video-gallery-image-info') { return Get-GalleryImageInfo $message $jobs }
     if ($message.action -eq 'video-gallery-start') { return Start-GalleryJob $message $jobs $(if($settings.autoClassify){Join-Path $settings.directory '图片'}else{$settings.directory}) }
     if ($message.action -eq 'video-open-task') {
@@ -358,6 +359,7 @@ function Invoke-VideoActionCore($message) {
     return @{ok=$true; id=$id; directory=$settings.directory}
 }
 function Assert-GalleryImage([string]$url,[string]$sourceKind='xiaohongshu',[bool]$resolveDns=$false) {
+    if($url -cmatch '\Acapture:[a-f0-9]{32}\z'){return $url}
     if($sourceKind -eq 'webpage'){
         if($url -clike 'data:*'){$null=Read-GalleryInlineSvg $url;return $url}
         return Assert-GalleryWebUrl $url $resolveDns
@@ -369,7 +371,7 @@ function Assert-GalleryImage([string]$url,[string]$sourceKind='xiaohongshu',[boo
 function Save-GalleryPreview($info,$url,$jobs,$directory) {
     $images=@($info.gallery_images)
     if($images.Count -lt 1 -or $images.Count -gt 100){throw '未找到有效图集，或图片数量超过 100 张。'}
-    foreach($item in $images){$item.url=Assert-GalleryImage $item.url}
+    foreach($item in $images){if($item.url -clike 'capture:*'){throw '图集来源不能直接提供截图编号。'};$item.url=Assert-GalleryImage $item.url}
     $id=[Guid]::NewGuid().ToString('N')
     Write-VideoJson (Join-Path $jobs ($id+'.gallery.json')) @{title=$info.title;noteId=$info.id;url=$url;images=$images;created=(Get-Date).ToUniversalTime().ToString('o')}
     return @{ok=$true;kind='gallery';draftId=$id;title=$info.title;images=$images;directory=$directory;heights=@()}
@@ -426,7 +428,10 @@ function Invoke-GalleryDownload($job,$jobPath,$logPath) {
             $number=if($item.originalIndex){[int]$item.originalIndex}else{$index}
             $response=$null;$temp=Join-Path $job.directory ('{0:D3}.{1}.part' -f $number,[Guid]::NewGuid().ToString('N'));$converted=$temp+'.converted'
             try {
-                if($job.sourceKind -eq 'webpage' -and $url -clike 'data:*'){
+                if($url -clike 'capture:*'){
+                    $bytes=[IO.File]::ReadAllBytes((Resolve-GalleryCapture $url ([IO.Path]::GetDirectoryName($jobPath))))
+                    $null=Get-GalleryCapturePngInfo $bytes
+                }elseif($job.sourceKind -eq 'webpage' -and $url -clike 'data:*'){
                     $bytes=Read-GalleryInlineSvg $url
                 }elseif($job.sourceKind -eq 'webpage'){
                     $null=Invoke-GalleryNetwork $url 'webpage' 'GET' $temp

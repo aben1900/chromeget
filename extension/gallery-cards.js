@@ -56,7 +56,7 @@
    label.append(img,fallback);const caption=make('figcaption','','第 '+(index+1)+' 张'),status=make('div','gallery-image-status');status.setAttribute('role','status');figure.append(header,label,caption,status);figure.dataset.selected='true';
    const item={index,info:{...info},figure,img,check,open,download,format,dimensions,bytes,status};items.push(item);
    check.onchange=()=>{figure.dataset.selected=String(check.checked);options.onSelection(index,check.checked);};
-   open.onclick=()=>{try{let url=info.url;if(url.startsWith('data:image/svg+xml;base64,')){if(!item.openUrl){const bytes=Uint8Array.from(atob(url.split(',')[1]),c=>c.charCodeAt(0));item.openUrl=URL.createObjectURL(new Blob([bytes],{type:'image/svg+xml'}));blobUrls.push(item.openUrl);}url=item.openUrl;}Promise.resolve(options.open(url)).catch(()=>{status.textContent='无法打开图片，请重试';});}catch{status.textContent='无法打开图片，请重试';}};
+   open.onclick=()=>{try{let url=info.url;if(/^data:image\/(svg\+xml|png);base64,/.test(url)){if(!item.openUrl){const bytes=Uint8Array.from(atob(url.split(',')[1]),c=>c.charCodeAt(0));item.openUrl=URL.createObjectURL(new Blob([bytes],{type:url.slice(5,url.indexOf(';'))}));blobUrls.push(item.openUrl);}url=item.openUrl;}Promise.resolve(options.open(url)).catch(()=>{status.textContent='无法打开图片，请重试';});}catch{status.textContent='无法打开图片，请重试';}};
    download.onclick=()=>downloadMenu(item);img.onload=()=>{img.hidden=false;fallback.hidden=true;showInfo(item);};img.onerror=()=>{img.hidden=true;fallback.hidden=false;fallback.textContent=imageType(item.info)==='tiff'?'浏览器无法预览 TIFF，可下载原图':'预览不可用，可下载原图';};showInfo(item);
   }
   const empty=make('p','gallery-filter-empty','此类型暂无图片，请选择其他类型。');empty.hidden=true;container.replaceChildren(...items.map(x=>x.figure),empty);

@@ -23,17 +23,68 @@ function Assert-GalleryWebUrl([string]$url,[bool]$resolveDns=$false) {
 function Read-GalleryDraft($message,[string]$jobs) {
     if($message.draftId -notmatch '^[a-f0-9]{32}$'){throw '图集预览编号无效。'}
     $draft=Read-VideoJson (Join-Path $jobs ($message.draftId+'.gallery.json'))
-    if(@($draft.images).Count -lt 1 -or @($draft.images).Count -gt 100){throw '图集图片数量无效。'}
+    if(@($draft.images).Count -lt 1 -or @($draft.images).Count -gt 120){throw '图集图片数量无效。'}
     if([DateTime]::Parse($draft.created).ToUniversalTime().AddMinutes(30) -lt (Get-Date).ToUniversalTime()){throw '图片链接可能已过期，请重新获取图集后确认。'}
-    $inlineSize=0
-    foreach($item in $draft.images){$null=Assert-GalleryImage $item.url $draft.sourceKind;if($item.url -clike 'data:*'){$inlineSize+=$item.url.Length}}
+    $inlineSize=0;$captures=0
+    foreach($item in $draft.images){
+        $null=Assert-GalleryImage $item.url $draft.sourceKind
+        if($item.url -clike 'capture:*'){$null=Resolve-GalleryCapture $item.url $jobs;$captures++}
+        if($item.url -clike 'data:*'){$inlineSize+=$item.url.Length}
+    }
+    if($captures -gt 20 -or (@($draft.images).Count-$captures) -gt 100){throw '每个图集最多 100 张原有图片和 20 张截图。'}
     if($inlineSize -gt 524288){throw '内联 SVG 总大小超过限制。'}
     return $draft
+}
+function Get-GalleryCapturePngInfo([byte[]]$bytes) {
+    if($bytes.Length -gt 8388608){throw '单张截图不能超过 8 MB。'}
+    if($bytes.Length -lt 33 -or [BitConverter]::ToString($bytes,0,8) -cne '89-50-4E-47-0D-0A-1A-0A' -or [BitConverter]::ToString($bytes,8,4) -cne '00-00-00-0D' -or [Text.Encoding]::ASCII.GetString($bytes,12,4) -cne 'IHDR'){throw '截图不是有效的 PNG 图片。'}
+    $width=[long]$bytes[16]*16777216+[long]$bytes[17]*65536+[long]$bytes[18]*256+$bytes[19]
+    $height=[long]$bytes[20]*16777216+[long]$bytes[21]*65536+[long]$bytes[22]*256+$bytes[23]
+    if($width -lt 1 -or $height -lt 1 -or $width -gt 40000000 -or $height -gt 40000000 -or $width*$height -gt 40000000){throw '截图不能超过 4000 万像素。'}
+    Add-Type -AssemblyName System.Drawing
+    $stream=[IO.MemoryStream]::new($bytes);$image=$null
+    try{
+        $image=[Drawing.Image]::FromStream($stream,$true,$true)
+        if($image.RawFormat.Guid -ne [Drawing.Imaging.ImageFormat]::Png.Guid -or $image.Width -ne $width -or $image.Height -ne $height){throw '截图 PNG 尺寸无效。'}
+        # Access a pixel to force raster decoding, rather than trusting IHDR alone.
+        $null=$image.GetPixel([int]($width-1),[int]($height-1))
+    }catch{throw '截图 PNG 内容损坏或无法解码。'}
+    finally{if($image){$image.Dispose()};$stream.Dispose()}
+    return @{width=[int]$width;height=[int]$height;format='png';bytes=$bytes.Length}
+}
+function Resolve-GalleryCapture([string]$token,[string]$jobs) {
+    if($token -cnotmatch '\Acapture:([a-f0-9]{32})\z'){throw '截图编号无效。'}
+    $root=[IO.Path]::GetFullPath($jobs).TrimEnd('\','/')
+    $path=[IO.Path]::GetFullPath((Join-Path $root ($Matches[1]+'.capture.png')))
+    if([IO.Path]::GetDirectoryName($path) -ine $root -or -not [IO.File]::Exists($path)){throw '截图文件不存在，请重新截图。'}
+    $file=Get-Item -LiteralPath $path -Force
+    if(($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $file.Length -gt 8388608){throw '截图文件无效或超过 8 MB。'}
+    return $path
+}
+function Save-GalleryCapture($message,[string]$jobs,[string]$directory) {
+    $draft=Read-GalleryDraft $message $jobs
+    if(@($draft.images|Where-Object{$_.url -clike 'capture:*'}).Count -ge 20){throw '每个图集最多添加 20 张截图。'}
+    $png=$message.png
+    if($png -isnot [string] -or $png.Length -gt 11184834 -or $png -cnotmatch '\Adata:image/png;base64,([A-Za-z0-9+/]*={0,2})\z'){throw '截图必须是 8 MB 以内的 PNG。'}
+    try{$bytes=[Convert]::FromBase64String($Matches[1])}catch{throw '截图 PNG 编码无效。'}
+    if($png -cne ('data:image/png;base64,'+[Convert]::ToBase64String($bytes))){throw '截图 PNG 编码无效。'}
+    $metadata=Get-GalleryCapturePngInfo $bytes
+    $captureId=[Guid]::NewGuid().ToString('N');$draftId=[Guid]::NewGuid().ToString('N')
+    $image=[pscustomobject]@{url=('capture:'+$captureId);width=$metadata.width;height=$metadata.height;format='png';bytes=$metadata.bytes}
+    $capturePath=Join-Path $jobs ($captureId+'.capture.png')
+    # A new folder identity prevents prepending from reusing the old numbered files.
+    $draft.noteId=$draftId;$draft.images=@($image)+@($draft.images)
+    try{
+        [IO.File]::WriteAllBytes($capturePath,$bytes)
+        Write-VideoJson (Join-Path $jobs ($draftId+'.gallery.json')) $draft
+    }catch{if([IO.File]::Exists($capturePath)){[IO.File]::Delete($capturePath)};throw}
+    return @{ok=$true;draftId=$draftId;image=$image;directory=$directory}
 }
 function Save-WebGalleryPreview($message,$jobs,$directory) {
     $url=Assert-GalleryWebUrl ([string]$message.url)
     if(@($message.images).Count -gt 100){throw '每次最多获取 100 张网页图片。'}
     $inlineSize=0;$seen=@{};$images=@(foreach($item in @($message.images)){
+        if([string]$item.url -clike 'capture:*'){continue}
         try{$imageUrl=Assert-GalleryImage ([string]$item.url) 'webpage'}catch{continue}
         if($seen.ContainsKey($imageUrl)){continue};$seen[$imageUrl]=$true
         if($imageUrl -clike 'data:*'){if($inlineSize+$imageUrl.Length -gt 524288){continue};$inlineSize+=$imageUrl.Length}
@@ -127,7 +178,11 @@ function Get-GalleryImageInfo($message,[string]$jobs) {
     $item=$draft.images[$index]
     $url=Assert-GalleryImage $item.url $draft.sourceKind
     $metadata=@{format=(Get-GalleryMetadataFormat '' $url);bytes=$null}
-    if($url -clike 'data:*'){$metadata=@{format='svg';bytes=(Read-GalleryInlineSvg $url).Length}}
+    if($url -clike 'capture:*'){
+        $metadata=Get-GalleryCapturePngInfo ([IO.File]::ReadAllBytes((Resolve-GalleryCapture $url $jobs)))
+        return @{ok=$true;format='png';bytes=$metadata.bytes;width=$metadata.width;height=$metadata.height;canConvert=$true}
+    }
+    elseif($url -clike 'data:*'){$metadata=@{format='svg';bytes=(Read-GalleryInlineSvg $url).Length}}
     else{try{$head=Invoke-GalleryHead $url $draft.sourceKind;$metadata.bytes=$head.bytes;if($head.format){$metadata.format=$head.format}}catch{}}
     return @{ok=$true;format=$metadata.format;bytes=$metadata.bytes;width=$item.width;height=$item.height;canConvert=($metadata.format -ne 'svg')}
 }

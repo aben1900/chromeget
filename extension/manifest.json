@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "精彩摘录",
   "description": "收藏内容，下载视频、图集与 Hugging Face 模型文件；支持后台任务、并行下载和续传。",
-  "version": "1.36.0",
+  "version": "1.36.1",
   "minimum_chrome_version": "116",
   "permissions": [
     "tabs",

@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 let galleryDraft=null, gallerySelected=new Set(), galleryChecks=[],galleryView=null,pageMediaUrl='';
-let parsedUrl='', busy=false, timer, jobId, taskActive=false, runningSelection;
+let parsedUrl='', busy=false, activeOperation='', timer, jobId, taskActive=false, runningSelection;
 function visibleGalleryIndexes(){return galleryView?.getVisibleIndexes()||galleryChecks.map((_,index)=>index);}
 function selectedGalleryIndexes(){return visibleGalleryIndexes().filter(index=>gallerySelected.has(index));}
 $('url').value = new URL(location.href).searchParams.get('url') || '';
@@ -49,6 +49,8 @@ function controls() {
   const name=platform==='x'?'X':platform==='youtube'?'YouTube':platform==='toutiao'?'头条':platform==='xiaohongshu'?'小红书':platform==='bilibili'?'B 站':'';
   $('browserCookies').textContent=name?'一键获取本浏览器的'+name+'登录态':'先填写视频网址，再获取登录态';
   for(const id of ['inspect','folder','saveFolder','cookies','clearCookies','browserCookies','extractUrl'])$(id).disabled=busy;
+  $('inspect').textContent=activeOperation==='inspect'?'正在获取…':'获取视频 / 图集';
+  $('inspect').setAttribute('aria-busy',String(activeOperation==='inspect'));
   for(const id of ['browserCookies','cookies','clearCookies'])$(id).disabled=busy || !platform;
   const galleryActive=galleryDraft && parsedUrl===$('url').value.trim();
   $('galleryCard').hidden=!galleryActive;
@@ -100,23 +102,23 @@ function showGallery(data,selection=null){
 }
 $('captureGalleryImage').addEventListener('click',async()=>{
   if(busy||!galleryDraft)return;
-  busy=true;controls();$('error').textContent='';$('status').textContent='请在网页上拖动框选，再确认截图；Esc 取消。';
+  busy=true;activeOperation='capture';controls();$('error').textContent='';$('captureStatus').textContent='请在网页上拖动框选，再确认截图；Esc 取消。';$('captureStatus').dataset.state='working';
   const original=galleryDraft,originalUrl=parsedUrl,selected=new Set(gallerySelected);
   try{
     const result=await GalleryCapture.capture((await chrome.windows.getCurrent()).id);
-    if(result.cancelled){$('status').textContent='已取消截图';return;}
+    if(result.cancelled){$('captureStatus').textContent='已取消截图';$('captureStatus').dataset.state='cancelled';return;}
     if(galleryDraft!==original||$('url').value.trim()!==originalUrl)throw Error('当前图集已变化，请重新截图。');
     const saved=await send('video-gallery-capture',{draftId:original.draftId,png:result.png});
     if(galleryDraft!==original||$('url').value.trim()!==originalUrl)throw Error('当前图集已变化，请重新截图。');
     const image={...saved.image,url:result.png,captured:true};
     showGallery({...original,draftId:saved.draftId,images:[image,...original.images]},new Set([0,...[...selected].map(index=>index+1)]));
-    $('galleryGrid').scrollTop=0;$('status').textContent='截图已放到图集第一张并选中，可预览或选择格式下载。';
-  }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;$('status').textContent='截图未添加';}
-  finally{busy=false;controls();}
+    $('galleryGrid').scrollTop=0;$('captureStatus').textContent='截图已放到第一张并选中，可预览或选择格式下载。';$('captureStatus').dataset.state='success';
+  }catch(error){$('captureStatus').dataset.state='error';$('captureStatus').textContent='截图失败：'+(typeof Recovery!=='undefined'?Recovery.normalize(error).details:error.message);}
+  finally{busy=false;activeOperation='';controls();}
 });
 async function inspectVideo(options={}) {
   if(busy)return;
-  busy=true;parsedUrl='';galleryDraft=null;galleryView?.destroy();galleryView=null;galleryChecks=[];pageMediaUrl='';$('pageVideos').replaceChildren();controls();$('error').textContent='';$('status').textContent='正在解析…';
+  busy=true;activeOperation='inspect';parsedUrl='';galleryDraft=null;galleryView?.destroy();galleryView=null;galleryChecks=[];pageMediaUrl='';$('pageVideos').replaceChildren();controls();$('error').textContent='';$('captureStatus').textContent='';$('status').textContent='正在获取媒体，请稍候…';
   const url=supportedVideoUrl($('url').value.trim())||webpageUrl($('url').value.trim());
   try {
     if(!url) throw Error('请填写网页、视频或 m3u8/mpd 流媒体的 HTTP/HTTPS 网址。');
@@ -139,9 +141,9 @@ async function inspectVideo(options={}) {
       $('status').textContent=data.sourceKind==='webpage'?'已获取当前网页图片。若有遗漏，先滚动网页加载图片，再重新获取。':'图集已获取，等待确认下载';return;
     }
     $('height').replaceChildren(...data.heights.map(h=>{const o=document.createElement('option');o.value=h;o.textContent=h===0?'最佳可用画质（含原始视频）':h+'p';return o;}));
-    $('height').disabled=false;$('status').textContent='请选择分辨率后下载';
+    $('height').disabled=false;$('status').textContent='获取成功 · 已找到视频，请选择分辨率后下载';
   }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;$('status').textContent='解析失败';}
-  finally{busy=false;controls();}
+  finally{busy=false;activeOperation='';controls();}
 }
 $('inspect').addEventListener('click',inspectVideo);
 $('browserCookies').addEventListener('click',async()=>{

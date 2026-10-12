@@ -8,7 +8,7 @@
       const c={hasSource:!!source(),hasTask:!!node('tasksList'),hasPending:!!node('retry')||!!node('checkCollect'),canChooseFolder:!!node('folder')};
       const available={setup:{label:'查看安装与修复步骤',run:setup},source:{label:'打开来源网页',run:()=>chrome.tabs.create({url:source()})},reparse:{label:'重新获取内容',run:()=>click(node('inspect')?'inspect':'probeFile')},'view-tasks':{label:'查看下载任务',run:()=>{node('tasksList')?.scrollIntoView({block:'start'});click('refreshTasks');}},'check-save':{label:'检查 / 重试待保存',run:()=>click(node('retry')?'retry':'checkCollect')},'choose-folder':{label:'重新选择保存目录',run:()=>click('folder')}};
       let ids=Recovery.actionsFor(error,c);if(!ids.length&&Recovery.normalize(error).code==='NETWORK_TEMPORARY'&&node('probeFile'))ids=['reparse'];
-      return {retention:id==='collectError'?'当前文字仍保留在收集页。':node('tasksList')?'已有下载文件会保留；是否可继续以任务按钮为准。':'请先确认待保存状态，避免重复提交。',actions:ids.filter(key=>available[key]).map(key=>({id:key,...available[key]}))};
+      return {detailsOpen:id==='error'&&!!node('inspect'),retention:id==='collectError'?'当前文字仍保留在收集页。':node('tasksList')?'已有下载文件会保留；是否可继续以任务按钮为准。':'请先确认待保存状态，避免重复提交。',actions:ids.filter(key=>available[key]).map(key=>({id:key,...available[key]}))};
     });
   }
   globalThis.renderTaskRecovery=(container,task,send,poll)=>{

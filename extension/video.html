@@ -4,20 +4,20 @@
 <section class="video-card">
 <label for="url">视频 / 图集 / 流媒体网址</label><input id="url" type="url" placeholder="当前网页、视频详情页、图集或 m3u8 / mpd 链接">
 <div class="actions"><button id="extractUrl">提取当前网页</button><button id="inspect">获取视频 / 图集</button></div>
-<p id="website" class="source-label" role="status">来源网站：待提取</p><p id="title"></p>
+<p id="status" class="media-status" role="status" aria-live="polite">检查下载引擎…</p><p id="error" role="alert"></p><p id="website" class="source-label" role="status">来源网站：待提取</p><p id="title"></p>
 </section>
 <section id="pageMediaCard" class="video-card" hidden><h2>网页中的视频</h2><div id="pageVideos" class="page-media-videos"></div></section>
 <section id="qualityCard" class="video-card">
 <label for="mediaMode">保存类型</label><select id="mediaMode"><option value="video">视频（含声音）</option><option value="audio">仅音频</option></select><div id="audioOptions" hidden><label for="audioFormat">音频格式</label><select id="audioFormat"><option value="best">原始最佳音频（避免重复编码）</option><option value="mp3">MP3</option><option value="m4a">M4A</option><option value="flac">FLAC</option></select></div><div id="videoQuality"><label for="height">分辨率</label><select id="height" disabled><option>请先解析视频</option></select>
 </div>
 </section>
-<section id="galleryCard" class="video-card" hidden><div class="gallery-toolbar"><div id="galleryTypeFilter"></div><button id="captureGalleryImage" type="button" class="gallery-capture-button" title="Capture your image · 区域截图" aria-label="区域截图"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 4H6a2 2 0 0 0-2 2v2m12-4h2a2 2 0 0 1 2 2v2M4 16v2a2 2 0 0 0 2 2h2m12-4v2a2 2 0 0 1-2 2h-2M12 8v8m-4-4h8"/></svg></button></div><p id="galleryCount"></p><div class="actions"><button id="gallerySelectAll">全选</button><button id="gallerySelectNone">取消全选</button></div><div id="galleryGrid"></div><p id="galleryDestination" class="hint"></p><button id="confirmGallery">确认下载全部图片</button></section>
+<section id="galleryCard" class="video-card" hidden><div class="gallery-toolbar"><div id="galleryTypeFilter"></div><button id="captureGalleryImage" type="button" class="gallery-capture-button" title="Capture your image · 区域截图" aria-label="区域截图"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 4H6a2 2 0 0 0-2 2v2m12-4h2a2 2 0 0 1 2 2v2M4 16v2a2 2 0 0 0 2 2h2m12-4v2a2 2 0 0 1-2 2h-2M12 8v8m-4-4h8"/></svg></button></div><p id="captureStatus" class="media-status" role="status" aria-live="polite"></p><p id="galleryCount"></p><div class="actions"><button id="gallerySelectAll">全选</button><button id="gallerySelectNone">取消全选</button></div><div id="galleryGrid"></div><p id="galleryDestination" class="hint"></p><button id="confirmGallery">确认下载全部图片</button></section>
 <section class="video-card">
 <label for="directoryInput">保存目录</label><input id="directoryInput" placeholder="例如 D:\视频">
 <div class="actions"><button id="folder">浏览目录</button><button id="saveFolder">保存路径</button></div>
 </section>
 <section class="video-card task-card">
-<div class="actions primary-actions"><button id="download" disabled>开始下载</button><button id="openRecent">最近下载位置</button></div><p id="status" role="status">检查下载引擎…</p><p id="error" role="alert"></p><pre id="progress"></pre>
+<div class="actions primary-actions"><button id="download" disabled>开始下载</button><button id="openRecent">最近下载位置</button></div><pre id="progress"></pre>
 <p id="locationStatus" role="status"></p>
 <details class="path-details"><summary>查看保存位置</summary><p id="directory"></p></details>
 
@@ -33,4 +33,4 @@
 <p id="transferStatus" role="status"></p><p id="transferError" role="alert"></p>
 
 <section class="video-card"><div class="section-heading"><h2>下载任务</h2><button id="refreshTasks" class="refresh-icon" title="刷新任务" aria-label="刷新任务"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div><label for="taskFilter">任务状态</label><select id="taskFilter"><option value="unfinished" selected>未完成（默认）</option><option value="all">全部任务</option><option value="active">进行中</option><option value="queued">排队中</option><option value="starting">准备中</option><option value="running">下载中</option><option value="paused">已暂停</option><option value="failed">中断 / 失败</option><option value="completed">已完成</option></select><p class="hint">按创建时间从新到旧排列；删除任务保留下载文件。</p><p id="tasksLoading" class="task-loading" role="status" aria-live="polite" hidden><span class="task-spinner" aria-hidden="true"></span><span>正在加载任务…</span></p><p id="tasksSummary"></p><p id="tasksError" role="alert"></p><div id="tasksList"></div><div class="actions"><button id="tasksPrevious" disabled>上一页</button><button id="tasksNext" disabled>下一页</button></div></section>
-</main><script src="recovery.js"></script><script src="task-ui.js"></script><script src="video-url.js"></script><script src="gallery-cards.js"></script><script src="gallery-capture.js"></script><script src="video.js"></script><script src="file-list-return.js"></script><script src="transfers.js"></script><script src="recovery-page.js"></script><script src="delete-icons.js"></script></body></html>
+</main><script src="recovery.js"></script><script src="media-feedback.js"></script><script src="task-ui.js"></script><script src="video-url.js"></script><script src="gallery-cards.js"></script><script src="gallery-capture.js"></script><script src="video.js"></script><script src="file-list-return.js"></script><script src="transfers.js"></script><script src="recovery-page.js"></script><script src="delete-icons.js"></script></body></html>

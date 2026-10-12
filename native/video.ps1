@@ -1,4 +1,11 @@
 ﻿. (Join-Path $PSScriptRoot 'gallery-image.ps1')
+function Get-VideoParseError([string]$site,[string]$engineError) {
+    $reason=$engineError.Trim()
+    if(-not $reason){$reason='下载引擎未返回具体原因，请重试。'}
+    if($reason.Length -gt 6000){$reason=$reason.Substring(0,6000)+'…'}
+    if($site -eq 'xiaohongshu'){return "小红书解析失败。请确认浏览器中可以打开此笔记，并保留完整分享链接；若提示登录，请获取本浏览器登录态后重试。`n下载引擎返回：`n$reason"}
+    return $reason
+}
 function Write-VideoJson($path, $value) {
     $temp = $path + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
     [IO.File]::WriteAllText($temp, (ConvertTo-Json -InputObject $value -Depth 8), (New-Object Text.UTF8Encoding($false)))
@@ -325,8 +332,7 @@ function Invoke-VideoActionCore($message) {
             if (-not $proc.WaitForExit(90000)) { $proc.Kill(); $proc.WaitForExit(); throw '解析超时，请检查网络后重试。' }
             $proc.Refresh()
             if ($proc.ExitCode -ne 0) {
-                if ($site -eq 'xiaohongshu') { throw '小红书未返回可下载的视频。请在浏览器打开视频笔记，复制带 xsec_token 等参数的完整网址，点击“一键使用本浏览器登录态”后重试；图文笔记、已失效链接或网站限制可能无法下载。' }
-                throw ([IO.File]::ReadAllText($err))
+                throw (Get-VideoParseError $site ([IO.File]::ReadAllText($err)))
             }
             $info = Read-VideoJson $out
             if ($info.media_kind -eq 'gallery') { return Save-GalleryPreview $info $url $jobs $(if($settings.autoClassify){Join-Path $baseDirectory '图片'}else{$settings.directory}) }

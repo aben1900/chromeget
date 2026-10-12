@@ -8,6 +8,7 @@ assert.equal(R.normalize({error:'磁盘空间不足'}).code,'DISK_FULL');
 assert.equal(R.normalize({error:'certificate verify failed'}).retryable,false);
 for(const secret of ['secret','private','password'])assert.ok(!R.redact('https://user:password@a.test/f?token=secret#private\nCookie: private\nAuthorization: Bearer secret').includes(secret));
 assert.ok(!R.redact('故障 C:\\Users\\Alice\\Downloads\\secret.zip').includes('Alice'));
+assert.ok(R.redact('请在 chrome://extensions 重新加载精彩摘录').includes('重新加载精彩摘录'),'browser settings URL must not be mistaken for a Windows path');
 assert.deepEqual(R.actionsFor({code:'SUBMISSION_UNKNOWN'},{hasTask:true}),['view-tasks']);
 assert.ok(!R.actionsFor({code:'NETWORK_TEMPORARY'},{canResume:false}).includes('resume'));
 assert.ok(!R.actionsFor({code:'DRM'},{hasSource:true}).includes('retry'));

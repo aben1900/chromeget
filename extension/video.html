@@ -3,7 +3,7 @@
 <body><main class="video-page"><button id="backToFileList" class="quiet" hidden>← 返回文件列表</button>
 <section class="video-card">
 <label for="url">视频 / 图集 / 流媒体网址</label><input id="url" type="url" placeholder="当前网页、视频详情页、图集或 m3u8 / mpd 链接">
-<div class="actions"><button id="extractUrl">提取当前网页</button><button id="inspect">获取视频 / 图集</button></div>
+<button id="extractUrl" class="extract-media-url">提取当前网页</button><div class="actions"><button id="inspect">获取视频</button><button id="inspectGallery" class="secondary">获取图集</button></div>
 <p id="status" class="media-status" role="status" aria-live="polite">检查下载引擎…</p><p id="error" role="alert"></p><p id="website" class="source-label" role="status">来源网站：待提取</p><p id="title"></p>
 </section>
 <section id="pageMediaCard" class="video-card" hidden><h2>网页中的视频</h2><div id="pageVideos" class="page-media-videos"></div></section>

@@ -223,11 +223,13 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       }
       if(message.action==='video-page-media'){
         if(!host.capabilities?.includes('webpage-gallery-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用网页图片获取。');
-        const captured=await collectPageMedia(message.windowId,message.url);
+        const mediaKind=['video','gallery'].includes(message.mediaKind)?message.mediaKind:'all';
+        const captured=await collectPageMedia(message.windowId,message.url,mediaKind);
         if(!captured.ok)throw Error(captured.error);
+        if(mediaKind==='video')return {...captured,images:[],kind:'page-media'};
         if(!captured.images.length)return {...captured,kind:'page-media'};
         const preview=await native({action:'video-gallery-preview',url:captured.url,title:captured.title,images:captured.images});
-        return {...preview,videos:captured.videos,captureUrl:captured.url};
+        return {...preview,videos:mediaKind==='gallery'?[]:captured.videos,captureUrl:captured.url};
       }
       let cookieText;
       if (message.action === 'video-browser-cookies') {

@@ -25,6 +25,8 @@ const source='https://huggingface.co/jialinyyzz/humanizer';
   assert.equal(r.url,source);assert.equal(r.title,'Humanizer model card');
   assert.deepEqual(r.images.map(i=>i.url),['https://huggingface.co/first.png','https://huggingface.co/second.png','https://huggingface.co/vector.svg','https://huggingface.co/header.png','https://huggingface.co/portrait.png','https://huggingface.co/icon.png']);
   assert.equal(r.images[0].width,600);assert.deepEqual(r.videos.map(v=>v.url),['https://huggingface.co/demo.mp4']);
+  const videoOnly=await page.evaluate(collectDocumentMedia,'video');assert.deepEqual(videoOnly.images,[]);assert.deepEqual(videoOnly.videos.map(v=>v.url),['https://huggingface.co/demo.mp4']);
+  const galleryOnly=await page.evaluate(collectDocumentMedia,'gallery');assert.equal(galleryOnly.images.length,6);assert.deepEqual(galleryOnly.videos,[]);
   // HF uses a model-card div in main and an unrelated article for a recommendation card.
   // Selecting any article before main silently drops the actual model-card images.
   await page.setContent('<main><section><div class="model-card-content"><img src="/first.png" width="600" height="400"><img src="/second.png" width="600" height="400"></div></section><aside><article class="overview-card-wrapper"><img src="/portrait.png" width="32" height="32">Related model</article></aside></main>');

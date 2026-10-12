@@ -8,26 +8,27 @@
   try{return normalize(new URL(info.url).pathname.match(/\.([a-z]+)$/i)?.[1]);}catch{return '';}
  }
  function render(container,images,options){
-  let busy=false,disposed=false,openMenu=null,running=0,filterOpen=false,initialized=false;const filters=new Set(),waiting=[],items=[],checks=[],blobUrls=[];
+  let busy=false,disposed=false,openMenu=null,running=0,filterOpen=false,initialized=false,defaultFilter=true;const filters=new Set(),waiting=[],items=[],checks=[],blobUrls=[];
   let filterButton,filterMenu,filterProgress;const filterChoices=[];
   const make=(tag,cls,text)=>{const el=document.createElement(tag);if(cls)el.className=cls;if(text)el.textContent=text;return el;};
   function closeMenu(){if(!openMenu)return;openMenu.menu.remove();openMenu.button.setAttribute('aria-expanded','false');openMenu=null;}
   function queueMetadata(item){if(item.removed||item.requested||disposed)return;item.requested=true;waiting.push(item);pump();}
   async function pump(){if(disposed||running>=3||!waiting.length)return;const item=waiting.shift();running++;pump();try{const data=await options.metadata(item.index);if(!disposed){item.info={...item.info,...data,format:normalize(data.format)||item.info.format};showInfo(item);}}catch{if(!disposed){item.info.bytes=null;showInfo(item);}}finally{item.resolved=true;running--;if(!disposed)refreshFilter();pump();}}
   const remainingItems=()=>items.filter(item=>!item.removed);
-  const visibleIndexes=()=>remainingItems().filter(item=>!filters.size||filters.has(imageType(item.info))).map(item=>item.index);
+  const matchesFilter=item=>defaultFilter?imageType(item.info)!=='svg':!filters.size||filters.has(imageType(item.info));
+  const visibleIndexes=()=>remainingItems().filter(matchesFilter).map(item=>item.index);
   function closeFilter(focus=false){filterOpen=false;if(filterMenu)filterMenu.hidden=true;if(filterButton){filterButton.setAttribute('aria-expanded','false');if(focus)filterButton.focus();}}
   function refreshFilter(notify=true){
    if(!initialized)return;
-   const remaining=remainingItems(),counts={any:remaining.length};for(const item of remaining){const type=imageType(item.info);if(type)counts[type]=(counts[type]||0)+1;item.figure.hidden=filters.size>0&&!filters.has(type);}
-   for(const choice of filterChoices){const count=counts[choice.value]||0,selected=choice.value==='any'?!filters.size:filters.has(choice.value);choice.button.textContent=(selected?'✓ ':'　 ')+choice.label+' ('+count+')';choice.button.setAttribute('aria-label',choice.label+' ('+count+')');choice.button.disabled=busy||(!count&&!selected);choice.button.setAttribute('aria-checked',String(selected));}
+   const remaining=remainingItems(),counts={any:remaining.length};for(const item of remaining){const type=imageType(item.info);if(type)counts[type]=(counts[type]||0)+1;item.figure.hidden=!matchesFilter(item);}counts.default=remaining.length-(counts.svg||0);
+   for(const choice of filterChoices){const count=counts[choice.value]||0,selected=choice.value==='default'?defaultFilter:!defaultFilter&&(choice.value==='any'?!filters.size:filters.has(choice.value));choice.button.textContent=(selected?'✓ ':'　 ')+choice.label+' ('+count+')';choice.button.setAttribute('aria-label',choice.label+' ('+count+')');choice.button.disabled=busy||(!count&&!selected);choice.button.setAttribute('aria-checked',String(selected));}
    if(filterProgress){const resolved=remaining.filter(item=>item.resolved).length;filterProgress.textContent=resolved<remaining.length?'确认类型 '+resolved+'/'+remaining.length:'';filterProgress.hidden=resolved===remaining.length;}
-   if(filterButton){const labels=Object.keys(formats).filter(type=>filters.has(type)).map(type=>formats[type]);filterButton.textContent='Type · '+(labels.length?labels.slice(0,2).join('、')+(labels.length>2?' 等 '+labels.length+' 种':''):'Any')+' ('+visibleIndexes().length+') ⌄';filterButton.title='多选图片类型：'+(labels.join('、')||'Any（全部）')+'；类型未知的图片保留在 Any 中';}
+   if(filterButton){const labels=Object.keys(formats).filter(type=>filters.has(type)).map(type=>formats[type]);filterButton.textContent='Type · '+(defaultFilter?'默认（不含 SVG）':labels.length?labels.slice(0,2).join('、')+(labels.length>2?' 等 '+labels.length+' 种':''):'Any')+' ('+visibleIndexes().length+') ⌄';filterButton.title='多选图片类型：'+(defaultFilter?'默认不显示 SVG，可选择 SVG 或 Any 查看':labels.join('、')||'Any（全部）')+'；类型未知的图片保留在默认和 Any 中';}
    empty.hidden=visibleIndexes().length>0;empty.textContent=remaining.length?'所选类型暂无图片，请选择其他类型。':'图集中已无图片，可重新获取或添加截图。';
    if(notify)options.onFilterChange?.();
   }
-  function setFilter(value){if(value!=='any'&&!formats[value])return;filters.clear();if(value!=='any')filters.add(value);closeMenu();closeFilter();refreshFilter();}
-  function toggleFilter(value){if(busy)return;if(value==='any')filters.clear();else if(filters.has(value))filters.delete(value);else filters.add(value);closeMenu();refreshFilter();}
+  function setFilter(value){if(!['any','default'].includes(value)&&!formats[value])return;defaultFilter=value==='default';filters.clear();if(formats[value])filters.add(value);closeMenu();closeFilter();refreshFilter();}
+  function toggleFilter(value){if(busy)return;defaultFilter=value==='default';if(value==='any'||defaultFilter)filters.clear();else if(filters.has(value))filters.delete(value);else filters.add(value);closeMenu();refreshFilter();}
   function showInfo(item){
    const info=item.info,w=item.img.naturalWidth||Number(info.width),h=item.img.naturalHeight||Number(info.height);
    item.format.textContent=formats[imageType(info)]||'类型未知';
@@ -65,7 +66,7 @@
   const empty=make('p','gallery-filter-empty','此类型暂无图片，请选择其他类型。');empty.hidden=true;container.replaceChildren(...remainingItems().map(x=>x.figure),empty);
   if(options.filterContainer){
    options.filterContainer.classList.add('gallery-type-filter');filterButton=make('button','gallery-type-toggle');filterButton.type='button';filterButton.setAttribute('aria-label','Type 图片类型过滤');filterButton.setAttribute('aria-haspopup','menu');filterButton.setAttribute('aria-expanded','false');filterMenu=make('div','gallery-type-menu');filterMenu.setAttribute('role','menu');filterMenu.setAttribute('aria-label','图片类型');filterMenu.hidden=true;
-   for(const [value,label]of [['any','Any'],...Object.entries(formats)]){const button=make('button');button.type='button';button.setAttribute('role','menuitemcheckbox');button.onclick=()=>toggleFilter(value);filterMenu.append(button);filterChoices.push({value,label,button});}
+   for(const [value,label]of [['default','默认（不含 SVG）'],['any','Any'],...Object.entries(formats)]){const button=make('button');button.type='button';button.setAttribute('role','menuitemcheckbox');button.onclick=()=>toggleFilter(value);filterMenu.append(button);filterChoices.push({value,label,button});}
    filterButton.onclick=()=>{if(busy)return;closeMenu();filterOpen=!filterOpen;filterMenu.hidden=!filterOpen;filterButton.setAttribute('aria-expanded',String(filterOpen));if(filterOpen)filterChoices.find(c=>c.button.getAttribute('aria-checked')==='true'&&!c.button.disabled)?.button.focus();};filterProgress=make('span','gallery-type-progress');filterProgress.setAttribute('role','status');options.filterContainer.replaceChildren(filterButton,filterProgress,filterMenu);
   }
   initialized=true;refreshFilter(false);

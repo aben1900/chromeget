@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 let galleryDraft=null, gallerySelected=new Set(), galleryChecks=[],galleryView=null,pageMediaUrl='';
-let parsedUrl='', busy=false, activeOperation='', timer, jobId, taskActive=false, runningSelection;
+let parsedUrl='', busy=false, activeOperation='', lastMediaTarget='video', timer, jobId, taskActive=false, runningSelection;
 function visibleGalleryIndexes(){return galleryView?.getVisibleIndexes()||galleryChecks.map((_,index)=>index);}
 function selectedGalleryIndexes(){return visibleGalleryIndexes().filter(index=>gallerySelected.has(index));}
 $('url').value = new URL(location.href).searchParams.get('url') || '';
@@ -48,9 +48,11 @@ function controls() {
   $('website').textContent=source ? '来源网站：'+source+(platform?'':' · 网页图片 / 视频') : '来源网站：待提取';
   const name=platform==='x'?'X':platform==='youtube'?'YouTube':platform==='toutiao'?'头条':platform==='xiaohongshu'?'小红书':platform==='bilibili'?'B 站':'';
   $('browserCookies').textContent=name?'一键获取本浏览器的'+name+'登录态':'先填写视频网址，再获取登录态';
-  for(const id of ['inspect','folder','saveFolder','cookies','clearCookies','browserCookies','extractUrl'])$(id).disabled=busy;
-  $('inspect').textContent=activeOperation==='inspect'?'正在获取…':'获取视频 / 图集';
+  for(const id of ['inspect','inspectGallery','folder','saveFolder','cookies','clearCookies','browserCookies','extractUrl'])$(id).disabled=busy;
+  $('inspect').textContent=activeOperation==='inspect'?'正在获取视频…':'获取视频';
   $('inspect').setAttribute('aria-busy',String(activeOperation==='inspect'));
+  $('inspectGallery').textContent=activeOperation==='inspect-gallery'?'正在获取图集…':'获取图集';
+  $('inspectGallery').setAttribute('aria-busy',String(activeOperation==='inspect-gallery'));
   for(const id of ['browserCookies','cookies','clearCookies'])$(id).disabled=busy || !platform;
   const galleryActive=galleryDraft && parsedUrl===$('url').value.trim();
   $('galleryCard').hidden=!galleryActive;
@@ -119,23 +121,27 @@ $('captureGalleryImage').addEventListener('click',async()=>{
 });
 async function inspectVideo(options={}) {
   if(busy)return;
-  busy=true;activeOperation='inspect';parsedUrl='';galleryDraft=null;galleryView?.destroy();galleryView=null;galleryChecks=[];pageMediaUrl='';$('pageVideos').replaceChildren();controls();$('error').textContent='';$('captureStatus').textContent='';$('status').textContent='正在获取媒体，请稍候…';
+  const target=options.target==='gallery'?'gallery':'video';lastMediaTarget=target;$('error').dataset.mediaTarget=target;
+  busy=true;activeOperation=target==='gallery'?'inspect-gallery':'inspect';parsedUrl='';galleryDraft=null;galleryView?.destroy();galleryView=null;galleryChecks=[];pageMediaUrl='';$('pageVideos').replaceChildren();controls();$('error').textContent='';$('captureStatus').textContent='';$('status').textContent=target==='gallery'?'正在获取图集，请稍候…':'正在获取视频，请稍候…';
   const url=supportedVideoUrl($('url').value.trim())||webpageUrl($('url').value.trim());
   try {
     if(!url) throw Error('请填写网页、视频或 m3u8/mpd 流媒体的 HTTP/HTTPS 网址。');
     $('url').value=url;
     const directImage=/\.(jpe?g|gif|png|bmp|svg|webp|ico|tiff?|avif)$/i.test(new URL(url).pathname);
-    const capture=!directImage&&options.directMedia!==true&&!supportedVideoUrl(url)&&! /\.(m3u8|mpd|mp4|webm|mov|m4v|mkv)(?:$|[?#])/i.test(url);
+    if(directImage&&target==='video'){$('status').textContent='这是图片链接，请点击“获取图集”。';return;}
+    const capture=!directImage&&(target==='gallery'?videoSite(url)!=='xiaohongshu':options.directMedia!==true&&!supportedVideoUrl(url)&&! /\.(m3u8|mpd|mp4|webm|mov|m4v|mkv)(?:$|[?#])/i.test(url));
     // Request website access within the click gesture, before any other await.
     if(capture&&!(await chrome.permissions.request({origins:[new URL(url).origin+'/*']})))throw Error('请允许读取当前网站，才能获取页面中的图片和视频。');
-    const data=directImage?await send('video-image-preview',{url}):capture?await send('video-page-media',{url,windowId:(await chrome.windows.getCurrent()).id}):await send('video-info',{url});
+    const data=directImage?await send('video-image-preview',{url}):capture?await send('video-page-media',{url,mediaKind:target,windowId:(await chrome.windows.getCurrent()).id}):await send('video-info',{url});
     if($('url').value.trim()!==url)return;
     $('title').textContent='【'+websiteName(url)+'】'+data.title;
-    if(capture){
+    if(capture&&target==='video'){
       pageMediaUrl=url;
       for(const item of data.videos||[]){const button=document.createElement('button');button.textContent='视频 · '+(item.label||new URL(item.url).pathname.split('/').pop()||item.type||'查看画质');button.title=item.url;button.addEventListener('click',async()=>{if(busy)return;try{const w=await chrome.windows.getCurrent();await chrome.storage.session.set({[`video-source:${w.id}`]:{url:item.url,referer:url}});useVideoUrl(item.url);await inspectVideo({directMedia:true});}catch(e){$('error').textContent=e.message;}});$('pageVideos').append(button);}
-      if(data.kind!=='gallery'){$('status').textContent=data.videos?.length?'请选择上方视频查看下载选项':data.modelRepoUrl?'此页未找到可下载图片或视频。模型文件请到“文件类”粘贴此网址获取。':'未找到可下载的正文图片或视频。请先打开目标网页，等待图片加载后重试。';return;}
+      $('status').textContent=data.videos?.length?'请选择上方视频查看下载选项':'未找到可下载的网页视频。图片请点击“获取图集”；正在播放的视频可尝试下方“查找正在播放的媒体”。';return;
     }
+    if(target==='video'&&data.kind==='gallery'){$('status').textContent='此链接返回的是图集，请点击“获取图集”。';return;}
+    if(target==='gallery'&&data.kind!=='gallery'){$('status').textContent=capture?'未找到可下载的网页图片。请打开目标网页，等待图片加载后重试。':'此链接返回的是视频，请点击“获取视频”。';return;}
     parsedUrl=url;
     if(data.kind==='gallery'){
       showGallery(data);
@@ -146,7 +152,8 @@ async function inspectVideo(options={}) {
   }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;$('status').textContent='解析失败';}
   finally{busy=false;activeOperation='';controls();}
 }
-$('inspect').addEventListener('click',inspectVideo);
+$('inspect').addEventListener('click',()=>inspectVideo({target:'video'}));
+$('inspectGallery').addEventListener('click',()=>inspectVideo({target:'gallery'}));
 $('browserCookies').addEventListener('click',async()=>{
   busy=true;controls();$('error').textContent='';$('status').textContent='正在获取视频所属平台的浏览器登录态…';
   let imported=false;
@@ -157,7 +164,7 @@ $('browserCookies').addEventListener('click',async()=>{
     await settings();$('status').textContent='登录态已获取，请输入视频网址后解析';
   } catch(error) { if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;$('status').textContent='获取登录态失败'; }
   finally { busy=false;controls(); }
-  if(imported && supportedVideoUrl($('url').value.trim())) await inspectVideo();
+  if(imported && supportedVideoUrl($('url').value.trim())) await inspectVideo({target:lastMediaTarget});
 });
 let tasksLoading=false,taskOffset=0,taskRevision=0,taskRefreshPending=false;
 function requestTaskRefresh(){

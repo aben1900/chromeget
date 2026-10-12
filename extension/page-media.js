@@ -17,7 +17,7 @@
   }
 
   // Chrome serializes this function. Keep every DOM-side dependency inside it.
-  function collectDocumentMedia() {
+  function collectDocumentMedia(mediaKind='all') {
     function publicUrl(value) {
       try {
         const url = new URL(value, document.baseURI);
@@ -213,7 +213,8 @@
       videoSeen.add(url);videos.push({url,type:String(type||'video').slice(0,80),label:String(label||'网页视频').trim().slice(0,200)});
     }
     for (const scope of scopes) {
-      collectImages(scope,true);
+      if(mediaKind!=='video')collectImages(scope,true);
+      if(mediaKind==='gallery')continue;
       for (const video of scope.querySelectorAll('video')) {
         if (!visible(video)) continue;
         addVideo(video.currentSrc || video.getAttribute('src'),video.getAttribute('type'),video.title);
@@ -224,13 +225,13 @@
       }
     }
     // Keep main content first, then include visible logos, avatars and page icons.
-    if (document.body) collectImages(document.body,false);
+    if (document.body&&mediaKind!=='video') collectImages(document.body,false);
     const result={url:location.href,title:document.title,images,videos};
     if (location.hostname==='huggingface.co' && /^\/[^/]+\/[^/]+\/?$/.test(location.pathname) && !images.length && !videos.length) result.modelRepoUrl=location.origin+location.pathname;
     return result;
   }
 
-  async function collectPageMedia(windowId, expectedUrl) {
+  async function collectPageMedia(windowId, expectedUrl, mediaKind='all') {
     const changed='当前标签页已变化。请切回要获取媒体的页面，再点击获取。';
     const normalized=value=>{try {const url=new URL(value);url.hash='';return url.href;}catch{return '';}};
     if (!Number.isInteger(windowId) || windowId<0) return {ok:false,error:'无法确定当前浏览器窗口，请重新打开侧栏后重试。'};
@@ -240,7 +241,7 @@
       const tabs=await chrome.tabs.query({active:true,windowId});
       const tab=tabs.find(item=>item.windowId===windowId);
       if (!tab || !Number.isInteger(tab.id) || normalized(tab.url)!==expected || tab.pendingUrl && normalized(tab.pendingUrl)!==expected) return {ok:false,error:changed};
-      const results=await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},func:collectDocumentMedia});
+      const results=await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},func:collectDocumentMedia,args:[['video','gallery'].includes(mediaKind)?mediaKind:'all']});
       const captured=results.find(item=>item.frameId===0)?.result;
       const current=await chrome.tabs.get(tab.id);
       if (!captured || normalized(captured.url)!==expected || normalized(current.url)!==expected || current.windowId!==windowId || current.active===false || current.pendingUrl && normalized(current.pendingUrl)!==expected) return {ok:false,error:changed};
@@ -256,7 +257,7 @@
       const videos=(Array.isArray(captured.videos)?captured.videos:[]).filter(item=>isPublicPageMediaUrl(item?.url)).slice(0,30);
       return {ok:true,url:captured.url,title:String(captured.title||'').slice(0,500),images,videos,...(captured.modelRepoUrl===expected?{modelRepoUrl:captured.modelRepoUrl}:{})};
     } catch (error) {
-      if (/permission|cannot access|not allowed|missing host|cannot be scripted/i.test(String(error?.message||error))) return {ok:false,error:'需要此网站的访问权限。请允许访问后，再点击获取视频/图集。'};
+      if (/permission|cannot access|not allowed|missing host|cannot be scripted/i.test(String(error?.message||error))) return {ok:false,error:'需要此网站的访问权限。请允许访问后，再点击“获取视频”或“获取图集”。'};
       return {ok:false,error:'无法读取当前网页。请确认页面已加载，刷新后重试。'};
     }
   }

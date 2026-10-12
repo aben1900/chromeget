@@ -11,6 +11,7 @@ Write-Output 'PASS YouTube full, short, mobile, Shorts/live URLs, playlist exclu
 $root=Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ('work\youtube-state-'+[Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($root)|Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\video.ps1') -Destination (Join-Path $root 'video.ps1')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\gallery-image.ps1') -Destination $root
 . (Join-Path $root 'video.ps1')
 $jobs=Join-Path $root 'video-jobs';[IO.Directory]::CreateDirectory($jobs)|Out-Null
 $id=[Guid]::NewGuid().ToString('N')

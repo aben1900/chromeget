@@ -5,6 +5,7 @@ $folder=Join-Path $root 'folder with spaces'
 [IO.Directory]::CreateDirectory($jobs)|Out-Null
 [IO.Directory]::CreateDirectory($folder)|Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\video.ps1') -Destination (Join-Path $root 'video.ps1')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\gallery-image.ps1') -Destination $root
 . (Join-Path $root 'video.ps1')
 $rejected=$false;try{Get-RecentVideoLocation $jobs|Out-Null}catch{$rejected=$true}
 if(-not $rejected){throw 'Empty jobs not rejected'}

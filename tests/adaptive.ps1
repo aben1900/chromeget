@@ -1,6 +1,6 @@
 $ErrorActionPreference='Stop'
 $root=Join-Path (Resolve-Path '.').Path ('work\adaptive-'+[Guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($root)|Out-Null
-foreach($file in @('recovery.ps1','video.ps1','video-worker.ps1')){Copy-Item -LiteralPath (Join-Path 'native' $file) -Destination $root}
+foreach($file in @('recovery.ps1','gallery-image.ps1','video.ps1','video-worker.ps1')){Copy-Item -LiteralPath (Join-Path 'native' $file) -Destination $root}
 @'
 function Start-VideoProcess($exe,$arguments,$stdoutPath,$stderrPath){
     $counter=Join-Path $PSScriptRoot 'attempt';$n=if(Test-Path $counter){[int][IO.File]::ReadAllText($counter)}else{0};$n++;[IO.File]::WriteAllText($counter,[string]$n)

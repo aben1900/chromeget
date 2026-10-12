@@ -3,6 +3,7 @@ $root=Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ('work\folder
 [IO.Directory]::CreateDirectory($root)|Out-Null
 $module=Join-Path $root 'video.ps1'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\video.ps1') -Destination $module
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\gallery-image.ps1') -Destination $root
 . $module
 $directory=Join-Path $root 'folder with spaces'
 $result=Invoke-VideoAction ([pscustomobject]@{action='video-set-folder';directory=$directory})

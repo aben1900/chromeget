@@ -80,10 +80,10 @@ const record = content => ({id:randomUUID(),time:'2026-09-30T07:20:08.000Z',type
   const empty=await native({action:'list'});assert.deepEqual(empty.records,[]);assert.equal(empty.total,0);
   const pages=Array.from({length:25},(_,i)=>({...record('分页 '+i),time:'2026-10-03 10:00:00 +08:00'}));
   fs.writeFileSync(journal,JSON.stringify(pages));
-  const firstPage=await native({action:'list',offset:0}),secondPage=await native({action:'list',offset:20});
-  assert.equal(firstPage.records.length,20);assert.equal(secondPage.records.length,5);
-  assert.equal(firstPage.records[0].id,pages[24].id);assert.equal(secondPage.records[4].id,pages[0].id);
-  assert.equal(new Set([...firstPage.records,...secondPage.records].map(r=>r.id)).size,25);
+  const firstPage=await native({action:'list',offset:0}),secondPage=await native({action:'list',offset:10}),thirdPage=await native({action:'list',offset:20});
+  assert.equal(firstPage.records.length,10);assert.equal(secondPage.records.length,10);assert.equal(thirdPage.records.length,5);
+  assert.equal(firstPage.records[0].id,pages[24].id);assert.equal(thirdPage.records[4].id,pages[0].id);
+  assert.equal(new Set([...firstPage.records,...secondPage.records,...thirdPage.records].map(r=>r.id)).size,25);
   console.log('PASS saved-record listing, title, chunked long text, batch deletion, invalid IDs, idempotence, concurrent save/delete, empty library, JSON-only storage');
   const externalPath=path.join(temp,'chosen.json');
   const sameA=record('相同内容\n第二行\n第三行'),sameB=record('相同内容\n第二行\n第三行');
@@ -121,7 +121,7 @@ const record = content => ({id:randomUUID(),time:'2026-09-30T07:20:08.000Z',type
   assert.equal(context.summarizePromptTitle('你是一位老师。请设计三天写作课程。包含练习。'),'设计三天写作课程');
   assert.equal(context.summarizePromptTitle('# 数据分析助手\n请分析表格'),'数据分析助手');
   assert.ok(Array.from(context.summarizePromptTitle('写'.repeat(100))).length<=36);
-  installed();await new Promise(r=>setImmediate(r));assert.equal(menu.length,9);
+  installed();await new Promise(r=>setImmediate(r));assert.equal(menu.length,11);assert.ok(menu.some(item=>item.id==='translate'));assert.ok(menu.some(item=>item.id==='translate-page'));
   const settle=()=>new Promise(r=>setTimeout(r,20));
   click({menuItemId:'download-link',linkUrl:'https://example.com/model.gguf'},{windowId:42});await settle();assert.equal(session['app-view:42'],'download');assert.equal(session['download-link:42'].url,'https://example.com/model.gguf');assert.equal(panels.at(-1).windowId,42);panels.length=0;delete session['app-view:42'];delete session['download-link:42'];
 

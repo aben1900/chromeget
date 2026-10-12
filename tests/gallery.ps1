@@ -17,14 +17,14 @@ foreach($bad in @('https://xhscdn.com.evil.com/one','http://xhscdn.com/one','htt
 Write-Output 'PASS ordered gallery preview, mandatory confirmation, one batch folder, filename sanitation, image host validation'
 function New-Object {
  param([string]$TypeName,[object[]]$ArgumentList)
- if($TypeName -eq 'Net.Http.HttpClientHandler'){$o=[pscustomobject]@{AllowAutoRedirect=$true};$o|Add-Member ScriptMethod Dispose {};return $o}
+ if($TypeName -eq 'Net.Http.HttpClientHandler'){$o=[pscustomobject]@{AllowAutoRedirect=$true;UseCookies=$true;UseDefaultCredentials=$false};$o|Add-Member ScriptMethod Dispose {};return $o}
  if($TypeName -eq 'Net.Http.HttpClient'){
   $agent=[pscustomobject]@{};$agent|Add-Member ScriptMethod ParseAdd {}
   $o=[pscustomobject]@{Timeout=$null;DefaultRequestHeaders=[pscustomobject]@{Referrer=$null;UserAgent=$agent}}
   $o|Add-Member ScriptMethod Dispose {}
   $o|Add-Member ScriptMethod GetAsync {
-   $content=[pscustomobject]@{};$content|Add-Member ScriptMethod ReadAsByteArrayAsync {
-    $task=[pscustomobject]@{};$task|Add-Member ScriptMethod GetAwaiter {return $this};$task|Add-Member ScriptMethod GetResult {return [byte[]]@(255,216,255,224,0,0,0,0,0,0,0,0,255,217)};return $task
+   $content=[pscustomobject]@{Headers=[pscustomobject]@{ContentLength=14}};$content|Add-Member ScriptMethod ReadAsStreamAsync {
+    $task=[pscustomobject]@{};$task|Add-Member ScriptMethod GetAwaiter {return $this};$task|Add-Member ScriptMethod GetResult {return [IO.MemoryStream]::new([byte[]]@(255,216,255,224,0,0,0,0,0,0,0,0,255,217))};return $task
    }
    $response=[pscustomobject]@{Content=$content};$response|Add-Member ScriptMethod EnsureSuccessStatusCode {}; $response|Add-Member ScriptMethod Dispose {}
    $task=[pscustomobject]@{Result=$response};$task|Add-Member ScriptMethod GetAwaiter {return $this};$task|Add-Member ScriptMethod GetResult {return $this.Result};return $task

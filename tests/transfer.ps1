@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference='Stop'
 $root=Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ('work\transfer-test-'+[Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory((Join-Path $root 'bin'))|Out-Null
-foreach($name in @('video.ps1','transfer.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('..\native\'+$name)) -Destination $root}
+foreach($name in @('gallery-image.ps1','video.ps1','transfer.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('..\native\'+$name)) -Destination $root}
 [IO.File]::WriteAllText((Join-Path $root 'bin\aria2c.exe'),'fixture')
 . (Join-Path $root 'video.ps1')
 Write-VideoJson (Join-Path $root 'video-settings.json') @{directory=(Join-Path $root 'downloads')}

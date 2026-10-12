@@ -1,6 +1,6 @@
 $ErrorActionPreference='Stop'
 $root=Join-Path (Resolve-Path '.').Path ('work\tls-test-'+[Guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($root)|Out-Null
-foreach($name in @('recovery.ps1','video.ps1','video-worker.ps1')){Copy-Item -LiteralPath (Join-Path 'native' $name) -Destination $root}
+foreach($name in @('recovery.ps1','gallery-image.ps1','video.ps1','video-worker.ps1')){Copy-Item -LiteralPath (Join-Path 'native' $name) -Destination $root}
 . (Join-Path $root 'video.ps1')
 $base=Join-Path $root 'error-fixture'
 [IO.File]::WriteAllLines(($base+'.out.log'),(@('Download aborted.','Exception: errorCode=1 SSL/TLS handshake failure: reset')+@(1..50|ForEach-Object{'generic summary'})))

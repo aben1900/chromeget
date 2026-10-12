@@ -1,6 +1,6 @@
 (() => {
  if(globalThis.__chromegetPageTranslation)return;globalThis.__chromegetPageTranslation=true;
- let active=false,token='',generation=0,observer,visibility,timer,pumping=false,queue=[],records=new Map(),cache=new Map(),bar,done=0,failed=0,halted=false,switching=false,invalidated=false;
+ let active=false,token='',generation=0,observer,visibility,timer,pumping=false,queue=[],records=new Map(),cache=new Map(),bar,done=0,failed=0,halted=false,switching=false,invalidated=false,pickerOpen=false,optionsRun=0,loadingOptions=false;
  const refreshMessage='扩展已更新、重载或停用，当前网页的翻译连接已失效。请刷新网页后重新开启双语翻译。';
  const selector='p,li,h1,h2,h3,h4,h5,h6,blockquote,figcaption,td,th,article div,main div';
  const excluded='script,style,noscript,textarea,input,select,button,pre,code,[contenteditable]:not([contenteditable="false"]),[translate="no"],[hidden],[aria-hidden="true"],[data-chromeget-translation]';
@@ -9,7 +9,7 @@
  function source(el){return [...el.childNodes].filter(n=>n.nodeType!==1||!n.hasAttribute('data-chromeget-translation')).map(n=>n.textContent).join('').trim();}
  function invalidate(){
   if(invalidated)return;invalidated=true;if(!active)return;
-  generation++;halted=true;pumping=false;switching=false;observer?.disconnect();visibility?.disconnect();clearTimeout(timer);clearUnfinished();
+  generation++;optionsRun++;halted=true;pumping=false;switching=false;pickerOpen=false;loadingOptions=false;observer?.disconnect();visibility?.disconnect();clearTimeout(timer);clearUnfinished();
   bar.error.textContent=refreshMessage;bar.notice.textContent='';status();
  }
  // Reloaded extensions can throw before returning a Promise, so guard the invocation itself.
@@ -18,34 +18,37 @@
  function stopSession(sessionToken){send({action:'page-translation-stop',token:sessionToken}).catch(()=>{});}
  function status(){
   if(!bar)return;
-  bar.label.textContent=invalidated?'翻译已停止 · 已完成 '+done+' 段':halted?'翻译暂停 · 已完成 '+done+' 段 · '+failed+' 段失败':'双语翻译 · '+done+' 段'+(queue.length||pumping?' · 翻译中…':'');
-  bar.recovery.hidden=!halted;bar.field.hidden=bar.resume.hidden=bar.cost.hidden=invalidated;bar.select.disabled=bar.resume.disabled=switching||invalidated;bar.resume.disabled||=!bar.select.value;
+  bar.label.textContent=invalidated?'翻译已停止 · 已完成 '+done+' 段':switching?'正在切换翻译路径…':halted?'翻译暂停 · 已完成 '+done+' 段 · '+failed+' 段失败':'双语翻译 · '+done+' 段'+(queue.length||pumping?' · 翻译中…':'');
+  bar.recovery.hidden=!halted&&!pickerOpen;bar.field.hidden=bar.resume.hidden=bar.cost.hidden=bar.cancel.hidden=!pickerOpen||invalidated;bar.select.disabled=bar.resume.disabled=switching||invalidated||loadingOptions;bar.resume.disabled||=!bar.select.value;
+  bar.picker.disabled=invalidated||switching;bar.picker.setAttribute('aria-expanded',String(pickerOpen));bar.cancel.disabled=switching;bar.resume.textContent=halted?'继续翻译未完成内容':'应用到本页后续内容';
  }
  function clearUnfinished(){queue=[];for(const r of records.values())if(!r.finished){r.pending=false;r.output.textContent='';r.output.hidden=true;r.output.style.display='none';}}
- function stop(){active=false;generation++;pumping=false;switching=false;observer?.disconnect();visibility?.disconnect();clearTimeout(timer);queue=[];for(const r of records.values())r.output.remove();records.clear();cache.clear();bar?.host.remove();bar=null;stopSession(token);}
+ function stop(){active=false;generation++;optionsRun++;pumping=false;switching=false;pickerOpen=false;loadingOptions=false;observer?.disconnect();visibility?.disconnect();clearTimeout(timer);queue=[];for(const r of records.values())r.output.remove();records.clear();cache.clear();bar?.host.remove();bar=null;stopSession(token);}
  function enqueue(el){const r=records.get(el);if(!active||!r||r.pending||r.finished||halted)return;r.pending=true;r.output.hidden=false;r.output.style.display='block';r.output.textContent='翻译中…';queue.push(el);status();pump();}
- async function choices(){
-  const run=generation;try{const response=await request({action:'page-translation-options',token});if(!active||run!==generation)return;if(!response?.ok)throw Error(explain(response));
+ function closePicker(){if(switching)return;pickerOpen=false;optionsRun++;loadingOptions=false;status();bar?.picker.focus();}
+ function openPicker(){if(!active||invalidated||switching)return;if(pickerOpen){closePicker();return;}pickerOpen=true;if(!halted)bar.error.textContent='';choices(true);}
+ async function choices(focus=false){
+  const run=generation,menuRun=++optionsRun;loadingOptions=true;bar.notice.textContent='正在读取可用翻译路径…';status();try{const response=await request({action:'page-translation-options',token});if(!active||run!==generation||menuRun!==optionsRun)return;if(!response?.ok)throw Error(explain(response));
    bar.select.replaceChildren();for(const choice of response.choices||[]){const option=document.createElement('option');option.value=choice.id;option.textContent=choice.label;option.dataset.route=choice.route;bar.select.append(option);}
    if(response.currentChoice)bar.select.value=response.currentChoice;bar.notice.textContent=response.notice||'';costHint();status();
-  }catch(e){if(active&&run===generation){bar.notice.textContent='模型列表读取失败；可尝试免 Key 通道。';status();}}
+  }catch(e){if(active&&run===generation&&menuRun===optionsRun)bar.notice.textContent='模型列表读取失败；可尝试免 Key 通道。';}finally{if(active&&run===generation&&menuRun===optionsRun){loadingOptions=false;status();if(focus&&pickerOpen)bar.select.focus();}}
  }
- function costHint(){if(bar)bar.cost.textContent=bar.select.selectedOptions[0]?.dataset.route==='model'?'继续后，未完成的网页文字将发送到所选模型，可能使用 API 额度。':'继续后，未完成的网页文字将发送到所选翻译服务。仅本页生效。';}
+ function costHint(){if(bar)bar.cost.textContent=bar.select.selectedOptions[0]?.dataset.route==='model'?'应用后，未完成和新增的网页文字将发送到所选模型，可能使用 API 额度。仅本页生效，保留已完成译文。':'应用后，未完成和新增的网页文字将发送到所选翻译服务。仅本页生效，保留已完成译文。';}
  async function resume(){
-  if(!active||invalidated||!halted||switching||!bar.select.value)return;switching=true;status();const run=generation,stateBar=bar;
+  if(!active||invalidated||!pickerOpen||switching||loadingOptions||!bar.select.value)return;switching=true;status();const run=generation,stateBar=bar;
   try{const response=await request({action:'page-translation-switch',token,choiceId:bar.select.value,confirmed:true});if(!active||run!==generation){if(response?.ok&&response.token)stopSession(response.token);return;}if(!response?.ok)throw Error(explain(response));
-   token=response.token;generation++;halted=false;failed=0;cache.clear();clearUnfinished();bar.error.textContent='';bar.route.textContent=response.label;watchVisibility();for(const [el,r]of records)if(!r.finished)visibility.observe(el);scan();
-  }catch(e){if(active&&run===generation)bar.error.textContent=explain(e);}finally{if(bar===stateBar){switching=false;status();}}
+   token=response.token;generation++;optionsRun++;pumping=false;pickerOpen=false;halted=false;failed=0;cache.clear();clearUnfinished();bar.error.textContent='';bar.route.textContent=response.label;bar.picker.focus();watchVisibility();for(const [el,r]of records)if(!r.finished)visibility.observe(el);scan();
+  }catch(e){if(active&&run===generation)bar.error.textContent=explain(e);}finally{if(bar===stateBar){switching=false;status();if(active&&!halted) pump();}}
  }
  async function pump(){
-  if(pumping)return;const run=generation;pumping=run;
-  try{while(active&&run===generation&&queue.length&&!halted){
+  if(pumping||switching)return;const run=generation;pumping=run;
+  try{while(active&&run===generation&&queue.length&&!halted&&!switching){
    const el=queue.shift(),r=records.get(el);if(!r||!el.isConnected)continue;const text=source(el);if(text!==r.text){r.pending=false;schedule();continue;}
    try{let translated=cache.get(text);if(!translated){const response=await request({action:'page-translation-text',token,text});if(!response?.ok)throw Error(explain(response));translated=response.text;if(typeof translated!=='string'||!translated.trim())throw Error('翻译服务没有返回译文，请重试或更换路径');}
     if(!active||run!==generation)break;if(cache.size<1000)cache.set(text,translated);if(source(el)!==text){r.pending=false;schedule();continue;}
     r.output.textContent=translated;r.output.hidden=false;r.finished=true;done++;
-   }catch(e){if(!active||run!==generation)break;failed++;halted=true;clearUnfinished();bar.error.textContent=explain(e);choices();}
-   finally{r.pending=false;status();}
+   }catch(e){if(!active||run!==generation)break;failed++;halted=true;clearUnfinished();bar.error.textContent=explain(e);if(!switching){pickerOpen=true;choices();}}
+   finally{if(run===generation)r.pending=false;status();}
   }}finally{if(pumping===run){pumping=false;status();if(active&&queue.length&&!halted)pump();}}
  }
  function scan(){
@@ -62,13 +65,14 @@
  function watchVisibility(){visibility?.disconnect();visibility=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting)enqueue(e.target);},{rootMargin:'600px'});}
  function start(m){
   if(invalidated)return;
-  active=true;halted=false;done=failed=0;token=m.token;generation++;globalThis.__chromegetTarget=m.targetLanguage;
+  active=true;halted=false;pickerOpen=false;loadingOptions=false;done=failed=0;token=m.token;generation++;globalThis.__chromegetTarget=m.targetLanguage;
   const host=document.createElement('div');host.setAttribute('data-chromeget-translation','');host.style.cssText='position:fixed;right:12px;bottom:12px;max-width:calc(100vw - 24px);z-index:2147483647';
   const shadow=host.attachShadow({mode:'closed'}),style=document.createElement('style');style.textContent='*{box-sizing:border-box}[hidden]{display:none!important}.box{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#fff;color:#292929;border:1px solid #d8d8d8;border-radius:12px;padding:10px 12px;box-shadow:0 3px 18px #0002;max-width:380px}.head{display:flex;gap:10px;align-items:center}.head span{flex:1}.close{font-size:22px;border:0;background:none;cursor:pointer;color:inherit}.route,small{font-size:12px;color:#666}.route:empty{display:none}.recovery{border-top:1px solid #eee;margin-top:6px;padding-top:8px}p{margin:0 0 8px;overflow-wrap:anywhere}select,button{font:inherit;max-width:100%}select{width:100%;padding:7px;border:1px solid #ccc;border-radius:7px;background:#fff;color:#222}.continue{margin-top:8px;padding:7px 12px;background:#242424;color:#fff;border:0;border-radius:7px;cursor:pointer}button:disabled{opacity:.5;cursor:default}small{display:block;margin-top:6px}small:empty{display:none}label{display:block;margin-bottom:5px}';
-  const box=document.createElement('div');box.className='box';const head=document.createElement('div');head.className='head';const label=document.createElement('span');label.setAttribute('role','status');const close=document.createElement('button');close.className='close';close.dataset.action='close';close.textContent='×';close.title='关闭双语翻译，恢复原文';close.setAttribute('aria-label',close.title);close.onclick=stop;head.append(label,close);
-  const route=document.createElement('div');route.className='route';route.textContent=m.route==='model'?'已配置模型':m.route==='bilibili'?'B站 · Index-Translate':'微软 · 免 Key';
+  style.textContent+='.picker{flex:1;text-align:left;padding:2px 0;border:0;background:none;color:inherit;cursor:pointer}.picker span{display:block}.picker:hover .route{text-decoration:underline}.picker:focus-visible,.cancel:focus-visible{outline:2px solid #4263eb;outline-offset:3px}.cancel{margin:8px 0 0 8px;padding:7px 10px;border:1px solid #ccc;border-radius:7px;background:#fff;color:#333;cursor:pointer}[role=alert]:empty{display:none}';
+  const box=document.createElement('div');box.className='box';const head=document.createElement('div');head.className='head';const label=document.createElement('span');label.setAttribute('role','status');const picker=document.createElement('button');picker.type='button';picker.className='picker';picker.dataset.action='choose-route';picker.setAttribute('aria-label','选择本页翻译路径或模型');picker.setAttribute('aria-controls','translation-route-panel');picker.setAttribute('aria-expanded','false');picker.title='选择本页翻译路径或模型';picker.onclick=openPicker;const close=document.createElement('button');close.className='close';close.dataset.action='close';close.textContent='×';close.title='关闭双语翻译，恢复原文';close.setAttribute('aria-label',close.title);close.onclick=stop;head.append(picker,close);
+  const route=document.createElement('span');route.className='route';route.textContent=m.route==='model'?'已配置模型':m.route==='bilibili'?'B站 · Index-Translate':'微软 · 免 Key';picker.append(label,route);
   const recovery=document.createElement('div');recovery.className='recovery';recovery.hidden=true;const error=document.createElement('p');error.setAttribute('role','alert');const field=document.createElement('label');field.textContent='更换翻译路径';const select=document.createElement('select');select.setAttribute('aria-label','翻译路径');for(const [id,text]of [['free','微软 · 免 Key'],['bilibili','B站 · Index-Translate']]){const option=document.createElement('option');option.value=id;option.dataset.route=id;option.textContent=text;select.append(option);}select.value=m.route==='bilibili'?'bilibili':'free';select.onchange=()=>{costHint();status();};field.append(select);
-  const button=document.createElement('button');button.dataset.action='continue';button.className='continue';button.textContent='继续翻译未完成内容';button.onclick=resume;const cost=document.createElement('small'),notice=document.createElement('small');recovery.append(error,field,cost,button,notice);box.append(head,route,recovery);shadow.append(style,box);document.documentElement.append(host);bar={host,label,route,recovery,error,field,select,resume:button,cost,notice};costHint();
+  recovery.id='translation-route-panel';const button=document.createElement('button');button.dataset.action='continue';button.className='continue';button.onclick=resume;const cancel=document.createElement('button');cancel.className='cancel';cancel.dataset.action='cancel-route';cancel.textContent='取消';cancel.onclick=closePicker;const cost=document.createElement('small'),notice=document.createElement('small');recovery.append(error,field,cost,button,cancel,notice);box.append(head,recovery);box.addEventListener('keydown',e=>{if(e.key==='Escape'&&pickerOpen&&!switching){e.preventDefault();e.stopPropagation();closePicker();}});shadow.append(style,box);document.documentElement.append(host);bar={host,label,picker,route,recovery,error,field,select,resume:button,cancel,cost,notice};costHint();
   watchVisibility();observer=new MutationObserver(changes=>{if(changes.some(c=>!c.target.parentElement?.closest('[data-chromeget-translation]')&&!(c.target.nodeType===1&&c.target.closest('[data-chromeget-translation]'))))schedule();});observer.observe(document.body,{childList:true,subtree:true,characterData:true});scan();
  }
  chrome.runtime.onMessage.addListener((m,s,reply)=>{if(m.action==='page-translation-state'){reply({active,phase:!active?'off':halted?'error':pumping||queue.length?'working':'on',done,failed});return;}if(m.action!=='page-translation-toggle')return;if(active)stop();else start(m);reply({active});});

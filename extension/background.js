@@ -1,5 +1,5 @@
 const HOST = 'cn.jingcai.clipper';
-importScripts('free-translation.js', 'recovery.js', 'collect-model.js', 'collect-service.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'sniffer.js', 'page-links.js', 'hover-control.js');
+importScripts('free-translation.js', 'recovery.js', 'collect-model.js', 'collect-service.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'sniffer.js', 'page-links.js', 'page-media.js', 'hover-control.js');
 const kinds = {comment: '评论', review: '评阅', content: '内容', prompt: '提示词', link: '网页地址', page: '网页地址'};
 let serial = Promise.resolve();
 function exclusive(fn) {
@@ -192,7 +192,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     })().then(reply,e=>reply({ok:false,error:e.message}));return true;
   }
 
-  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','video-sniff-start','video-sniff-list','video-sniff-stop','video-sniff-download','download-page-links','hover-download-set'].includes(message.action)) {
+  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-gallery-image-info','video-page-media','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','video-sniff-start','video-sniff-list','video-sniff-stop','video-sniff-download','download-page-links','hover-download-set'].includes(message.action)) {
     (async()=>{
       if(message.action==='hover-download-set')return setHoverDownload(message.enabled===true,message.windowId);
       if(message.action==='download-page-links')return downloadPageLinks(message.windowId);
@@ -211,6 +211,15 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(message.genericFile && !host.capabilities?.includes('generic-files'))throw Error('请运行开始使用.cmd → 更新 / 修复 更新普通文件下载功能。');
       if(message.action==='video-pause' && !host.capabilities?.includes('task-progress'))throw Error(`当前连接的本地程序未声明暂停能力（版本：${host.version || '未知'}；路径：${host.hostPath || '未提供'}）。请运行“开始使用.cmd → 更新 / 修复”，然后在 chrome://extensions 重新加载精彩摘录并重新打开侧边栏。更新扩展本身不会更新本地程序。`);
       if((message.action==='video-file-probe'||message.genericMedia||message.maxActive!==undefined) && !host.capabilities?.includes('download-suite'))throw Error('请更新本地程序以使用探测、队列或通用流媒体功能。');
+      if((message.action==='video-gallery-image-info'||message.imageFormat&&message.imageFormat!=='original')&&!host.capabilities?.includes('gallery-image-options-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用图片信息和格式转换。');
+      if(message.action==='video-page-media'){
+        if(!host.capabilities?.includes('webpage-gallery-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用网页图片获取。');
+        const captured=await collectPageMedia(message.windowId,message.url);
+        if(!captured.ok)throw Error(captured.error);
+        if(!captured.images.length)return {...captured,kind:'page-media'};
+        const preview=await native({action:'video-gallery-preview',url:captured.url,title:captured.title,images:captured.images});
+        return {...preview,videos:captured.videos,captureUrl:captured.url};
+      }
       let cookieText;
       if (message.action === 'video-browser-cookies') {
         if (!host.capabilities?.includes('browser-cookies')) throw Error('请运行“开始使用.cmd → 更新 / 修复”更新本地程序，然后重试获取登录态。');
@@ -218,7 +227,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       }
       if(message.transferMode==='extreme'&&!host.capabilities?.includes('range64'))throw Error('请更新本地程序以使用原生 64 路下载。');
       if(message.mediaMode==='audio'&&!host.capabilities?.includes('audio-download'))throw Error('请更新本地程序以使用仅音频下载。');
-      const result=await native({action:message.action,url:message.url,height:message.height,mediaMode:message.mediaMode,audioFormat:message.audioFormat,id:message.id,directory:message.directory,site:message.site,cookieText,draftId:message.draftId,confirmed:message.confirmed,selectedIndexes:message.selectedIndexes,title:message.title,statusFilter:message.statusFilter,offset:message.offset,transferMode:message.transferMode,genericFile:message.genericFile,filename:message.filename,checksum:message.checksum,genericMedia:message.genericMedia,referer:message.referer,maxActive:message.maxActive,autoClassify:message.autoClassify,adaptive:message.adaptive});
+      const result=await native({action:message.action,url:message.url,height:message.height,mediaMode:message.mediaMode,audioFormat:message.audioFormat,id:message.id,directory:message.directory,site:message.site,cookieText,draftId:message.draftId,confirmed:message.confirmed,selectedIndexes:message.selectedIndexes,index:message.index,imageFormat:message.imageFormat,title:message.title,statusFilter:message.statusFilter,offset:message.offset,transferMode:message.transferMode,genericFile:message.genericFile,filename:message.filename,checksum:message.checksum,genericMedia:message.genericMedia,referer:message.referer,maxActive:message.maxActive,autoClassify:message.autoClassify,adaptive:message.adaptive});
       if(['video-start','video-gallery-start','video-file-start','video-resume'].includes(message.action)) await chrome.storage.local.set({lastVideoJob:result.id,lastVideoSelection:{url:message.url,height:message.height}});
       return {...result,hostVersion:host.version,hostPath:host.hostPath};
     })().then(reply,error=>reply(Recovery.response(error)));

@@ -1,6 +1,7 @@
 ﻿$ErrorActionPreference='Stop'
 $root=Join-Path (Resolve-Path '.').Path ('work\queue-test-'+[Guid]::NewGuid().ToString('N'));$jobs=Join-Path $root 'video-jobs';[IO.Directory]::CreateDirectory($jobs)|Out-Null
 Copy-Item native/video.ps1 $root
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\gallery-image.ps1') -Destination $root
 . (Join-Path $root 'video.ps1')
 Write-VideoJson (Join-Path $root 'video-settings.json') @{directory=$root;maxActive=2}
 $script:launches=0

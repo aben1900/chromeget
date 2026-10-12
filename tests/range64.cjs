@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),crypto=require('crypto'),assert=require('assert/strict'),{spawn}=require('child_process');
 const root=path.resolve('work/range64-'+Date.now()),jobs=path.join(root,'video-jobs');fs.mkdirSync(jobs,{recursive:true});fs.mkdirSync(path.join(root,'bin'));
-for(const n of ['recovery.ps1','video.ps1','video-worker.ps1','range-worker.ps1','range-engine.cs','transfer.ps1','transfer-probe.ps1','telemetry.ps1'])fs.copyFileSync('native/'+n,path.join(root,n));fs.copyFileSync('native/bin/aria2c.exe',path.join(root,'bin/aria2c.exe'));
+for(const n of ['recovery.ps1','gallery-image.ps1','video.ps1','video-worker.ps1','range-worker.ps1','range-engine.cs','transfer.ps1','transfer-probe.ps1','telemetry.ps1'])fs.copyFileSync('native/'+n,path.join(root,n));fs.copyFileSync('native/bin/aria2c.exe',path.join(root,'bin/aria2c.exe'));
 fs.writeFileSync(path.join(root,'video-settings.json'),JSON.stringify({directory:path.join(root,'out'),transferMode:'extreme',maxActive:1}));
 const data=crypto.randomBytes(64*1024*1024),hash=crypto.createHash('sha256').update(data).digest('hex');let active=0,peak=0,etag='"v1"',starts=[];
 const server=http.createServer((req,res)=>{const m=req.headers.range?.match(/bytes=(\d+)-(\d+)/);if(!m){res.writeHead(400);res.end();return;}let offset=+m[1],end=+m[2];starts.push(offset);active++;peak=Math.max(peak,active);res.writeHead(206,{'Content-Range':`bytes ${offset}-${end}/${data.length}`,'Content-Length':end-offset+1,'ETag':etag});

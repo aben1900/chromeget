@@ -1,6 +1,6 @@
 $ErrorActionPreference='Stop'
 $root=Join-Path (Resolve-Path '.').Path ('work\watch-'+[Guid]::NewGuid().ToString('N'));$jobs=Join-Path $root 'video-jobs';[IO.Directory]::CreateDirectory($jobs)|Out-Null
-foreach($file in @('recovery.ps1','video.ps1','video-worker.ps1','queue-watch.ps1')){Copy-Item -LiteralPath (Join-Path 'native' $file) -Destination $root}
+foreach($file in @('recovery.ps1','gallery-image.ps1','video.ps1','video-worker.ps1','queue-watch.ps1')){Copy-Item -LiteralPath (Join-Path 'native' $file) -Destination $root}
 . (Join-Path $root 'video.ps1')
 Write-VideoJson (Join-Path $root 'video-settings.json') @{directory=$root;maxActive=1}
 $first=Join-Path $jobs (([Guid]::NewGuid().ToString('N'))+'.json');$self=Get-Process -Id $PID

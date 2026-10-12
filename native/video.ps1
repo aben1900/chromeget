@@ -1,4 +1,5 @@
-﻿function Write-VideoJson($path, $value) {
+﻿. (Join-Path $PSScriptRoot 'gallery-image.ps1')
+function Write-VideoJson($path, $value) {
     $temp = $path + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
     [IO.File]::WriteAllText($temp, (ConvertTo-Json -InputObject $value -Depth 8), (New-Object Text.UTF8Encoding($false)))
     if ([IO.File]::Exists($path)) { [IO.File]::Replace($temp,$path,[NullString]::Value) } else { [IO.File]::Move($temp,$path) }
@@ -152,6 +153,8 @@ function Invoke-VideoActionCore($message) {
     }
     $jobs = Join-Path $PSScriptRoot 'video-jobs'
     [IO.Directory]::CreateDirectory($jobs) | Out-Null
+    if ($message.action -eq 'video-gallery-preview') { return Save-WebGalleryPreview $message $jobs $(if($settings.autoClassify){Join-Path $settings.directory '图片'}else{$settings.directory}) }
+    if ($message.action -eq 'video-gallery-image-info') { return Get-GalleryImageInfo $message $jobs }
     if ($message.action -eq 'video-gallery-start') { return Start-GalleryJob $message $jobs $(if($settings.autoClassify){Join-Path $settings.directory '图片'}else{$settings.directory}) }
     if ($message.action -eq 'video-open-task') {
         if($message.id -notmatch '^[a-f0-9]{32}$'){throw '下载任务编号无效。'}
@@ -354,7 +357,8 @@ function Invoke-VideoActionCore($message) {
     Submit-DownloadJob $jobPath
     return @{ok=$true; id=$id; directory=$settings.directory}
 }
-function Assert-GalleryImage([string]$url) {
+function Assert-GalleryImage([string]$url,[string]$sourceKind='xiaohongshu',[bool]$resolveDns=$false) {
+    if($sourceKind -eq 'webpage'){return Assert-GalleryWebUrl $url $resolveDns}
     $uri=$null
     if(-not [Uri]::TryCreate($url,[UriKind]::Absolute,[ref]$uri) -or $uri.Scheme -ne 'https' -or $uri.Port -ne 443 -or $uri.UserInfo -or $uri.Host -notmatch '(^|\.)xhscdn\.com$'){throw '图集图片地址无效。'}
     return $uri.AbsoluteUri
@@ -369,7 +373,8 @@ function Save-GalleryPreview($info,$url,$jobs,$directory) {
 }
 function Start-GalleryJob($message,$jobs,$directory) {
     if($message.confirmed -ne $true -or $message.draftId -notmatch '^[a-f0-9]{32}$'){throw '请先获取图集并确认下载。'}
-    $draft=Read-VideoJson (Join-Path $jobs ($message.draftId+'.gallery.json'))
+    $format=Get-GalleryImageFormat $message.imageFormat
+    $draft=Read-GalleryDraft $message $jobs
     $indexes=if($null -ne $message.selectedIndexes){@($message.selectedIndexes)}else{@(0..($draft.images.Count-1))}
     if($indexes.Count -eq 0){throw '请至少选择一张图片。'}
     $seen=@{}
@@ -382,12 +387,14 @@ function Start-GalleryJob($message,$jobs,$directory) {
         [pscustomobject]@{url=$item.url;width=$item.width;height=$item.height;originalIndex=([int]$index+1)}
     })
     if([DateTime]::Parse($draft.created).ToUniversalTime().AddMinutes(30) -lt (Get-Date).ToUniversalTime()){throw '图片链接可能已过期，请重新获取图集后确认。'}
-    foreach($item in $draft.images){$null=Assert-GalleryImage $item.url}
+    foreach($item in $draft.images){$null=Assert-GalleryImage $item.url $draft.sourceKind}
     if($draft.noteId -notmatch '^[a-f0-9]+$'){throw '图集编号无效。'}
     $title=([regex]::Replace([string]$draft.title,'[<>:"/\\|?*\x00-\x1f]','_')).Trim().TrimEnd('.')
     if($title.Length -gt 60){$title=$title.Substring(0,60)}
-    $folder=Join-Path $directory ("【小红书】$title [$($draft.noteId)]")
-    $existing=Find-ExistingDownload $jobs @{kind='gallery';directory=$folder} $true
+    $prefix=if($draft.sourceKind -eq 'webpage'){'网页'}else{'小红书'}
+    $folder=Join-Path $directory ("【$prefix】$title [$($draft.noteId)]")
+    if($format -ne 'original'){$folder=Join-Path $folder $format.ToUpperInvariant()}
+    $existing=Find-ExistingDownload $jobs @{kind='gallery';directory=$folder;imageFormat=$format} $true
     if($existing){
         $active=Read-VideoJson (Join-Path $jobs ($existing+'.json'))
         if((@($active.images.originalIndex) -join ',') -eq (@($images.originalIndex) -join ',')){return @{ok=$true;id=$existing;directory=$folder}}
@@ -395,40 +402,48 @@ function Start-GalleryJob($message,$jobs,$directory) {
     }
     [IO.Directory]::CreateDirectory($folder)|Out-Null
     $id=[Guid]::NewGuid().ToString('N');$jobPath=Join-Path $jobs ($id+'.json')
-    Write-VideoJson $jobPath @{createdAt=(Get-Date).ToUniversalTime().ToString('o');state='starting';kind='gallery';directory=$folder;images=$images;title=$draft.title;source=$draft.url;error='';file='';siteName='小红书';completedCount=0}
+    Write-VideoJson $jobPath @{createdAt=(Get-Date).ToUniversalTime().ToString('o');state='starting';kind='gallery';directory=$folder;images=$images;imageFormat=$format;sourceKind=$draft.sourceKind;title=$draft.title;source=$draft.url;error='';file='';siteName=$(if($draft.sourceKind -eq 'webpage'){$draft.siteName}else{'小红书'});completedCount=0}
     Submit-DownloadJob $jobPath
     return @{ok=$true;id=$id;directory=$folder}
 }
 function Invoke-GalleryDownload($job,$jobPath,$logPath) {
     Add-Type -AssemblyName System.Net.Http
     $handler=New-Object Net.Http.HttpClientHandler
-    $handler.AllowAutoRedirect=$false
+    $handler.AllowAutoRedirect=$false;$handler.UseCookies=$false;$handler.UseDefaultCredentials=$false
     $client=New-Object Net.Http.HttpClient($handler)
     $client.Timeout=[TimeSpan]::FromSeconds(60)
-    $client.DefaultRequestHeaders.Referrer=[Uri]'https://www.xiaohongshu.com/'
+    if($job.sourceKind -ne 'webpage'){$client.DefaultRequestHeaders.Referrer=[Uri]'https://www.xiaohongshu.com/'}
     $client.DefaultRequestHeaders.UserAgent.ParseAdd('Mozilla/5.0')
-    $files=@();$index=0
+    $files=@();$index=0;$format=Get-GalleryImageFormat $job.imageFormat
+    $ffmpeg=if($format -ne 'original'){(Get-VideoTools).ffmpeg}else{''}
     try {
         foreach($item in $job.images){
             if(Test-Path -LiteralPath ($jobPath+'.deleted')){throw '任务已删除。'}
-            $index++;$url=Assert-GalleryImage $item.url
+            $index++;$url=Assert-GalleryImage $item.url $job.sourceKind
             $number=if($item.originalIndex){[int]$item.originalIndex}else{$index}
-            $response=$null;$temp=Join-Path $job.directory ('{0:D3}.part' -f $number)
+            $response=$null;$temp=Join-Path $job.directory ('{0:D3}.{1}.part' -f $number,[Guid]::NewGuid().ToString('N'));$converted=$temp+'.converted'
             try {
-                $response=$client.GetAsync($url).GetAwaiter().GetResult()
-                $null=$response.EnsureSuccessStatusCode()
-                $bytes=$response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
-                if($bytes.Length -lt 12){throw '图片内容不完整。'}
-                $ext=if($bytes[0] -eq 255 -and $bytes[1] -eq 216){'jpg'}elseif($bytes[0] -eq 137 -and $bytes[1] -eq 80){'png'}elseif([Text.Encoding]::ASCII.GetString($bytes,0,4) -eq 'RIFF' -and [Text.Encoding]::ASCII.GetString($bytes,8,4) -eq 'WEBP'){'webp'}elseif([Text.Encoding]::ASCII.GetString($bytes,0,3) -eq 'GIF'){'gif'}else{throw '服务器未返回支持的图片格式。'}
-                $file=Join-Path $job.directory ('{0:D3}.{1}' -f $number,$ext)
+                if($job.sourceKind -eq 'webpage'){
+                    $null=Invoke-GalleryNetwork $url 'webpage' 'GET' $temp
+                    $bytes=[IO.File]::ReadAllBytes($temp)
+                }else{
+                    $response=Invoke-GalleryRequest $client $url 'GET' $job.sourceKind
+                    $null=$response.EnsureSuccessStatusCode()
+                    $bytes=Read-GalleryImageBody $response
+                }
+                $ext=Get-GalleryImageExtension $bytes
+                $targetExt=if($format -eq 'original'){$ext}elseif($format -eq 'jpeg'){'jpg'}else{$format}
+                $file=Join-Path $job.directory ('{0:D3}.{1}' -f $number,$targetExt)
                 if(-not (Test-Path -LiteralPath $file)){
-                    [IO.File]::WriteAllBytes($temp,$bytes);[IO.File]::Move($temp,$file)
+                    [IO.File]::WriteAllBytes($temp,$bytes)
+                    if($format -eq 'original'){[IO.File]::Move($temp,$file)}
+                    else{Convert-GalleryImage $temp $converted $format $ffmpeg;[IO.File]::Move($converted,$file)}
                 }
                 $files+=@{index=$number;file=[IO.Path]::GetFileName($file);width=$item.width;height=$item.height}
                 $job.completedCount=$index;$job.file=$file
                 Write-VideoJson $jobPath $job
                 [IO.File]::WriteAllText($logPath,"已保存 $index / $($job.images.Count) 张图片",(New-Object Text.UTF8Encoding($false)))
-            } finally {if($response){$response.Dispose()};if(Test-Path -LiteralPath $temp){Remove-Item -LiteralPath $temp}}
+            } finally {if($response){$response.Dispose()};foreach($part in @($temp,$converted)){if(Test-Path -LiteralPath $part){Remove-Item -LiteralPath $part}}}
         }
         $manifest=Join-Path $job.directory '图集信息.json'
         if(Test-Path -LiteralPath $manifest){
@@ -441,7 +456,7 @@ function Invoke-GalleryDownload($job,$jobPath,$logPath) {
 }
 function Get-DownloadKey($job){
     if($job.kind -eq 'files'){return 'files|'+$job.directory+'|'+($job.expectedFiles -join '|')}
-    if($job.kind -eq 'gallery'){return 'gallery|'+$job.directory}
+    if($job.kind -eq 'gallery'){return 'gallery|'+$job.directory+'|'+(Get-GalleryImageFormat $job.imageFormat)}
     $argsList=@($job.arguments)
     $formatIndex=[Array]::IndexOf($argsList,'--format')
     $format=if($formatIndex -ge 0){$argsList[$formatIndex+1]}else{''}

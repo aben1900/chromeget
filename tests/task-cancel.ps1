@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 $root=Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ('work\cancel-test-'+[Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($root)|Out-Null
-foreach($file in @('recovery.ps1','video.ps1','video-worker.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('..\native\'+$file)) -Destination $root}
+foreach($file in @('recovery.ps1','gallery-image.ps1','video.ps1','video-worker.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('..\native\'+$file)) -Destination $root}
 . (Join-Path $root 'video.ps1')
 $jobs=Join-Path $root 'video-jobs';[IO.Directory]::CreateDirectory($jobs)|Out-Null
 $id=[Guid]::NewGuid().ToString('N');$path=Join-Path $jobs ($id+'.json')

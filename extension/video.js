@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-let galleryDraft=null, gallerySelected=new Set(), galleryChecks=[];
+let galleryDraft=null, gallerySelected=new Set(), galleryChecks=[],galleryView=null,pageMediaUrl='';
 let parsedUrl='', busy=false, timer, jobId, taskActive=false, runningSelection;
 $('url').value = new URL(location.href).searchParams.get('url') || '';
 function useVideoUrl(url) {
@@ -43,7 +43,7 @@ async function send(action, extra={}) {
 function controls() {
   const platform=videoSite($('url').value);
   const source=websiteName($('url').value);
-  $('website').textContent=source ? '来源网站：'+source+(platform?'':' · 通用视频解析') : '来源网站：待提取';
+  $('website').textContent=source ? '来源网站：'+source+(platform?'':' · 网页图片 / 视频') : '来源网站：待提取';
   const name=platform==='x'?'X':platform==='youtube'?'YouTube':platform==='toutiao'?'头条':platform==='xiaohongshu'?'小红书':platform==='bilibili'?'B 站':'';
   $('browserCookies').textContent=name?'一键获取本浏览器的'+name+'登录态':'先填写视频网址，再获取登录态';
   for(const id of ['inspect','folder','saveFolder','cookies','clearCookies','browserCookies','extractUrl'])$(id).disabled=busy;
@@ -55,6 +55,9 @@ function controls() {
   $('confirmGallery').disabled=busy || !galleryActive || !gallerySelected.size;
   $('gallerySelectAll').disabled=busy;$('gallerySelectNone').disabled=busy;
   for(const check of galleryChecks)check.disabled=busy;
+  galleryView?.setBusy(busy);
+  $('pageMediaCard').hidden=pageMediaUrl!==$('url').value.trim()||!$('pageVideos').childElementCount;
+  for(const button of $('pageVideos').querySelectorAll('button'))button.disabled=busy;
   if(galleryActive){$('galleryCount').textContent='共 '+galleryDraft.images.length+' 张 · 已选 '+gallerySelected.size+' 张';$('confirmGallery').textContent='确认下载所选 '+gallerySelected.size+' 张图片';}
   const audio=$('mediaMode').value==='audio';$('audioOptions').hidden=!audio;$('videoQuality').hidden=audio;$('height').disabled=busy||audio||!parsedUrl;$('mediaMode').disabled=busy;$('audioFormat').disabled=busy;
   const duplicate=taskActive && runningSelection?.url===parsedUrl && runningSelection?.height===Number($('height').value)&&(runningSelection?.mediaMode||'video')===($('mediaMode').value||'video')&&(runningSelection?.audioFormat||'best')===($('audioFormat').value||'best');
@@ -78,26 +81,38 @@ $('openRecent').addEventListener('click',async()=>{
   } catch(error) { if(typeof Recovery!=='undefined')Recovery.setError($('locationStatus'),error);else $('locationStatus').textContent=error.message; }
   finally { $('openRecent').disabled=false; }
 });
-async function inspectVideo() {
-  busy=true;parsedUrl='';galleryDraft=null;controls();$('error').textContent='';$('status').textContent='正在解析…';
+function showGallery(data){
+  galleryDraft=data;gallerySelected=new Set(data.images.map((_,index)=>index));
+  $('galleryDestination').textContent='保存至：'+data.directory+'（原格式保留；转换图片存入对应格式子文件夹）';
+  galleryView=GalleryCards.render($('galleryGrid'),data.images,{
+    onSelection(index,checked){if(checked)gallerySelected.add(index);else gallerySelected.delete(index);controls();},
+    open:url=>chrome.tabs.create({url}),
+    metadata:index=>send('video-gallery-image-info',{draftId:data.draftId,index}),
+    onDownload:(index,imageFormat)=>startGallery([index],imageFormat,false)
+  });galleryChecks=galleryView.checks;
+}
+async function inspectVideo(options={}) {
+  if(busy)return;
+  busy=true;parsedUrl='';galleryDraft=null;galleryView?.destroy();galleryView=null;galleryChecks=[];pageMediaUrl='';$('pageVideos').replaceChildren();controls();$('error').textContent='';$('status').textContent='正在解析…';
   const url=supportedVideoUrl($('url').value.trim())||webpageUrl($('url').value.trim());
   try {
-    if(!url) throw Error('请填写视频详情页或 m3u8/mpd 流媒体清单的 HTTP/HTTPS 网址。');
+    if(!url) throw Error('请填写网页、视频或 m3u8/mpd 流媒体的 HTTP/HTTPS 网址。');
     $('url').value=url;
-    const data=await send('video-info',{url});parsedUrl=url;$('title').textContent='【'+websiteName(url)+'】'+data.title;
+    const capture=options.directMedia!==true&&!supportedVideoUrl(url)&&! /\.(m3u8|mpd|mp4|webm|mov|m4v|mkv)(?:$|[?#])/i.test(url);
+    // Request website access within the click gesture, before any other await.
+    if(capture&&!(await chrome.permissions.request({origins:[new URL(url).origin+'/*']})))throw Error('请允许读取当前网站，才能获取页面中的图片和视频。');
+    const data=capture?await send('video-page-media',{url,windowId:(await chrome.windows.getCurrent()).id}):await send('video-info',{url});
+    if($('url').value.trim()!==url)return;
+    $('title').textContent='【'+websiteName(url)+'】'+data.title;
+    if(capture){
+      pageMediaUrl=url;
+      for(const item of data.videos||[]){const button=document.createElement('button');button.textContent='视频 · '+(item.label||new URL(item.url).pathname.split('/').pop()||item.type||'查看画质');button.title=item.url;button.addEventListener('click',async()=>{if(busy)return;try{const w=await chrome.windows.getCurrent();await chrome.storage.session.set({[`video-source:${w.id}`]:{url:item.url,referer:url}});useVideoUrl(item.url);await inspectVideo({directMedia:true});}catch(e){$('error').textContent=e.message;}});$('pageVideos').append(button);}
+      if(data.kind!=='gallery'){$('status').textContent=data.videos?.length?'请选择上方视频查看下载选项':data.modelRepoUrl?'此页未找到可下载图片或视频。模型文件请到“文件类”粘贴此网址获取。':'未找到可下载的正文图片或视频。请先打开目标网页，等待图片加载后重试。';return;}
+    }
+    parsedUrl=url;
     if(data.kind==='gallery'){
-      galleryDraft=data;gallerySelected=new Set(data.images.map((_,index)=>index));galleryChecks=[];
-      $('galleryCount').textContent='共 '+data.images.length+' 张图片，请确认后下载';
-      $('confirmGallery').textContent='确认下载全部 '+data.images.length+' 张图片';
-      $('galleryDestination').textContent='保存至：'+data.directory+'（自动新建图集文件夹）';
-      $('galleryGrid').replaceChildren(...data.images.map((item,index)=>{
-        const figure=document.createElement('figure'),img=document.createElement('img'),caption=document.createElement('figcaption');
-        img.src=item.url;img.alt='第 '+(index+1)+' 张';img.loading='lazy';img.referrerPolicy='no-referrer';
-        const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=true;check.setAttribute('aria-label','选择第 '+(index+1)+' 张图片');galleryChecks.push(check);
-        check.addEventListener('change',()=>{if(check.checked)gallerySelected.add(index);else gallerySelected.delete(index);controls();});
-        caption.textContent='第 '+(index+1)+' 张';label.append(img,check,caption);figure.append(label);return figure;
-      }));
-      $('status').textContent='图集已获取，等待确认下载';return;
+      showGallery(data);
+      $('status').textContent=data.sourceKind==='webpage'?'已获取当前网页图片。若有遗漏，先滚动网页加载图片，再重新获取。':'图集已获取，等待确认下载';return;
     }
     $('height').replaceChildren(...data.heights.map(h=>{const o=document.createElement('option');o.value=h;o.textContent=h===0?'最佳可用画质（含原始视频）':h+'p';return o;}));
     $('height').disabled=false;$('status').textContent='请选择分辨率后下载';
@@ -180,17 +195,19 @@ $('tasksNext').addEventListener('click',()=>{taskOffset+=50;requestTaskRefresh()
 function selectGallery(all){gallerySelected=new Set(all?galleryChecks.map((_,i)=>i):[]);galleryChecks.forEach(check=>check.checked=all);controls();}
 $('gallerySelectAll').addEventListener('click',()=>selectGallery(true));
 $('gallerySelectNone').addEventListener('click',()=>selectGallery(false));
-$('confirmGallery').addEventListener('click',async()=>{
-  if(!galleryDraft || !gallerySelected.size || parsedUrl!==$('url').value.trim())return;
+async function startGallery(indexes,imageFormat='original',dismiss=true){
+  if(busy || !galleryDraft || !indexes.length || parsedUrl!==$('url').value.trim())return;
   busy=true;controls();clearTimeout(timer);$('error').textContent='';
   try {
-    const data=await send('video-gallery-start',{draftId:galleryDraft.draftId,confirmed:true,selectedIndexes:[...gallerySelected].sort((a,b)=>a-b)});
+    const data=await send('video-gallery-start',{draftId:galleryDraft.draftId,confirmed:true,selectedIndexes:indexes,imageFormat});
     jobId=data.id;taskActive=true;runningSelection={url:parsedUrl,height:0};
     await chrome.storage.local.set({lastVideoJob:jobId,lastVideoSelection:runningSelection});
-    $('directory').textContent=data.directory;galleryDraft=null;parsedUrl='';poll();
+    $('directory').textContent=data.directory;$('status').textContent='已加入下载任务 · '+(imageFormat==='original'?'原格式':imageFormat.toUpperCase());
+    if(dismiss){galleryDraft=null;parsedUrl='';galleryView?.destroy();galleryView=null;}poll();
   }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;poll();}
   finally{busy=false;controls();}
-});
+}
+$('confirmGallery').addEventListener('click',()=>startGallery([...gallerySelected].sort((a,b)=>a-b)));
 $('download').addEventListener('click',async()=>{
   busy=true;controls();clearTimeout(timer);$('error').textContent='';
   try{

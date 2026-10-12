@@ -8,5 +8,7 @@ await click();assert.equal(await page.evaluate(()=>messages[0].pageUrl),'https:/
 await page.evaluate(()=>{history.pushState({},'','/writer/status/999999');document.querySelector('article a').href='/writer/status/999999';});await click();assert.equal(await page.evaluate(()=>messages.at(-1).pageUrl),'https://x.com/i/web/status/999999');
 await page.addScriptTag({content:fs.readFileSync('extension/video-url.js','utf8')});
 for(const [url,name] of [['https://www.tiktok.com/@u/video/123','TikTok'],['https://www.reddit.com/r/test/comments/abc/video/','Reddit'],['https://vimeo.com/123','Vimeo'],['https://www.twitch.tv/videos/123','Twitch']])assert.deepEqual(await page.evaluate(u=>[!!supportedVideoUrl(u),websiteName(u),videoSite(u)],url),[true,name,'']);
-console.log('PASS X feed selection, SPA navigation/reused player, TikTok/Reddit/Vimeo/Twitch routes and cookie isolation');
+await page.evaluate(()=>{document.querySelector('video').remove();const v=document.createElement('bwp-video');v.style.cssText='display:block;width:400px;height:250px';document.querySelector('article').append(v);});
+await page.mouse.move(550,500);await page.waitForTimeout(900);await page.mouse.move(100,120);await page.waitForFunction(()=>document.getElementById('jingcai-video-download').style.display==='block');
+console.log('PASS X feed selection, SPA navigation/reused player, bwp-video detection, TikTok/Reddit/Vimeo/Twitch routes and cookie isolation');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

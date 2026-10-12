@@ -17,10 +17,12 @@ async function poll() {
     $('tasksError').textContent='';
     const total=data.total ?? items.length;
     if(!items.length && taskOffset>0){taskOffset=Math.max(0,taskOffset-50);taskRefreshPending=true;return;}
-    $('tasksSummary').textContent=total?'共 '+total+' 个任务'+(total>50?' · 第 '+(Math.floor(taskOffset/50)+1)+' 页':''):'此状态下暂无任务';
+    $('tasksSummary').textContent=total?'共 '+total+' 个任务'+(total>50?' · 第 '+(Math.floor(taskOffset/50)+1)+' 页':''):'暂无任务';
     $('tasksPrevious').disabled=taskOffset===0;$('tasksNext').disabled=taskOffset+items.length>=total;
+    const pagination=$('tasksPrevious').closest('.task-pagination');if(pagination)pagination.hidden=total<=50;
 
     if(typeof setupTaskBatch==='function')setupTaskBatch(items,send,poll);
+    const batch=$('taskBatch');if(batch)batch.hidden=!items.length;
     $('tasksList').replaceChildren(...items.map(task=>{
       if(typeof renderTaskCard==='function')return renderTaskCard(task,send,poll);
       const card=document.createElement('article'),title=document.createElement('p'),state=document.createElement('p'),progress=document.createElement('pre');

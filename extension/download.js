@@ -11,15 +11,15 @@ function suggestedName(url){try{return safeName(decodeURIComponent(new URL(url).
 function refreshDownloadButton(){
   const b=$('fileDownload'),url=inputUrl();b.hidden=prepared?.kind==='model';
   b.disabled=submitBusy||probeBusy||!url||(!directoryReady&&prepared?.kind==='file');
-  b.textContent=submitBusy?'正在加入下载…':probeBusy?'正在识别链接…':queuedUrl&&queuedUrl===url?'查看下载任务':!url?'先粘贴一个链接':!prepared?'识别链接':prepared.kind==='video'?'去选择画质 / 图片':prepared.kind==='webpage'?'尝试解析网页中的视频':!directoryReady?'正在读取保存位置…':prepared.unverified?'仍按文件链接下载':'开始下载';
+  b.textContent=submitBusy?'正在加入下载…':probeBusy?'正在识别…':queuedUrl&&queuedUrl===url?'查看下载任务':!url?'开始下载':!prepared?'识别链接':prepared.kind==='video'?'前往视频 / 图集':prepared.kind==='webpage'?'尝试解析视频':!directoryReady?'正在读取保存位置…':prepared.unverified?'仍按文件链接下载':'开始下载';
 }
 function displayPrepared(){
   const p=prepared;$('filePreview').hidden=!p;if(!p){refreshDownloadButton();return;}
-  $('previewKind').textContent=p.kind==='model'?'模型仓库':p.kind==='video'?'视频 / 图集':p.kind==='webpage'?'网页链接':'将要下载的文件';
+  $('previewKind').textContent=p.kind==='model'?'模型仓库':p.kind==='video'?'视频 / 图集':p.kind==='webpage'?'网页链接':'文件';
   $('previewName').textContent=p.kind==='file'?($('fileName').value.trim()||p.name):p.name;
   $('previewMeta').textContent=p.meta||new URL(p.url).hostname;$('previewHint').textContent=p.hint||'';refreshDownloadButton();
 }
-function updateDirectory(path){$('directoryInput').value=path||'';$('directoryDisplay').textContent=path||'尚未设置，点击更改';$('directoryDisplay').title=path||'';directoryReady=!!path;refreshDownloadButton();if(typeof updateFileSelection==='function')updateFileSelection();}
+function updateDirectory(path){$('directoryDisplay').textContent=path||'请选择目录';$('directoryDisplay').title=path||'';directoryReady=!!path;refreshDownloadButton();if(typeof updateFileSelection==='function')updateFileSelection();}
 function resetInput(){
   clearTimeout(recognitionTimer);recognitionId++;prepared=null;probeBusy=false;queuedUrl='';$('fileName').value='';$('fileChecksum').value='';$('transferError').textContent='';$('transferStatus').textContent='';$('previewHint').textContent='';$('hfSection').hidden=true;$('hfUrl').value='';$('hfUrl').dispatchEvent(new Event('input'));displayPrepared();
 }
@@ -41,20 +41,20 @@ async function recognizeLink(){
   const id=++recognitionId;probeBusy=false;prepared=null;$('hfSection').hidden=true;$('transferError').textContent='';$('previewHint').textContent='';
   const uri=new URL(url);
   if(uri.hostname==='huggingface.co'){
-    prepared={url,kind:'model',name:uri.pathname.split('/').filter(Boolean).slice(0,2).join(' / '),hint:'勾选需要的模型文件，再确认下载。'};displayPrepared();$('hfSection').hidden=false;$('hfUrl').value=url;$('hfUrl').dispatchEvent(new Event('input'));inspectModelFiles();return;
+    prepared={url,kind:'model',name:uri.pathname.split('/').filter(Boolean).slice(0,2).join(' / '),hint:''};displayPrepared();$('hfSection').hidden=false;$('hfUrl').value=url;$('hfUrl').dispatchEvent(new Event('input'));inspectModelFiles();return;
   }
   if(supportedVideoUrl(url)||/\.(m3u8|mpd)(?:$|[?#])/i.test(url)){
-    prepared={url,kind:'video',name:websiteName(url)+' 的视频或图集',hint:'下一步将在“视频/图集类”页选择画质或图片，不会直接开始下载。'};displayPrepared();return;
+    prepared={url,kind:'video',name:websiteName(url)+' 的视频或图集',hint:''};displayPrepared();return;
   }
-  probeBusy=true;$('filePreview').hidden=true;$('previewHint').textContent='正在读取文件名和大小…';refreshDownloadButton();
+  probeBusy=true;$('filePreview').hidden=true;$('previewHint').textContent='';refreshDownloadButton();
   try{
     const r=await send('video-file-probe',{url});if(id!==recognitionId)return;
     const html=/^text\/html/i.test(r.contentType||'')&&!/\.html?$/i.test(uri.pathname);
-    prepared={url,kind:html?'webpage':'file',name:safeName(r.filename)||suggestedName(url),meta:(r.sizeKnown?bytes(r.size):'大小由下载时确定')+' · '+(r.host||uri.hostname),hint:html?'这是网页，不是文件直链。可以尝试解析视频，或打开该网页后点击“从本页找文件”。':r.rangeSupported?'可暂停，稍后继续下载。':'服务器不支持续传，中断后可能需要重新下载。'};
-  }catch(e){if(id!==recognitionId)return;prepared={url,kind:'file',name:suggestedName(url),meta:uri.hostname+' · 暂时无法读取大小',hint:'未能读取文件信息，可在更多选项中重试识别。确认这是文件链接后，也可直接尝试下载。',unverified:true};if(typeof Recovery!=='undefined')Recovery.setError($('transferError'),e);else $('transferError').textContent=e.message;}
+    prepared={url,kind:html?'webpage':'file',name:safeName(r.filename)||suggestedName(url),meta:(r.sizeKnown?bytes(r.size):'大小待确定')+' · '+(r.host||uri.hostname),hint:html?'这是网页链接，可尝试解析视频，或查找本页文件。':r.rangeSupported?'':'不支持续传，中断后需重新下载。'};
+  }catch(e){if(id!==recognitionId)return;prepared={url,kind:'file',name:suggestedName(url),meta:uri.hostname+' · 暂时无法读取大小',hint:'请确认是文件直链，再尝试下载。',unverified:true};if(typeof Recovery!=='undefined')Recovery.setError($('transferError'),e);else $('transferError').textContent=e.message;}
   finally{if(id===recognitionId){probeBusy=false;displayPrepared();}}
 }
-function onModelLoaded(data){if(prepared?.kind==='model'&&prepared.url===$('hfUrl').value){prepared.name=data.title;prepared.meta=data.files.length+' 个文件 · '+bytes(data.totalBytes);displayPrepared();}}
+function onModelLoaded(data){if(prepared?.kind==='model'&&prepared.url===$('hfUrl').value){prepared.name=data.title;prepared.meta=data.files.length+' 个文件 · '+bytes(data.totalBytes);$('transferStatus').textContent='';displayPrepared();}}
 $('fileUrl').addEventListener('input',()=>{resetInput();if(inputUrl())recognitionTimer=setTimeout(recognizeLink,550);else if($('fileUrl').value.trim())$('previewHint').textContent='请粘贴完整网址，例如 https://example.com/file.zip';});
 $('fileUrl').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();recognizeLink();}});
 $('fileName').addEventListener('input',displayPrepared);
@@ -81,7 +81,7 @@ $('fileDownload').addEventListener('click',async()=>{
     }
     if(!directoryReady)throw Error('请先选择保存文件夹。');
     await send('video-file-start',{url:choice.url,filename:$('fileName').value.trim()||(choice.name==='下载文件'?'':choice.name),genericFile:true,checksum:$('fileChecksum').value.trim(),confirmed:true});
-    queuedUrl=choice.url;$('transferStatus').textContent='已加入下载。可以在下方查看进度、暂停或继续。';await poll();focusTaskList();
+    queuedUrl=choice.url;$('transferStatus').textContent='已加入下载。';await poll();focusTaskList();
   }catch(e){if(typeof Recovery!=='undefined')Recovery.setError($('transferError'),e);else $('transferError').textContent=e.message;}finally{submitBusy=false;refreshDownloadButton();}
 });
 $('currentLink').addEventListener('click',()=>transferTask($('currentLink'),async()=>{const url=await currentWebpage(downloadWindowId);if(!url)throw Error('请先切换到需要下载内容的网页。');loadLink(url);}));
@@ -91,14 +91,14 @@ $('pageLinks').addEventListener('click',()=>{
     if(!await grant)throw Error('需要允许读取当前网页，才能帮你找到文件。');
     $('backToFileList').hidden=true;selectedFromList=false;$('linkResults').hidden=false;$('linkCount').textContent='正在查找网页中的文件链接…';
     const r=await send('download-page-links',{windowId:downloadWindowId});$('linkList').replaceChildren();
-    $('linkCount').textContent=r.links.length?'找到 '+r.links.length+' 个文件候选，点选预览确认。已过滤普通网页链接。':'没有找到明确的文件链接。无后缀或动态下载链接，可右键网页下载按钮复制后粘贴到上方识别。';
+    $('linkCount').textContent=r.links.length?r.links.length+' 个文件，点选预览':'未找到文件。可复制网页下载按钮的链接后粘贴。';
     for(const link of r.links){const b=document.createElement('button');b.className='page-link';const type=document.createElement('span');type.className='page-link-type';type.textContent=pageLinkType(link);const label=document.createElement('span');label.textContent=(link.download?'↓ ':'')+(link.text||link.url);b.append(type,label);b.title=link.url;b.addEventListener('click',()=>{loadLink(link.url,true);$('linkResults').hidden=true;if(link.filename)$('fileName').value=safeName(link.filename);});$('linkList').append(b);}
   });
 });
-for(const [id,action] of [['folder','video-folder'],['saveFolder','video-set-folder']])$(id).addEventListener('click',()=>transferTask($(id),async()=>{
-  const r=await send(action,{directory:$('directoryInput').value});if(!r.cancelled){updateDirectory(r.directory);$('transferStatus').textContent='保存位置已更改。';}
+$('folder').addEventListener('click',()=>transferTask($('folder'),async()=>{
+  const r=await send('video-folder',{directory:$('directoryDisplay').title});if(!r.cancelled){updateDirectory(r.directory);$('transferStatus').textContent='保存位置已更改。';}
 }));
-send('video-status').then(r=>{updateDirectory(r.directory);$('destinationHint').textContent=r.autoClassify?'已开启自动分类，将保存到对应类型的子文件夹。':'';}).catch(e=>{$('directoryDisplay').textContent='未连接本地程序';if(typeof Recovery!=='undefined')Recovery.setError($('transferError'),e);else $('transferError').textContent=e.message;});
+send('video-status').then(r=>{updateDirectory(r.directory);$('destinationHint').textContent=r.autoClassify?'按文件类型存入子目录':'';}).catch(e=>{$('directoryDisplay').textContent='未连接本地程序';if(typeof Recovery!=='undefined')Recovery.setError($('transferError'),e);else $('transferError').textContent=e.message;});
 $('probeFile').addEventListener('click',recognizeLink);
 
 $('batchAdd').addEventListener('click',()=>transferTask($('batchAdd'),async()=>{

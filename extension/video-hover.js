@@ -9,11 +9,13 @@
   function position(){if(!video?.isConnected){hide();return;}const r=video.getBoundingClientRect();if(r.width<120||r.height<70||r.bottom<0||r.top>innerHeight){hide();return;}host.style.top=Math.max(8,r.top+12)+'px';host.style.left=Math.max(8,Math.min(innerWidth-150,r.right-150))+'px';}
   chrome.storage.local.get('hoverDownloadEnabled').then(data=>enabled=!!data.hoverDownloadEnabled);
   chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.hoverDownloadEnabled){enabled=!!changes.hoverDownloadEnabled.newValue;if(!enabled)hide();}});
-  document.addEventListener('pointerover',event=>{
+  function detectVideo(event){
     if(!enabled)return;
-    const candidate=event.composedPath().find(n=>n instanceof HTMLVideoElement)||[...document.querySelectorAll('video')].find(v=>{const r=v.getBoundingClientRect();return r.width>=120&&r.height>=70&&event.clientX>=r.left&&event.clientX<=r.right&&event.clientY>=r.top&&event.clientY<=r.bottom;});
+    const candidate=event.composedPath().find(n=>n instanceof Element&&n.matches('video,bwp-video'))||[...document.querySelectorAll('video,bwp-video')].find(v=>{const r=v.getBoundingClientRect();return r.width>=120&&r.height>=70&&event.clientX>=r.left&&event.clientX<=r.right&&event.clientY>=r.top&&event.clientY<=r.bottom;});
     if(candidate){clearTimeout(hideTimer);video=candidate;host.style.display='block';status.textContent='';position();}
-  },true);
+  }
+  document.addEventListener('pointerover',detectVideo,true);
+  document.addEventListener('pointermove',event=>{if(enabled&&!video)detectVideo(event);},{passive:true});
   document.addEventListener('pointerout',event=>{if(event.target===video)hideTimer=setTimeout(hide,1600);},true);
   host.addEventListener('pointerenter',()=>clearTimeout(hideTimer));host.addEventListener('pointerleave',()=>hideTimer=setTimeout(hide,800));
   document.addEventListener('pointermove',event=>{if(!video||host.contains(event.target))return;const r=video.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom){if(!hideTimer)hideTimer=setTimeout(()=>{hideTimer=null;hide();},800);}else{clearTimeout(hideTimer);hideTimer=null;}},{passive:true});
@@ -42,7 +44,7 @@
   document.addEventListener('pointerover',()=>{if(lastPage!==location.href){lastPage=location.href;status.textContent='';if(video&&!video.isConnected)hide();}},{passive:true});
   button.addEventListener('click',async event=>{
     event.preventDefault();event.stopPropagation();button.disabled=true;clearTimeout(hideTimer);
-    try{if(!video?.isConnected)throw Error('视频已切换，请重新移到目标视频上。');const pageUrl=videoPage(video);if(!pageUrl)throw Error('未找到当前视频的帖子链接，请打开该帖子后重试。');const result=await chrome.runtime.sendMessage({action:'page-video-download',pageUrl,mediaUrl:video?.currentSrc||video?.src||''});if(!result?.ok)throw Error(result?.error||'无法打开下载面板');status.textContent='已载入右侧面板，请选择画质或确认下载。';}
+    try{if(!video?.isConnected)throw Error('视频已切换，请重新移到目标视频上。');const pageUrl=videoPage(video);if(!pageUrl)throw Error('未找到当前视频的帖子链接，请打开该帖子后重试。');const result=await chrome.runtime.sendMessage({action:'page-video-download',pageUrl,mediaUrl:video?.currentSrc||video?.src||''});if(!result?.ok)throw Error(result?.error||'无法打开下载面板');status.textContent='侧栏已接收，正在获取视频；结果或错误将在侧栏显示。';}
     catch(e){status.textContent=e.message;}finally{button.disabled=false;}
   });
 })();

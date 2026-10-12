@@ -339,19 +339,39 @@ function Invoke-VideoActionCore($message) {
             $heights = @($info.formats | Where-Object { $_.vcodec -ne 'none' -and $_.height -gt 0 -and -not $_.has_drm } | ForEach-Object { [int]$_.height } | Sort-Object -Unique -Descending)
             if (-not @($info.formats | Where-Object { $_.vcodec -ne 'none' -and -not $_.has_drm }).Count) { throw '未找到可下载的视频。请确认是视频笔记，保留分享链接参数；需要登录时请获取本浏览器登录态后重试。' }
             if ($site -in @('xiaohongshu','toutiao','youtube','x','generic') -or -not $heights.Count) { $heights = @(0) + $heights }
-            return @{ok=$true; title=$info.title; heights=$heights; directory=$settings.directory}
+            $qualities=@()
+            if($site -eq 'bilibili'){
+                $labels=@{6='240P';16='360P';32='480P';64='720P 高清';74='720P 60帧';80='1080P 高清';112='1080P 高码率';116='1080P 60帧';120='4K';125='HDR';126='杜比视界';127='8K'}
+                $formats=@($info.formats | Where-Object { $_.vcodec -ne 'none' -and $_.height -gt 0 -and -not $_.has_drm -and $_.quality -gt 0 })
+                foreach($group in @($formats | Group-Object quality | Sort-Object {[int]$_.Name} -Descending)){
+                    $quality=[int]$group.Name;$height=[int]($group.Group | Measure-Object height -Maximum).Maximum
+                    $label=if($labels.ContainsKey($quality)){$labels[$quality]}else{[string]$group.Group[0].format}
+                    if(-not $label){$label=[string]$height+'p'}
+                    $qualities+=@{height=$height;quality=$quality;label=$label}
+                }
+            }
+            $notice=''
+            if($site -eq 'bilibili' -and $qualities.Count -and -not @($qualities|Where-Object{$_.quality -ge 112}).Count){$notice='未返回高码率档位；大会员请重新获取浏览器登录态后重试。'}
+            return @{ok=$true; title=$info.title; heights=$heights; qualities=$qualities; qualityNotice=$notice; directory=$settings.directory}
         } finally { foreach ($path in @($out,$err)) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } } }
     }
     if ($message.action -ne 'video-start') { throw '不支持的视频操作。' }
     $height = [int]$message.height
     if (($height -ne 0 -and $height -lt 1) -or $height -gt 8640) { throw '请选择有效分辨率。' }
+    $quality=0
     $format = if($audio){'bestaudio/best'}elseif ($height -eq 0) { 'bv*+ba/b' } else { "bestvideo[height=$height]+bestaudio/best[height=$height]" }
+    if($site -eq 'bilibili' -and $message.quality -and -not $audio){
+        $quality=0
+        if(-not [int]::TryParse([string]$message.quality,[ref]$quality) -or $quality -lt 1 -or $quality -gt 1000){throw '画质档位无效，请重新获取视频。'}
+        $format="bestvideo[quality=$quality]+bestaudio/best[quality=$quality]"
+    }
     $siteName = if($site -eq 'generic'){switch -Regex (([Uri]$url).Host){'(^|\.)tiktok\.com$'{'TikTok';break}'(^|\.)(reddit\.com|redd\.it)$'{'Reddit';break}'(^|\.)vimeo\.com$'{'Vimeo';break}'(^|\.)twitch\.tv$'{'Twitch';break}default{([Uri]$url).Host}}}elseif ($site -eq 'x') { 'X' } elseif ($site -eq 'youtube') { 'YouTube' } elseif ($site -eq 'toutiao') { '头条' } elseif ($site -eq 'xiaohongshu') { '小红书' } else { 'B站' }
     $id = [Guid]::NewGuid().ToString('N')
     $jobPath = Join-Path $jobs ($id+'.json')
     [IO.Directory]::CreateDirectory($settings.directory) | Out-Null
     $arguments += @(Get-ParallelVideoArgs $settings)
     $arguments += @('--ffmpeg-location',$tools.ffmpeg,'--continue','--newline','--progress','--windows-filenames','--merge-output-format','mp4','--format',$format,'-P',$settings.directory,'-o',("【$siteName】"+'%(title).100B [%(id)s] [%(height)sp].%(ext)s'),'--print','after_move:filepath','--no-simulate','--',$url)
+    if($quality -gt 0){$outputIndex=[Array]::IndexOf($arguments,'-o');$arguments[$outputIndex+1]=("【$siteName】"+'%(title).100B [%(id)s] [Q'+$quality+'].%(ext)s')}
     if($audio){
         $mergeIndex=[Array]::IndexOf($arguments,'--merge-output-format');$arguments=@($arguments[0..($mergeIndex-1)])+@($arguments[($mergeIndex+2)..($arguments.Count-1)])
         $outputIndex=[Array]::IndexOf($arguments,'-o');$arguments[$outputIndex+1]=('【'+$siteName+'】%(title).100B [%(id)s] [音频-'+$audioFormat+'].%(ext)s')

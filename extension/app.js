@@ -23,6 +23,6 @@ chrome.windows.getCurrent().then(async current=>{
   // Link results live in the current file-page iframe; reopening starts a fresh list.
   await chrome.storage.session.set({[`download-list-origin:${current.id}`]:null,[`download-return-list:${current.id}`]:null});
   const key=`app-view:${current.id}`;let received=false;
-  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes[key]){received=true;selectView(changes[key].newValue);}});
+  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes[`hover-request:${current.id}`]?.newValue){received=true;selectView('video');}else if(area==='session'&&changes[key]){received=true;selectView(changes[key].newValue);}});
   const data=await chrome.storage.session.get(key);if(!received)selectView(data[key]||'collect');
 }).catch(report);

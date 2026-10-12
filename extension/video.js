@@ -7,14 +7,28 @@ function mediaStatus(text,details=text){$('status').textContent=text;$('status')
 $('url').value = new URL(location.href).searchParams.get('url') || '';
 function useVideoUrl(url) {
   if (!webpageUrl(url) || url === $('url').value) return;
-  $('url').value=url; parsedUrl=''; $('title').textContent=''; $('height').disabled=true; controls();
+  $('url').value=url; parsedUrl=''; $('title').textContent=''; $('height').disabled=true; controls();settings().catch(()=>{$('cookieStatus').textContent='登录态读取失败';});
 }
 chrome.windows.getCurrent().then(async current => {
   const key = `video-url:${current.id}`;
-  let received = false;
+  let received = false,lastHoverRequest='';
+  async function receiveHover(request){
+    if(!request?.id||request.id===lastHoverRequest||Date.now()-request.time>15000||!webpageUrl(request.url))return;
+    lastHoverRequest=request.id;const receiptKey=`hover-receipt:${current.id}`;
+    if(busy){await chrome.storage.session.set({[receiptKey]:{id:request.id,ok:false,error:'侧栏正在处理其他操作，请完成后再点悬浮下载。'}});return;}
+    useVideoUrl(request.url);mediaStatus('已收到悬浮下载请求，正在获取视频…');
+    const parsing=inspectVideo({target:'video',directMedia:true});
+    await chrome.storage.session.set({[receiptKey]:{id:request.id,ok:true}});
+    await parsing;
+  }
+  function acceptHover(request){receiveHover(request).catch(error=>{$('error').textContent=error.message;});}
+  const hoverKey=`hover-request:${current.id}`;
+
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'session' && changes[key]) { received = true; useVideoUrl(changes[key].newValue); }
+    if(area==='session'&&changes[hoverKey]?.newValue){received=true;acceptHover(changes[hoverKey].newValue);}
   });
+  const hover=(await chrome.storage.session.get(hoverKey))[hoverKey];if(hover){const receiptKey=`hover-receipt:${current.id}`,receipt=(await chrome.storage.session.get(receiptKey))[receiptKey];if(receipt?.id!==hover.id){received=true;acceptHover(hover);}}
   const saved = (await chrome.storage.session.get(key))[key];
   if (!received && saved) useVideoUrl(saved);
   if (!$('url').value) {
@@ -48,7 +62,7 @@ function controls() {
   const source=websiteName($('url').value);
   $('website').textContent=source||'';$('website').title=source||'';
   const name=platform==='x'?'X':platform==='youtube'?'YouTube':platform==='toutiao'?'头条':platform==='xiaohongshu'?'小红书':platform==='bilibili'?'B 站':'';
-  $('browserCookies').textContent=name?'一键获取本浏览器的'+name+'登录态':'先填写视频网址，再获取登录态';
+  $('browserCookies').textContent='浏览器登录';$('browserCookies').title=name?'使用本浏览器的'+name+'登录态':'先填写支持的视频网址';
   for(const id of ['inspect','inspectGallery','folder','cookies','clearCookies','browserCookies','extractUrl'])$(id).disabled=busy;
   $('inspect').textContent=activeOperation==='inspect'?'正在获取视频…':'获取视频';
   $('inspect').setAttribute('aria-busy',String(activeOperation==='inspect'));
@@ -65,21 +79,24 @@ function controls() {
   $('gallerySelectAll').disabled=busy||!visibleGalleryIndexes().length;$('gallerySelectNone').disabled=busy||!visibleGalleryIndexes().length;
   for(const check of galleryChecks)check.disabled=busy;
   galleryView?.setBusy(busy);
+  if(parsedUrl!==$('url').value.trim()||$('mediaMode').value==='audio')$('qualityNotice').hidden=true;else $('qualityNotice').hidden=!$('qualityNotice').textContent;
   $('pageMediaCard').hidden=pageMediaUrl!==$('url').value.trim()||!$('pageVideos').childElementCount;
   for(const button of $('pageVideos').querySelectorAll('button'))button.disabled=busy;
   if(galleryActive){$('galleryCount').textContent='共 '+(galleryView?.getCount()??galleryDraft.images.length)+' 张 · 显示 '+visibleGalleryIndexes().length+' 张 · 已选 '+visibleSelection.length+' 张';$('confirmGallery').textContent='确认下载所选 '+visibleSelection.length+' 张图片';}
   const audio=$('mediaMode').value==='audio';$('audioOptions').hidden=!audio;$('videoQuality').hidden=audio;$('height').disabled=busy||audio||!parsedUrl;$('mediaMode').disabled=busy;$('audioFormat').disabled=busy;
-  const duplicate=taskActive && runningSelection?.url===parsedUrl && runningSelection?.height===Number($('height').value)&&(runningSelection?.mediaMode||'video')===($('mediaMode').value||'video')&&(runningSelection?.audioFormat||'best')===($('audioFormat').value||'best');
+  const duplicate=taskActive && runningSelection?.url===parsedUrl && runningSelection?.height===Number($('height').value)&&(runningSelection?.quality||0)===(Number($('height').selectedOptions[0]?.dataset.quality)||0)&&(runningSelection?.mediaMode||'video')===($('mediaMode').value||'video')&&(runningSelection?.audioFormat||'best')===($('audioFormat').value||'best');
   $('download').disabled=busy || duplicate || !parsedUrl || parsedUrl!==$('url').value.trim();
   $('download').textContent=busy?'正在处理…':duplicate?'该画质正在下载':!parsedUrl || parsedUrl!==$('url').value.trim()?'请先解析媒体':'开始下载';
 }
+let settingsRevision=0;
 async function settings() {
-  const data=await send('video-status');$('directory').textContent=data.directory;
+  const revision=++settingsRevision,url=$('url').value;
+  const data=await send('video-status');if(revision!==settingsRevision||url!==$('url').value)return;$('directory').textContent=data.directory;
   $('directoryInput').value=data.directory;
   $('galleryDestination').textContent='保存至：'+data.directory+'（自动新建图集文件夹）';
-  $('cookieStatus').textContent=!videoSite($('url').value)?'通用解析不读取浏览器登录态':data.cookies?'已启用当前平台的本机登录态':'未使用 Cookie';
+  const site=videoSite($('url').value);$('cookieStatus').textContent=site&&data.cookies?websiteName($('url').value)+'已登录':'未使用 Cookie';$('cookieStatus').dataset.enabled=String(!!site&&!!data.cookies);$('cookieStatus').title=data.cookies?'已启用保存的 Cookie；是否仍有效及会员画质以实际解析结果为准':'';
 }
-$('url').addEventListener('input',()=>{if(parsedUrl!==$('url').value.trim())$('title').textContent='';controls();$('cookieStatus').textContent='登录态按平台分别保存，解析时自动使用';});
+$('url').addEventListener('input',()=>{if(parsedUrl!==$('url').value.trim())$('title').textContent='';controls();$('cookieStatus').textContent='未使用 Cookie';settings().catch(()=>{$('cookieStatus').textContent='登录态读取失败';});});
 $('height').addEventListener('change',controls);
 $('mediaMode').addEventListener('change',controls);$('audioFormat').addEventListener('change',controls);
 $('openRecent').addEventListener('click',async()=>{
@@ -139,7 +156,7 @@ async function inspectVideo(options={}) {
     if(capture&&target==='video'){
       pageMediaUrl=url;
       for(const item of data.videos||[]){const button=document.createElement('button');button.textContent='视频 · '+(item.label||new URL(item.url).pathname.split('/').pop()||item.type||'查看画质');button.title=item.url;button.addEventListener('click',async()=>{if(busy)return;try{const w=await chrome.windows.getCurrent();await chrome.storage.session.set({[`video-source:${w.id}`]:{url:item.url,referer:url}});useVideoUrl(item.url);await inspectVideo({directMedia:true});}catch(e){$('error').textContent=e.message;}});$('pageVideos').append(button);}
-      mediaStatus(data.videos?.length?'请选择上方视频查看下载选项':'未找到可下载的网页视频。图片请点击“获取图集”；正在播放的视频可尝试下方“查找正在播放的媒体”。');return;
+      mediaStatus(data.videos?.length?'请选择上方视频查看下载选项':'未找到可下载的网页视频。图片请点击“获取图集”；请确认网页中有可访问的视频直链。');return;
     }
     if(target==='video'&&data.kind==='gallery'){mediaStatus('此链接返回的是图集，请点击“获取图集”。');return;}
     if(target==='gallery'&&data.kind!=='gallery'){mediaStatus(capture?'未找到可下载的网页图片。请打开目标网页，等待图片加载后重试。':'此链接返回的是视频，请点击“获取视频”。');return;}
@@ -148,8 +165,10 @@ async function inspectVideo(options={}) {
       showGallery(data);
       mediaStatus('图集已获取',data.sourceKind==='webpage'?'已获取当前网页图片。若有遗漏，先滚动网页加载图片，再重新获取。':'请选择图片后确认下载');return;
     }
-    $('height').replaceChildren(...data.heights.map(h=>{const o=document.createElement('option');o.value=h;o.textContent=h===0?'最佳可用画质（含原始视频）':h+'p';return o;}));
-    $('height').disabled=false;mediaStatus('视频已获取','请选择分辨率后下载');
+    $('height').replaceChildren(...(data.qualities?.length?data.qualities:data.heights.map(height=>({height,label:height===0?'最佳可用画质（含原始视频）':height+'p'}))).map(q=>{const o=document.createElement('option');o.value=q.height;o.dataset.quality=q.quality??'';o.textContent=q.label;return o;}));
+    const notice=videoSite(url)==='bilibili'&&!data.qualities?.length?'本地程序未返回画质档位，目前只有像素高度。请使用当前代码的管理中心更新 / 修复本地程序，再重新获取视频。':data.qualityNotice||'';
+    $('qualityNotice').textContent=notice;$('qualityNotice').hidden=!notice;
+    $('height').disabled=false;mediaStatus('视频已获取','请选择画质后下载');
   }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;mediaStatus('解析失败');}
   finally{busy=false;activeOperation='';controls();}
 }
@@ -246,8 +265,8 @@ $('confirmGallery').addEventListener('click',()=>startGallery(selectedGalleryInd
 $('download').addEventListener('click',async()=>{
   busy=true;controls();clearTimeout(timer);$('error').textContent='';
   try{
-    const data=await send('video-start',{url:parsedUrl,height:Number($('height').value),mediaMode:$('mediaMode').value||'video',audioFormat:$('audioFormat').value||'best',title:$('title').textContent?'【'+websiteName(parsedUrl)+'】'+$('title').textContent:''});
-    jobId=data.id;taskActive=true;runningSelection={url:parsedUrl,height:Number($('height').value),mediaMode:$('mediaMode').value||'video',audioFormat:$('audioFormat').value||'best'};
+    const data=await send('video-start',{url:parsedUrl,height:Number($('height').value),quality:Number($('height').selectedOptions[0]?.dataset.quality)||0,mediaMode:$('mediaMode').value||'video',audioFormat:$('audioFormat').value||'best',title:$('title').textContent?'【'+websiteName(parsedUrl)+'】'+$('title').textContent:''});
+    jobId=data.id;taskActive=true;runningSelection={url:parsedUrl,height:Number($('height').value),quality:Number($('height').selectedOptions[0]?.dataset.quality)||0,mediaMode:$('mediaMode').value||'video',audioFormat:$('audioFormat').value||'best'};
     await chrome.storage.local.set({lastVideoJob:jobId,lastVideoSelection:runningSelection});poll();
   }catch(error){if(typeof Recovery!=='undefined')Recovery.setError($('error'),error);else $('error').textContent=error.message;poll();}
   finally{busy=false;controls();}

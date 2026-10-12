@@ -1,5 +1,5 @@
 const HOST = 'cn.jingcai.clipper';
-importScripts('free-translation.js', 'recovery.js', 'collect-model.js', 'collect-service.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'sniffer.js', 'page-links.js', 'page-media.js', 'hover-control.js');
+importScripts('free-translation.js', 'recovery.js', 'collect-model.js', 'collect-service.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'page-links.js', 'page-media.js', 'hover-control.js');
 const kinds = {comment: '评论', review: '评阅', content: '内容', prompt: '提示词', link: '网页地址', page: '网页地址'};
 let serial = Promise.resolve();
 function exclusive(fn) {
@@ -176,27 +176,33 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       }finally{clearTimeout(timer);}
     })().then(reply,e=>reply({...Recovery.response(e),connected:false}));return true;
   }
-  if(message.action==='page-video-download' && sender.id===chrome.runtime.id && Number.isInteger(sender.tab?.windowId) && sender.frameId===0 && webpageUrl(sender.url)){
+  if(message.action==='page-video-download' && sender.id===chrome.runtime.id && Number.isInteger(sender.tab?.windowId) && webpageUrl(sender.url)){
     const requestedPage=supportedVideoUrl(message.pageUrl);
     const originName=websiteName(sender.url),targetName=websiteName(requestedPage);
     const selectedPage=requestedPage&&originName===targetName?requestedPage:sender.url;
     const media=webpageUrl(message.mediaUrl),page=supportedVideoUrl(selectedPage)||(/\.(m3u8|mpd)(?:$|[?#])/i.test(media)?media:!media?webpageUrl(sender.url):'');
-    if(!page && (!media || !/\.(mp4|webm|mov)(?:$|[?#])/i.test(media))){reply({ok:false,error:'此网页尚不能解析视频；可在下载面板开启媒体嗅探，或使用支持的网站详情页。'});return;}
+    if(!page && (!media || !/\.(mp4|webm|mov)(?:$|[?#])/i.test(media))){reply({ok:false,error:'此网页尚不能解析视频；请使用支持的网站详情页或直接粘贴视频链接。'});return;}
     // Keep opening the side panel inside the content-script click message gesture.
     const opened=chrome.sidePanel.open({windowId:sender.tab.windowId});
     (async()=>{
       if(!(await chrome.storage.local.get('hoverDownloadEnabled')).hoverDownloadEnabled)throw Error('视频悬浮下载按钮已关闭。');
       await opened;
-      await chrome.storage.session.set(page?{[`video-url:${sender.tab.windowId}`]:page,[`video-source:${sender.tab.windowId}`]:{url:page,referer:sender.url},[`app-view:${sender.tab.windowId}`]:'video'}:{[`download-link:${sender.tab.windowId}`]:{url:media,time:Date.now()},[`app-view:${sender.tab.windowId}`]:'download'});
-      return {ok:true};
+      const windowId=sender.tab.windowId,url=page||media,id=crypto.randomUUID();
+      await chrome.storage.session.set({[`video-url:${windowId}`]:url,[`video-source:${windowId}`]:{url,referer:sender.url},[`app-view:${windowId}`]:'video',[`hover-request:${windowId}`]:{id,url,time:Date.now()}});
+      for(let attempt=0;attempt<40;attempt++){
+        const key=`hover-receipt:${windowId}`,receipt=(await chrome.storage.session.get(key))[key];
+        if(receipt?.id===id){if(!receipt.ok)throw Error(receipt.error);return {ok:true};}
+        await new Promise(resolve=>setTimeout(resolve,250));
+      }
+      throw Error('侧栏未确认接收，请重新加载扩展并关闭后重开侧栏，再重试。');
+
     })().then(reply,e=>reply({ok:false,error:e.message}));return true;
   }
 
-  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-gallery-image-info','video-gallery-capture','video-page-media','video-image-preview','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','video-sniff-start','video-sniff-list','video-sniff-stop','video-sniff-download','download-page-links','hover-download-set'].includes(message.action)) {
+  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-gallery-image-info','video-gallery-capture','video-page-media','video-image-preview','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','download-page-links','hover-download-set'].includes(message.action)) {
     (async()=>{
       if(message.action==='hover-download-set')return setHoverDownload(message.enabled===true,message.windowId);
       if(message.action==='download-page-links')return downloadPageLinks(message.windowId);
-      if(message.action.startsWith('video-sniff-'))return sniffAction(message);
       const host=await native({action:'status'});
       if (!host.capabilities?.includes('video-api-2')) throw Error(`本地程序版本不匹配（${host.version || '未知旧版'}）。请运行本项目的“开始使用.cmd → 更新 / 修复”，然后重新加载扩展。`);
       if (!host.capabilities?.includes('video-multisite')) throw Error('请运行“开始使用.cmd → 更新 / 修复”更新多平台视频功能。');
@@ -237,9 +243,10 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         cookieText = await currentBiliCookies(message.windowId, videoSite(message.url));
       }
       if(message.transferMode==='extreme'&&!host.capabilities?.includes('range64'))throw Error('请更新本地程序以使用原生 64 路下载。');
+      if(message.quality&&!host.capabilities?.includes('video-quality-v1'))throw Error('请在管理中心更新 / 修复本地程序，启用按画质档位下载。');
       if(message.mediaMode==='audio'&&!host.capabilities?.includes('audio-download'))throw Error('请更新本地程序以使用仅音频下载。');
-      const result=await native({action:message.action,url:message.url,height:message.height,mediaMode:message.mediaMode,audioFormat:message.audioFormat,id:message.id,directory:message.directory,site:message.site,cookieText,draftId:message.draftId,confirmed:message.confirmed,selectedIndexes:message.selectedIndexes,index:message.index,imageFormat:message.imageFormat,title:message.title,statusFilter:message.statusFilter,offset:message.offset,transferMode:message.transferMode,genericFile:message.genericFile,filename:message.filename,checksum:message.checksum,genericMedia:message.genericMedia,referer:message.referer,maxActive:message.maxActive,autoClassify:message.autoClassify,adaptive:message.adaptive});
-      if(['video-start','video-gallery-start','video-file-start','video-resume'].includes(message.action)) await chrome.storage.local.set({lastVideoJob:result.id,lastVideoSelection:{url:message.url,height:message.height}});
+      const result=await native({action:message.action,url:message.url,height:message.height,quality:message.quality,mediaMode:message.mediaMode,audioFormat:message.audioFormat,id:message.id,directory:message.directory,site:message.site,cookieText,draftId:message.draftId,confirmed:message.confirmed,selectedIndexes:message.selectedIndexes,index:message.index,imageFormat:message.imageFormat,title:message.title,statusFilter:message.statusFilter,offset:message.offset,transferMode:message.transferMode,genericFile:message.genericFile,filename:message.filename,checksum:message.checksum,genericMedia:message.genericMedia,referer:message.referer,maxActive:message.maxActive,autoClassify:message.autoClassify,adaptive:message.adaptive});
+      if(['video-start','video-gallery-start','video-file-start','video-resume'].includes(message.action)) await chrome.storage.local.set({lastVideoJob:result.id,lastVideoSelection:{url:message.url,height:message.height,quality:message.quality,mediaMode:message.mediaMode,audioFormat:message.audioFormat}});
       return {...result,hostVersion:host.version,hostPath:host.hostPath};
     })().then(reply,error=>reply(Recovery.response(error)));
     return true;

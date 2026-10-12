@@ -137,9 +137,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if(['page-translation-control','page-translation-status'].includes(message?.action))return handlePageTranslationControl(message,sender,reply);
-  if(['page-translation-text','page-translation-stop'].includes(message?.action))return handlePageTranslation(message,sender,reply);
+  if(['page-translation-text','page-translation-stop','page-translation-options','page-translation-switch'].includes(message?.action))return handlePageTranslation(message,sender,reply);
   if(message.action==='free-translate' && sender.id===chrome.runtime.id && sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL('translate.html') && (sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)){
-    (async()=>{if(message.route==='bilibili'){const host=await native({action:'status'});if(!host.capabilities?.includes('free-translation-native-v1'))throw Error('B站翻译需要更新本地程序：开始使用.cmd → 更新 / 修复，然后重新加载扩展');return native({...message,action:'ai-free-translate'});}return freeTranslate(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.message}));return true;
+    (async()=>{if(message.route==='bilibili'){const host=await native({action:'status'});if(!host.capabilities?.includes('free-translation-native-v1'))throw Error('B站翻译需要更新本地程序：开始使用.cmd → 更新 / 修复，然后重新加载扩展');return native({...message,action:'ai-free-translate'});}return browserFreeTranslate(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.code||e.message}));return true;
   }
   if(['ai-settings-get','ai-translate'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL('translate.html')&&(sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)){
     (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('ai-translation-v1'))throw Error('翻译需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');return native(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.message}));return true;

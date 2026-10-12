@@ -15,7 +15,7 @@ async function freeTranslate(message, request = fetch) {
 
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),route==='bilibili'?45000:20000),started=Date.now();
  try{const response=await request(url.href,{method,...(body?{headers:{'Content-Type':'application/json'},body}:{}),credentials:'omit',redirect:'error',signal:controller.signal});
- if(!response.ok)throw Error(response.status===429?'免费翻译请求过于频繁，请稍后重试':'免费翻译服务暂不可用（'+response.status+'）');
+ if(!response.ok)throw Object.assign(Error(response.status===429?'免费翻译请求过于频繁，请稍后重试':'免费翻译服务拒绝请求或暂不可用（HTTP '+response.status+'），可更换翻译路径。'),{code:'TRANSLATION_HTTP_'+response.status});
  const data=await response.json();let translated;
  if(route==='free')translated=data?.[0]?.translations?.[0]?.text;
  if(route==='bilibili'){
@@ -27,6 +27,13 @@ async function freeTranslate(message, request = fetch) {
 
  if(typeof translated!=='string'||!translated.trim())throw Error('免费翻译未返回有效译文');
  return {ok:true,text:translated,provider:freeTranslationRoutes[route].label,model:route==='bilibili'?'Index-Translate-35B-A3B':'机器翻译',elapsedMs:Date.now()-started,detectedLanguage:route==='free'?data[0].detectedLanguage?.language||'':''};
- }catch(e){if(controller.signal.aborted)throw Error('免费翻译超时，请稍后重试');throw e;}finally{clearTimeout(timer);}
+ }catch(e){if(controller.signal.aborted)throw Object.assign(Error('免费翻译超时，可稍后重试或更换翻译路径。'),{code:'TRANSLATION_TIMEOUT'});if(e?.name==='TypeError'&&/fetch|network/i.test(e.message))throw Object.assign(Error((route==='free'?'微软':'B站')+'翻译连接失败，未收到服务响应。请检查浏览器网络或代理，或更换翻译路径。'),{code:route==='free'?'MICROSOFT_NETWORK_ERROR':'TRANSLATION_NETWORK_ERROR'});throw e;}finally{clearTimeout(timer);}
+}
+async function browserFreeTranslate(message){
+ if((message.route||'free')==='free'&&typeof chrome!=='undefined'&&chrome.permissions?.contains){
+  const granted=await chrome.permissions.contains({origins:['https://edge.microsoft.com/*']});
+  if(!granted)throw Object.assign(Error('扩展没有微软翻译网站的访问权限。请重新加载扩展并允许该网站访问，或更换翻译路径。'),{code:'MICROSOFT_PERMISSION_REQUIRED'});
+ }
+ return freeTranslate(message);
 }
 if(typeof module!=='undefined')module.exports={freeTranslate,freeTranslationRoutes};

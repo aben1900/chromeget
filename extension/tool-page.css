@@ -1,0 +1,11 @@
+/* Controls for a tool opened as a browser tab when the current page cannot host an overlay. */
+.tool-page-header{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;height:52px;padding:0 16px 0 22px;border-bottom:1px solid #e5eaf0;background:#fff;color:#263449;font:700 18px/1.4 "Segoe UI","Microsoft YaHei",sans-serif}
+.tool-page-header .tool-page-actions{display:flex;align-items:center;gap:4px}
+.tool-page-header button{display:grid;place-items:center;width:34px;height:34px;padding:6px;border:0;border-radius:8px;background:transparent;color:#4e6076;cursor:pointer}
+.tool-page-header button:hover{background:#e9eef5;box-shadow:inset 0 2px 4px #0002}
+.tool-page-header button:active{background:#dce5ef;box-shadow:inset 0 3px 5px #0003}
+.tool-page-header button:focus-visible{outline:2px solid #416fc4;outline-offset:1px}
+.tool-page-header svg{display:block;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tool-page-header [data-tool-fullscreen] svg{width:18px;height:18px;stroke-width:1.7}
+html[data-tool-embedded="true"] main>h1,html[data-tool-standalone="true"] main>h1{display:none}
+html[data-tool-standalone="true"] body>main{height:calc(100dvh - 52px);min-height:0}

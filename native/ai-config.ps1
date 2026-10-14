@@ -134,7 +134,7 @@ function Save-AiSettings([string]$root,$message) {
         $p=Invoke-AiNode @{op='config-update';old=$old;message=$draft;ciphertext=$cipher;keyChanged=$keyChanged}
         foreach($m in @($old.models)){if($m.id -cnotin @($p.models.id)){foreach($o in @($m.origins)){$s.imports.ignored=@($s.imports.ignored)+($o.source+':'+$o.sourceId)}}}
         if($message.testReceipt){Restore-AiDraftTest $root $p ([string]$message.testReceipt)}
-        if(@($message.testReceipts).Count -gt 200){throw 'CONFIG_LIMIT'}
+        if(@($message.testReceipts).Count -gt 400){throw 'CONFIG_LIMIT'}
         foreach($receiptId in @($message.testReceipts)){if($receiptId){Restore-AiDraftTest $root $p ([string]$receiptId) -AnyModel}}
         if($s.defaultProfileId -ceq $id -and $old.model -cne $p.model){$s.selectionRevision=[Guid]::NewGuid().ToString()}
         Set-AiProperty $s.profiles $id $p;Write-AiSettings $root $s
@@ -187,11 +187,18 @@ function Resolve-AiDraft([string]$root,$message) {
         Set-AiProperty $p 'secret' $secret;$p.hasKey=$true;return $p
     }
 }
-function Resolve-AiProfile([string]$root,[string]$profileId,[string]$model,[switch]$Temporary) {
+function Resolve-AiProfile([string]$root,[string]$profileId,[string]$model,[switch]$Temporary,[switch]$Vision,[switch]$VisionTest,[switch]$ModelTest) {
+    if(($Vision -or $VisionTest) -and $profileId.StartsWith('cc:')){throw 'CONFIG_CHANGED'}
     if($profileId.StartsWith('cc:')){return Invoke-AiNode @{op='cc-resolve';dbPath=(Join-Path $env:USERPROFILE '.cc-switch\cc-switch.db');id=$profileId.Substring(3);model=$model}}
     return Invoke-AiConfigLock $root {
         $s=Read-AiSettings $root;$saved=$s.profiles.$profileId;if(-not $saved){throw 'CONFIG_CHANGED'}
-        $p=Invoke-AiNode @{op='config-public';profile=$saved};if($Temporary){
+        $p=Invoke-AiNode @{op='config-public';profile=$saved};if($Vision -or $VisionTest -or $ModelTest){
+            if($ModelTest -and -not $model){$model=$saved.model}
+            $entry=@($saved.models|Where-Object {$_.id -ceq $model})
+            if($entry.Count -ne 1){throw 'CONFIG_CHANGED'}
+            if($Vision -and (-not $entry[0].lastVisionTest.ok -or $entry[0].lastVisionTest.connectionRevision -cne $saved.connectionRevision)){throw 'VISION_NOT_TESTED'}
+            $p.model=$model
+        }elseif($Temporary){
             $entry=@($saved.models|Where-Object {$_.id -ceq $model})
             if($entry.Count -ne 1 -or -not $entry[0].lastTest.ok -or $entry[0].lastTest.connectionRevision -cne $saved.connectionRevision){throw 'MODEL_NOT_TESTED'}
             $p.model=$model
@@ -199,13 +206,13 @@ function Resolve-AiProfile([string]$root,[string]$profileId,[string]$model,[swit
         $secret=Unprotect-AiKey $saved.ciphertext;$p.hasKey=[bool]$secret;Set-AiProperty $p 'secret' $secret;return $p
     }
 }
-function Save-AiTestResult([string]$root,$profile,$result) {
+function Save-AiTestResult([string]$root,$profile,$result,[switch]$Vision) {
     Invoke-AiConfigLock $root {
         $s=Read-AiSettings $root;$p=$s.profiles.([string]$profile.profileId)
         if($p -and $p.revision -ceq $profile.revision){
           $model=if($profile.model){$profile.model}else{$p.model}
           $items=@($p.models|Where-Object {$_.id -ceq $model})
-          if($items.Count -eq 1){Set-AiProperty $result 'connectionRevision' $p.connectionRevision;Set-AiProperty $items[0] 'lastTest' $result;Write-AiSettings $root $s}
+          if($items.Count -eq 1){Set-AiProperty $result 'connectionRevision' $p.connectionRevision;$field=if($Vision){'lastVisionTest'}else{'lastTest'};Set-AiProperty $items[0] $field $result;Write-AiSettings $root $s}
         }
     }
 }
@@ -213,10 +220,10 @@ function Get-AiTestSignature($p,[string]$secret) {
     $sha=[Security.Cryptography.SHA256]::Create()
     try{return [Convert]::ToBase64String($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject @($p.provider,$p.protocol,$p.baseUrl,$p.auth,$p.model,$secret) -Compress))))}finally{$sha.Dispose()}
 }
-function Save-AiDraftTest([string]$root,$profile,$result) {
+function Save-AiDraftTest([string]$root,$profile,$result,[switch]$Vision) {
     $folder=Join-Path $root 'ai-test-receipts';[void][IO.Directory]::CreateDirectory($folder)
     foreach($file in [IO.Directory]::GetFiles($folder,'*.json')){if([IO.File]::GetLastWriteTimeUtc($file) -lt [DateTime]::UtcNow.AddHours(-4)){[IO.File]::Delete($file)}}
-    $id=[Guid]::NewGuid().ToString();$payload=@{model=$profile.model;signature=(Get-AiTestSignature $profile $profile.secret);result=$result;expires=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()+14400000}
+    $id=[Guid]::NewGuid().ToString();$payload=@{model=$profile.model;capability=$(if($Vision){'ocr'}else{'txt'});signature=(Get-AiTestSignature $profile $profile.secret);result=$result;expires=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()+14400000}
     [IO.File]::WriteAllText((Join-Path $folder ($id+'.json')),(Protect-AiKey (ConvertTo-Json -InputObject $payload -Depth 8 -Compress)))
     return $id
 }
@@ -226,6 +233,6 @@ function Restore-AiDraftTest([string]$root,$p,[string]$id,[switch]$AnyModel) {
     try{$receipt=(Unprotect-AiKey ([IO.File]::ReadAllText($file)))|ConvertFrom-Json;if($receipt.expires -lt [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()){return};$model=if($AnyModel -and $receipt.model){[string]$receipt.model}else{$p.model};$m=@($p.models|Where-Object {$_.id -ceq $model})[0];if(-not $m){return}
       $snapshot=@{provider=$p.provider;protocol=$p.protocol;baseUrl=$p.baseUrl;auth=$p.auth;model=$model}
       $signature=Get-AiTestSignature $snapshot (Unprotect-AiKey $p.ciphertext)
-      if($signature -ceq $receipt.signature){Set-AiProperty $receipt.result 'connectionRevision' $p.connectionRevision;Set-AiProperty $m 'lastTest' $receipt.result}
+      if($signature -ceq $receipt.signature){Set-AiProperty $receipt.result 'connectionRevision' $p.connectionRevision;$field=if($receipt.capability -ceq 'ocr'){'lastVisionTest'}else{'lastTest'};Set-AiProperty $m $field $receipt.result}
     }catch{}finally{if([IO.File]::Exists($file)){[IO.File]::Delete($file)}}
 }

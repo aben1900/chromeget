@@ -9,6 +9,9 @@ Add-Type -AssemblyName System.Drawing
 $bitmap=New-Object Drawing.Bitmap(17,11);$stream=New-Object IO.MemoryStream
 try{$bitmap.SetPixel(8,5,[Drawing.Color]::Red);$bitmap.Save($stream,[Drawing.Imaging.ImageFormat]::Png);$pngBytes=$stream.ToArray()}finally{$stream.Dispose();$bitmap.Dispose()}
 $png='data:image/png;base64,'+[Convert]::ToBase64String($pngBytes)
+$standalone=Save-GalleryCapture ([pscustomobject]@{sourceUrl='https://example.com/page';sourceTitle='Standalone';png=$png}) $root $root
+$standaloneDraft=Read-GalleryDraft $standalone $root
+Assert-True ($standaloneDraft.images.Count -eq 1 -and $standaloneDraft.title -eq 'Standalone') 'First capture must create a standalone gallery'
 $page=Save-WebGalleryPreview ([pscustomobject]@{url='https://example.com/page';title='Capture source';images=@(@{url='https://example.com/first.png';width=100;height=50},@{url='https://example.com/second.jpg';width=50;height=100})}) $root $root
 $oldPath=Join-Path $root ($page.draftId+'.gallery.json');$oldText=[IO.File]::ReadAllText($oldPath)
 $result=Save-GalleryCapture ([pscustomobject]@{draftId=$page.draftId;png=$png}) $root $root

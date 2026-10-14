@@ -1,5 +1,5 @@
 'use strict';
-const {buildRequest,parseResponse}=require('./ai-provider.cjs');
+const {buildRequest,buildVisionRequest,parseResponse}=require('./ai-provider.cjs');
 function apiError(status,body){
  let code='',apiCode='',message='';try{const e=JSON.parse(body).error;apiCode=String(e?.code||'');code=apiCode+' '+String(e?.type||'');message=typeof e?.message==='string'?e.message:'';}catch{}
  // 1220 also covers ordinary API permissions. Only identify an IP restriction when the service says so.
@@ -8,8 +8,8 @@ function apiError(status,body){
  if(/unsupported_country_region_territory/.test(code))return 'REGION_UNSUPPORTED';
  return status===401?'AUTH_FAILED':status===403?'PERMISSION_DENIED':status===429?'RATE_LIMITED':status===404?'MODEL_UNAVAILABLE':status>=500?'SERVICE_UNAVAILABLE':status===400?'API_REQUEST_REJECTED':'NETWORK_ERROR';
 }
-async function requestSummary(profile,text,length,{isTest=false,timeoutMs=45000,translation=null}={}){
- const request=buildRequest(profile,text,length,isTest,translation),u=new URL(request.url);
+async function requestSummary(profile,text,length,{isTest=false,timeoutMs=45000,translation=null,vision=null}={}){
+ const request=vision?buildVisionRequest(profile,vision):buildRequest(profile,text,length,isTest,translation),u=new URL(request.url);
  const json=await new Promise((resolve,reject)=>{
   let done=false,timer;const finish=(error,value)=>{if(done)return;done=true;clearTimeout(timer);if(error)reject(Error(error));else resolve(value);};
   const req=require(u.protocol==='https:'?'node:https':'node:http').request(u,{method:'POST',headers:request.headers},res=>{

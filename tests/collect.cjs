@@ -22,5 +22,9 @@ const request=(action,extra={})=>new Promise((resolve,reject)=>{if(handler({acti
  const second=await request('collect-edit',{windowId:2,text:'另一个窗口',type:'内容'});assert.notEqual(second.draft.id,next.id);assert.equal(session['collect-draft:1'].text,'中断的提交');
  assert.equal((await request('collect-save',{id:'stale',revision:1})).ok,false);
  assert.equal(handler({action:'collect-save',windowId:1},{id:'test',url:'https://evil.test'},noop),undefined);
- console.log('PASS collection classification, window isolation, duplicate saves, stable retry ID, stale draft and sender guards');
+ const popupRequest=(action,extra={})=>new Promise(resolve=>handler({action,windowId:1,...extra},{id:'test',url:root+'popup.html'},resolve));
+ const beforeCollect=session['collect-draft:1'];
+ const ocr=await popupRequest('collect-edit',{text:'https://example.com/',type:'提示词',title:'OCR prompt',explicitType:true});
+ assert.equal(ocr.ok,true);await popupRequest('collect-save',{id:ocr.draft.id,revision:ocr.draft.revision});assert.equal(saves.at(-1).type,'提示词');assert.equal(saves.at(-1).title,'OCR prompt');assert.deepEqual(session['collect-draft:1'],beforeCollect,'OCR must not replace collection draft');
+ console.log('PASS collection classification, window isolation, duplicate saves, stable retry ID, stale draft and sender guards, explicit OCR type and separate drafts');
 })().catch(e=>{console.error(e);process.exitCode=1;});

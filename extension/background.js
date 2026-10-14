@@ -1,5 +1,5 @@
 const HOST = 'cn.jingcai.clipper';
-importScripts('free-translation.js', 'recovery.js', 'collect-model.js', 'collect-service.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'page-links.js', 'page-media.js', 'hover-control.js');
+importScripts('free-translation.js', 'recovery.js', 'collect-model.js', 'collect-service.js', 'prompt-title.js', 'browser-cookies.js', 'video-url.js', 'page-links.js', 'page-media.js', 'hover-control.js', 'window-overlay.js');
 const kinds = {comment: '评论', review: '评阅', content: '内容', prompt: '提示词', link: '网页地址', page: '网页地址'};
 let serial = Promise.resolve();
 function exclusive(fn) {
@@ -17,6 +17,74 @@ function native(message) {
       resolve(response);
     });
   });
+}
+const overlayLifetimeMs=2*60*60*1000;
+function topExtensionPage(sender,pages){
+  return sender.id===chrome.runtime.id&&(sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)&&pages.some(page=>sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL(page));
+}
+async function authorizedOverlaySender(sender,tool){
+  if(sender.id!==chrome.runtime.id||!Number.isInteger(sender.frameId)||sender.frameId<1||!Number.isInteger(sender.tab?.id))return false;
+  const page=tool==='model'?'model-settings.html':'translate.html';
+  let target;
+  try{target=new URL(sender.url);}catch{return false;}
+  if(target.href.split(/[?#]/)[0]!==chrome.runtime.getURL(page))return false;
+  const token=target.searchParams.get('overlay');
+  if(!token)return false;
+  const key='tool-overlay:'+token,receipt=(await chrome.storage.session.get(key))[key];
+  return receipt?.tool===tool&&receipt.page===page&&receipt.tabId===sender.tab.id&&receipt.windowId===sender.tab.windowId&&receipt.expiresAt>Date.now();
+}
+async function renderToolInExtensionTab(tab,url,token,tool,title){
+  if(typeof BroadcastChannel==='undefined')return false;
+  let channel;try{channel=new BroadcastChannel('chromeget-connection-overlay')}catch{return false}let timer;
+  try{
+    const ready=new Promise(resolve=>{channel.onmessage=event=>{if(event.data?.type==='ready'&&event.data.token===token)resolve(true)};timer=setTimeout(()=>resolve(false),900)});
+    channel.postMessage({type:'prepare',tabId:tab.id,token,url,tool,title});
+    if(!await ready)return false;
+    channel.postMessage({type:'commit',token});
+    return true;
+  }catch{return false;
+  }finally{clearTimeout(timer);channel.close()}
+}
+async function openToolOverlay(tool,translationId='',preferredTab,inline=false){
+  const tab=Number.isInteger(preferredTab?.id)?preferredTab:(await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0];
+  if(!Number.isInteger(tab?.id))throw Error('未找到当前浏览器标签页');
+  const page=tool==='model'?'model-settings.html':'translate.html',title=tool==='model'?'模型设置':'比对翻译页';
+  const id=translationId?'id='+encodeURIComponent(translationId):'';
+  const fallbackUrl=chrome.runtime.getURL(page)+(id?'?'+id:'');
+  const token=crypto.randomUUID(),key='tool-overlay:'+token,index='tool-overlay-current:'+tab.id+':'+tool;
+  const url=chrome.runtime.getURL(page)+'?overlay='+encodeURIComponent(token)+(id?'&'+id:'');
+  const previous=(await chrome.storage.session.get(index))[index];
+  await chrome.storage.session.set({[key]:{tool,page,tabId:tab.id,windowId:tab.windowId,expiresAt:Date.now()+overlayLifetimeMs}});
+  if(inline){
+    await chrome.storage.session.set({[index]:token});
+    if(previous&&previous!==token)await chrome.storage.session.remove('tool-overlay:'+previous);
+    return {ok:true,render:{url,token,tool,title}};
+  }
+  if(tab.url?.startsWith(chrome.runtime.getURL(''))&&await renderToolInExtensionTab(tab,url,token,tool,title)){
+    await chrome.storage.session.set({[index]:token});
+    if(previous&&previous!==token)await chrome.storage.session.remove('tool-overlay:'+previous);
+    return {ok:true};
+  }
+  try{
+    const result=await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},func:OverlayWindowRender,args:[url,token,tool,title]});
+    if(result?.some(item=>item.result===false))throw Error('网页无法显示工具窗口');
+    await chrome.storage.session.set({[index]:token});
+    if(previous&&previous!==token)await chrome.storage.session.remove('tool-overlay:'+previous);
+    return {ok:true};
+  }catch(error){
+    await chrome.storage.session.remove(key);
+    await chrome.tabs.create({url:fallbackUrl,...(Number.isInteger(tab.windowId)?{windowId:tab.windowId}:{})});
+    return {ok:true,fallback:'tab'};
+  }
+}
+async function closeToolOverlay(token,sender){
+  const key='tool-overlay:'+token,receipt=(await chrome.storage.session.get(key))[key];
+  if(!receipt)return {ok:true};
+  if(sender.id!==chrome.runtime.id||sender.tab?.id!==receipt.tabId||sender.tab?.windowId!==receipt.windowId)throw Error('无权关闭此工具窗口');
+  const index='tool-overlay-current:'+receipt.tabId+':'+receipt.tool;
+  if((await chrome.storage.session.get(index))[index]===token)await chrome.storage.session.remove(index);
+  await chrome.storage.session.remove(key);
+  return {ok:true};
 }
 async function menus() {
   await chrome.contextMenus.removeAll();
@@ -76,7 +144,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if(info.menuItemId==='translate-page'){togglePageTranslation(tab).catch(pageTranslationFailure);return;}
   if(info.menuItemId==='translate'){
     const text=String(info.selectionText||'');if(!text.trim())return;
-    (async()=>{const id=crypto.randomUUID(),key='translation:'+id;await chrome.storage.session.set({[key]:{text,createdAt:Date.now()}});try{const parent=await chrome.windows.get(tab.windowId),width=Math.min(1100,parent.width),height=Math.min(760,parent.height);await chrome.windows.create({url:chrome.runtime.getURL('translate.html?id='+id),type:'popup',width,height,left:Math.round(parent.left+(parent.width-width)/2),top:Math.round(parent.top+(parent.height-height)/2)});}catch(e){await chrome.storage.session.remove(key);throw e;}})().catch(e=>{chrome.action.setTitle({title:'翻译窗口未能打开：'+e.message}).catch(console.error);});return;
+    (async()=>{const id=crypto.randomUUID(),key='translation:'+id;await chrome.storage.session.set({[key]:{text,createdAt:Date.now()}});try{await openToolOverlay('translate',id,tab);}catch(e){await chrome.storage.session.remove(key);throw e;}})().catch(e=>{chrome.action.setTitle({title:'翻译窗口未能打开：'+e.message}).catch(console.error);});return;
   }
   if(info.menuItemId==='collect'&&Number.isInteger(tab?.windowId)){
     chrome.sidePanel.open({windowId:tab.windowId}).catch(console.error);
@@ -136,17 +204,31 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if(message?.action==='open-tool-overlay'){
+    (async()=>{
+      if(!['model','translate'].includes(message.tool))throw Error('未知的工具窗口');
+      const trusted=topExtensionPage(sender,['app.html','library.html','translate.html','ocr-review.html'])
+        ||await authorizedOverlaySender(sender,'translate')
+        ||sender.id===chrome.runtime.id&&sender.url?.startsWith(chrome.runtime.getURL('ocr-review.html')+'?token=')&&Number.isInteger(sender.tab?.id);
+      if(!trusted)throw Error('无权打开工具窗口');
+      const inline=topExtensionPage(sender,['library.html','translate.html','ocr-review.html'])&&sender.tab?.url?.startsWith(chrome.runtime.getURL(''));
+      return openToolOverlay(message.tool,message.tool==='translate'?String(message.translationId||''):'',sender.tab,inline);
+    })().then(reply,error=>reply({ok:false,error:error.message}));return true;
+  }
+  if(message?.action==='close-tool-overlay'){
+    closeToolOverlay(String(message.token||''),sender).then(reply,error=>reply({ok:false,error:error.message}));return true;
+  }
   if(['page-translation-control','page-translation-status'].includes(message?.action))return handlePageTranslationControl(message,sender,reply);
   if(['page-translation-text','page-translation-stop','page-translation-options','page-translation-switch'].includes(message?.action))return handlePageTranslation(message,sender,reply);
-  if(message.action==='free-translate' && sender.id===chrome.runtime.id && sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL('translate.html') && (sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)){
-    (async()=>{if(message.route==='bilibili'){const host=await native({action:'status'});if(!host.capabilities?.includes('free-translation-native-v1'))throw Error('B站翻译需要更新本地程序：开始使用.cmd → 更新 / 修复，然后重新加载扩展');return native({...message,action:'ai-free-translate'});}return browserFreeTranslate(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.code||e.message}));return true;
+  if(message.action==='free-translate' && sender.id===chrome.runtime.id && sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL('translate.html')){
+    (async()=>{if(!topExtensionPage(sender,['translate.html'])&&!(await authorizedOverlaySender(sender,'translate')))throw Error('翻译窗口未授权');if(message.route==='bilibili'){const host=await native({action:'status'});if(!host.capabilities?.includes('free-translation-native-v1'))throw Error('B站翻译需要更新本地程序：开始使用.cmd → 更新 / 修复，然后重新加载扩展');return native({...message,action:'ai-free-translate'});}return browserFreeTranslate(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.code||e.message}));return true;
   }
-  if(['ai-settings-get','ai-translate'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL('translate.html')&&(sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)){
-    (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('ai-translation-v1'))throw Error('翻译需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');return native(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.message}));return true;
+  if(['ai-settings-get','ai-translate'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL('translate.html')){
+    (async()=>{if(!topExtensionPage(sender,['translate.html'])&&!(await authorizedOverlaySender(sender,'translate')))throw Error('翻译窗口未授权');const host=await native({action:'status'});if(!host.capabilities?.includes('ai-translation-v1'))throw Error('翻译需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');return native(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.message}));return true;
   }
-  const aiActions=['ai-model-select','ai-models-discover','ai-model-delete','ai-default-set','ai-model-import-preview','ai-model-import-apply','ai-test-draft','ai-settings-get','ai-settings-save','ai-ccswitch-list','ai-test','ai-prepare','ai-generate','ai-status','ai-recent','ai-read','ai-save'];
-  if(aiActions.includes(message.action)&&sender.id===chrome.runtime.id&&['library.html','model-settings.html'].some(page=>sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL(page))&&(sender.frameId===undefined||sender.frameId===0||sender.frameId===-1)){
-    (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('ai-config-models-v2'))throw Error('模型管理需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');return native(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.message}));return true;
+  const aiActions=['ai-model-select','ai-models-discover','ai-model-delete','ai-default-set','ai-model-import-preview','ai-model-import-apply','ai-test-draft','ai-test-vision','ai-settings-get','ai-settings-save','ai-ccswitch-list','ai-test','ai-prepare','ai-generate','ai-status','ai-recent','ai-read','ai-save'];
+  if(aiActions.includes(message.action)&&sender.id===chrome.runtime.id&&['library.html','model-settings.html'].some(page=>sender.url?.split(/[?#]/)[0]===chrome.runtime.getURL(page))&&(topExtensionPage(sender,['library.html','model-settings.html'])||sender.url?.startsWith(chrome.runtime.getURL('model-settings.html')+'?overlay='))){
+    (async()=>{if(!topExtensionPage(sender,['library.html','model-settings.html'])&&!(await authorizedOverlaySender(sender,'model')))throw Error('模型设置窗口未授权');const host=await native({action:'status'});if(!host.capabilities?.includes('ai-config-models-v2'))throw Error('模型管理需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');if((message.action==='ai-test-vision'||message.action==='ai-test-draft'&&message.capability==='ocr')&&!host.capabilities?.includes('ai-vision-test-v1'))throw Error('AI_VISION_UPDATE_REQUIRED');return native(message);})().then(reply,e=>reply({ok:false,error:e.message,code:e.message}));return true;
   }
   const backupActions=['library-backup-create','library-backup-list','library-backup-open','library-restore-choose','library-restore-preview','library-restore-apply','library-restore-result'];
   const libraryActions=[...backupActions,'library-query','library-image','library-read','library-delete','library-update','library-taxonomy','library-duplicates','library-open','library-export-prepare','library-export-start','library-export-status','library-export-recent','library-export-open'];
@@ -154,13 +236,26 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     const run=async()=>{const host=await native({action:'status'});const capability=message.action==='library-delete'?'library-delete-v1':backupActions.includes(message.action)?'library-backup-v1':'library-v1';if(!host.capabilities?.includes(capability))throw Error('此功能需要更新本地程序，请运行“开始使用.cmd → 更新 / 修复”');if(['library-restore-apply','library-delete'].includes(message.action)){const {pending=[]}=await chrome.storage.local.get('pending');if(pending.length)throw Error('请先在侧栏重试并保存待处理记录，再恢复备份或删除资料。');}return native(message);};
     (['library-restore-apply','library-delete'].includes(message.action)?exclusive(run):run()).then(reply,e=>reply(Recovery.response(e)));return true;
   }
-  if(['collect-load','collect-edit','collect-save','collect-state','collect-retry'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('collect.html')){
-    exclusive(()=>collectionRequest(message)).then(reply,error=>reply(Recovery.response(error)));return true;
+  const ocrReviewSender=sender.id===chrome.runtime.id&&sender.url?.startsWith(chrome.runtime.getURL('ocr-review.html')+'?');
+  if(['capture-ocr-models','capture-ai-ocr'].includes(message.action)&&ocrReviewSender){
+    (async()=>{if(message.action==='capture-ocr-models')return native({action:'ai-settings-get'});const host=await native({action:'status'});if(!host.capabilities?.includes('capture-ai-ocr-v1'))throw Error('请更新 / 修复本地程序以使用大模型截图识别。');if(message.confirmed!==true)throw Error('请确认使用所选模型提取文字');return native({action:'ai-capture-ocr',png:message.png,profileId:message.profileId,model:message.model,expectedRevision:message.expectedRevision,language:message.language,confirmed:true});})().then(reply,e=>reply(Recovery.response(e)));return true;
   }
-  if(message.action==='retry-pending' && sender.id===chrome.runtime.id && sender.url===chrome.runtime.getURL('app.html')){
+  if(message.action==='video-status'&&sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('app.html')){
+    native({action:'video-status'}).then(reply,e=>reply(Recovery.response(e)));return true;
+  }
+  if(['capture-save','capture-directory'].includes(message.action)&&sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('app.html')){
+    (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('capture-save-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用截图保存功能。');return native({action:message.action,png:message.png,name:message.name,directory:message.directory});})().then(reply,e=>reply(Recovery.response(e)));return true;
+  }
+  if(message.action==='capture-ocr'&&sender.id===chrome.runtime.id&&(['popup.html','app.html'].some(p=>sender.url===chrome.runtime.getURL(p))||ocrReviewSender)){
+    (async()=>{const host=await native({action:'status'});if(!host.capabilities?.includes('capture-ocr-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用本地截图文字识别。');if(!['zh-Hans-CN','en-US','auto'].includes(message.language))throw Error('请选择识别语言');return native({action:'capture-ocr',png:message.png,language:message.language});})().then(reply,e=>reply(Recovery.response(e)));return true;
+  }
+  if(['collect-load','collect-edit','collect-save','collect-state','collect-retry'].includes(message.action)&&sender.id===chrome.runtime.id&&(['collect.html','popup.html','app.html'].some(p=>sender.url===chrome.runtime.getURL(p))||ocrReviewSender)){
+    exclusive(()=>collectionRequest(message,sender.url===chrome.runtime.getURL('collect.html')?'collect-draft':'content-ocr-draft')).then(reply,error=>reply(Recovery.response(error)));return true;
+  }
+  if(message.action==='retry-pending' && sender.id===chrome.runtime.id && ['app.html','connection-window.html'].some(p=>sender.url?.split('?')[0]===chrome.runtime.getURL(p))){
     exclusive(async()=>{await flush();const {pending=[],lastError=''}=await chrome.storage.local.get(['pending','lastError']);return {ok:!pending.length,pendingCount:pending.length,error:Recovery.redact(lastError)};}).then(reply,e=>reply(Recovery.response(e)));return true;
   }
-  if(message.action==='check-connection' && sender.id===chrome.runtime.id && ['app.html','collect.html'].some(p=>sender.url===chrome.runtime.getURL(p))){
+  if(message.action==='check-connection' && sender.id===chrome.runtime.id && ['app.html','collect.html','connection-window.html'].some(p=>sender.url?.split('?')[0]===chrome.runtime.getURL(p))){
     (async()=>{
       let timer;const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Recovery.toError({code:'HOST_UNAVAILABLE',error:'检查超时，请重试'})),message.fullIntegrity===true?60000:12000);});
       try{
@@ -172,7 +267,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         if(!host&&!report)return {...Recovery.response(status.reason||diagnostics.reason),connected:false,checks:[{id:'browser',state:'fail',message:'未连接配套程序'}]};
         const checks=Array.isArray(report?.checks)?report.checks.filter(c=>c.id!=='browser'):[{id:'diagnostics',state:'pending',message:'配套程序尚不能完成检查，请更新'}];
         if(!host)checks.push({id:'save',state:'fail',message:'无法读取保存设置'});
-        return {ok:true,connected:true,hostVersion:host?.version||'',diskExtensionVersion:host?.diskExtensionVersion||'',extensionRoot:host?.extensionRoot||'',hostPath:host?.hostPath||'',journalPath:host?.journalPath||host?.path||'',storageFormat:host?.storageFormat||'',capabilities:host?.capabilities||[],checks:[{id:'browser',state:'pass',message:'配套程序已连接'},...checks]};
+        return {ok:true,connected:true,hostVersion:host?.version||'',diskExtensionVersion:host?.diskExtensionVersion||'',engineVersions:report?.engineVersions||{},extensionRoot:host?.extensionRoot||'',hostPath:host?.hostPath||'',journalPath:host?.journalPath||host?.path||'',storageFormat:host?.storageFormat||'',capabilities:host?.capabilities||[],checks:[{id:'browser',state:'pass',message:'配套程序已连接'},...checks]};
       }finally{clearTimeout(timer);}
     })().then(reply,e=>reply({...Recovery.response(e),connected:false}));return true;
   }
@@ -221,7 +316,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(['video-image-preview','video-page-media'].includes(message.action)&&!host.capabilities?.includes('gallery-image-types-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用全部图片类型获取。');
       if(message.action==='video-gallery-capture'){
         if(!host.capabilities?.includes('gallery-capture-v1'))throw Error('请运行开始使用.cmd → 更新 / 修复，启用图集区域截图。');
-        return native({action:'video-gallery-capture',draftId:message.draftId,png:message.png});
+        return native({action:'video-gallery-capture',draftId:message.draftId,png:message.png,sourceUrl:message.sourceUrl,sourceTitle:message.sourceTitle});
       }
       if(message.action==='video-image-preview'){
         const url=webpageUrl(message.url);if(!url||!/\.(jpe?g|gif|png|bmp|svg|webp|ico|tiff?|avif)$/i.test(new URL(url).pathname))throw Error('请填写支持的图片文件网址。');

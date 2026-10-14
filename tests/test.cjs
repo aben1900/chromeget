@@ -136,7 +136,7 @@ const record = content => ({id:randomUUID(),time:'2026-09-30T07:20:08.000Z',type
   console.log('PASS selected URL menu actions, selection priority, query preservation, www normalization and invalid selection guard');
   store.hoverDownloadEnabled=true;
   const hovered=await new Promise(resolve=>onMessage({action:'page-video-download',mediaUrl:'blob:opaque'},{id:'test',frameId:0,url:'https://www.youtube.com/watch?v=d2UVNJSX7oA',tab:{windowId:55}},resolve));
-  assert.equal(hovered.ok,true);assert.equal(session['app-view:55'],'video');assert.equal(session['video-url:55'],'https://www.youtube.com/watch?v=d2UVNJSX7oA');delete session['app-view:55'];delete session['video-url:55'];delete session['video-source:55'];panels.length=0;
+  assert.equal(hovered.ok,true);assert.equal(session['app-view:55'],'video');assert.equal(session['video-url:55'],'https://www.youtube.com/watch?v=d2UVNJSX7oA');for(const key of ['app-view:55','video-url:55','video-source:55','hover-request:55','hover-receipt:55'])delete session[key];panels.length=0;
   click({menuItemId:'comment',selectionText:'选中文字'},{});
   click({menuItemId:'link',linkUrl:'https://example.com/target'},{windowId:42,url:'https://source.example/'});
   click({menuItemId:'page',pageUrl:'https://example.com/page'},{windowId:43,url:'https://example.com/page',title:'网页名称'});

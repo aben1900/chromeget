@@ -14,13 +14,13 @@ function normalizeConfig(v){
  const seen=new Set(),connectionRevision=String(v.connectionRevision||v.revision||'default');
  const models=v.models.map(m=>{if(!m||typeof m.id!=='string'||!m.id.trim()||m.id!==m.id.trim()||m.id.length>200||/[\x00-\x1f]/.test(m.id)||seen.has(m.id))invalid();seen.add(m.id);
   const entry={id:m.id,label:String(m.label||m.id).slice(0,200),origins:Array.isArray(m.origins)?m.origins.map(o=>({source:String(o.source),sourceId:String(o.sourceId),fingerprint:String(o.fingerprint||''),credentialFingerprint:String(o.credentialFingerprint||'')})):[],locallyEdited:!!m.locallyEdited};
-  const test=cleanTest(m.lastTest,connectionRevision);if(test)entry.lastTest=test;return entry;});
+  for(const field of ['lastTest','lastVisionTest']){const test=cleanTest(m[field],connectionRevision);if(test)entry[field]=test;}return entry;});
  if(!seen.has(p.model))invalid();
  return {...p,models,connectionRevision,ciphertext:typeof v.ciphertext==='string'?v.ciphertext:'',locallyEdited:!!v.locallyEdited};
 }
 function publicConfig(value){
  const p=normalizeConfig(value),{ciphertext,connectionRevision,locallyEdited,...out}=p;
- out.hasKey=!!ciphertext;out.models=p.models.map(m=>({id:m.id,label:m.label,...(m.lastTest?{lastTest:{...m.lastTest,connectionRevision:undefined,revision:p.revision}}:{})}));
+ out.hasKey=!!ciphertext;out.models=p.models.map(m=>({id:m.id,label:m.label,...Object.fromEntries(['lastTest','lastVisionTest'].filter(f=>m[f]).map(f=>[f,{...m[f],connectionRevision:undefined,revision:p.revision}]))}));
  const active=out.models.find(m=>m.id===p.model);if(active.lastTest)out.lastTest=active.lastTest;return out;
 }
 function migrateSettings(value,credentialGroups={}){
@@ -57,7 +57,7 @@ function updateConfig(old,message,ciphertext,keyChanged=false){
  let p=normalizeConfig(input);const changed=!old||keyChanged||connectionFields.some(k=>p[k]!==old[k]);
  if(changed)p.connectionRevision=crypto.randomUUID();
  const removed=old?.models.filter(m=>!p.models.some(n=>n.id===m.id))||[];
- for(const m of p.models){const previous=old?.models.find(n=>n.id===m.id);if(previous){m.origins=previous.origins;m.locallyEdited=previous.locallyEdited||m.label!==previous.label;if(!changed&&previous.lastTest)m.lastTest=previous.lastTest;}}
+ for(const m of p.models){const previous=old?.models.find(n=>n.id===m.id);if(previous){m.origins=previous.origins;m.locallyEdited=previous.locallyEdited||m.label!==previous.label;for(const f of ['lastTest','lastVisionTest'])if(!changed&&previous[f])m[f]=previous[f];}}
  p.locallyEdited=!!old?.locallyEdited||!!old&&(changed||p.label!==old.label||removed.length>0||p.models.some(m=>!old.models.some(n=>n.id===m.id)));
  return normalizeConfig(p);
 }

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "精彩摘录",
   "description": "收藏内容，下载视频、图集与 Hugging Face 模型文件；支持后台任务、并行下载和续传。",
-  "version": "1.36.7",
+  "version": "1.39.0",
   "minimum_chrome_version": "116",
   "permissions": [
     "tabs",
@@ -35,6 +35,7 @@
     "default_title": "精彩摘录 · 打开工作台"
   },
   "optional_host_permissions": [
+    "<all_urls>",
     "http://*/*",
     "https://*/*"
   ],
@@ -45,5 +46,19 @@
       },
       "description": "切换当前网页双语翻译 / 恢复原文"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "ocr-review.html",
+        "connection-window.html",
+        "translate.html",
+        "model-settings.html"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    }
+  ]
 }

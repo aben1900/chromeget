@@ -9,12 +9,14 @@ function build(){
   const changes=[];
   for(const section of read('使用说明.md').split(/^## /m).slice(1)){
     const [title,...body]=section.split(/\r?\n/),version=title.match(/\d+\.\d+\.\d+/)?.[0];if(!version)continue;
-    const summary=body.filter(l=>l.trim()&&!l.startsWith('|')).slice(0,2).join(' ').replace(/https?:\/\/\S+/g,'').replace(/[*`]/g,'').slice(0,500);
+    const firstParagraph=body.find(l=>l.trim()&&!l.startsWith('|'))||'';
+    const plain=firstParagraph.replace(/https?:\/\/\S+/g,'').replace(/[*`]/g,'').trim();
+    const summary=plain.length<=140?plain:plain.slice(0,136).replace(/[，,；;：:][^，,；;：:]*$/,'')+'…';
     changes.push({version,title:title.replace(/（.*?）/g,'').trim(),summary});
   }
   changes.sort((a,b)=>{const x=a.version.split('.').map(Number),y=b.version.split('.').map(Number);return y[0]-x[0]||y[1]-x[1]||y[2]-x[2];});
   const stamp=new Date(Math.max(...inputs.map(p=>fs.statSync(path.join(root,p)).mtimeMs))).toISOString();
-  const data={...catalog,version:manifest.version,nativeVersion,updatedAt:stamp,changes:changes.slice(0,10),revision:revision()};
+  const data={...catalog,version:manifest.version,nativeVersion,updatedAt:stamp,changes:changes.slice(0,5),revision:revision()};
   const template=read('showcase/template.html');if(!template.includes('__SHOWCASE_DATA__'))throw Error('Missing data placeholder');
   const html=template.replace('__SHOWCASE_DATA__',JSON.stringify(data).replace(/</g,'\\u003c'));
   const output=path.join(root,'功能介绍.html');

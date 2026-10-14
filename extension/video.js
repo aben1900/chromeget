@@ -70,8 +70,10 @@ function controls() {
   $('inspectGallery').setAttribute('aria-busy',String(activeOperation==='inspect-gallery'));
   for(const id of ['browserCookies','cookies','clearCookies'])$(id).disabled=busy || !platform;
   const galleryActive=galleryDraft && parsedUrl===$('url').value.trim();
-  $('galleryCard').hidden=!galleryActive;
-  $('captureGalleryImage').disabled=busy||!galleryActive;
+  if(!galleryActive&&galleryDraft){galleryDraft=null;galleryView?.destroy();galleryView=null;galleryChecks=[];gallerySelected.clear();}
+  $('galleryCard').hidden=false;
+  if(!galleryView)galleryView=GalleryCards.render($('galleryGrid'),[],{filterContainer:$('galleryTypeFilter'),onFilterChange:controls});
+  $('captureGalleryImage').disabled=busy;
   $('qualityCard').hidden=!!galleryActive;
   $('download').hidden=!!galleryActive;
   const visibleSelection=selectedGalleryIndexes();
@@ -83,6 +85,7 @@ function controls() {
   $('pageMediaCard').hidden=pageMediaUrl!==$('url').value.trim()||!$('pageVideos').childElementCount;
   for(const button of $('pageVideos').querySelectorAll('button'))button.disabled=busy;
   if(galleryActive){$('galleryCount').textContent='共 '+(galleryView?.getCount()??galleryDraft.images.length)+' 张 · 显示 '+visibleGalleryIndexes().length+' 张 · 已选 '+visibleSelection.length+' 张';$('confirmGallery').textContent='确认下载所选 '+visibleSelection.length+' 张图片';}
+  else {$('galleryCount').textContent='暂无图片，可直接截图或获取图集。';$('confirmGallery').textContent='确认下载所选图片';}
   const audio=$('mediaMode').value==='audio';$('audioOptions').hidden=!audio;$('videoQuality').hidden=audio;$('height').disabled=busy||audio||!parsedUrl;$('mediaMode').disabled=busy;$('audioFormat').disabled=busy;
   const duplicate=taskActive && runningSelection?.url===parsedUrl && runningSelection?.height===Number($('height').value)&&(runningSelection?.quality||0)===(Number($('height').selectedOptions[0]?.dataset.quality)||0)&&(runningSelection?.mediaMode||'video')===($('mediaMode').value||'video')&&(runningSelection?.audioFormat||'best')===($('audioFormat').value||'best');
   $('download').disabled=busy || duplicate || !parsedUrl || parsedUrl!==$('url').value.trim();
@@ -122,17 +125,18 @@ function showGallery(data,selection=null){
   galleryChecks.forEach((check,index)=>{check.checked=gallerySelected.has(index);});galleryView.setBusy(busy);
 }
 $('captureGalleryImage').addEventListener('click',async()=>{
-  if(busy||!galleryDraft)return;
+  if(busy)return;
   busy=true;activeOperation='capture';controls();$('error').textContent='';$('captureStatus').textContent='请在网页上拖动框选，再确认截图；Esc 取消。';$('captureStatus').dataset.state='working';
-  const original=galleryDraft,originalUrl=parsedUrl,selected=new Set(gallerySelected);
+  const snapshot=galleryDraft,originalUrl=$('url').value.trim(),original=parsedUrl===originalUrl?galleryDraft:null,selected=new Set(original?gallerySelected:[]);
   try{
-    const result=await GalleryCapture.capture((await chrome.windows.getCurrent()).id);
+    const result=await GalleryCapture.capture(chrome.windows.getCurrent().then(w=>w.id),{confirmLabel:'入待下载区'});
     if(result.cancelled){$('captureStatus').textContent='已取消截图';$('captureStatus').dataset.state='cancelled';return;}
-    if(galleryDraft!==original||$('url').value.trim()!==originalUrl)throw Error('当前图集已变化，请重新截图。');
-    const saved=await send('video-gallery-capture',{draftId:original.draftId,png:result.png});
-    if(galleryDraft!==original||$('url').value.trim()!==originalUrl)throw Error('当前图集已变化，请重新截图。');
+    if(galleryDraft!==snapshot||$('url').value.trim()!==originalUrl)throw Error('当前图集已变化，请重新截图。');
+    const saved=await send('video-gallery-capture',{draftId:original?.draftId,png:result.png,sourceUrl:result.sourceUrl,sourceTitle:result.sourceTitle});
+    if(galleryDraft!==snapshot||$('url').value.trim()!==originalUrl)throw Error('当前图集已变化，请重新截图。');
     const image={...saved.image,url:result.png,captured:true};
-    showGallery({...original,draftId:saved.draftId,images:[image,...original.images]},new Set([0,...[...selected].map(index=>index+1)]));
+    if(!original){$('url').value=result.sourceUrl;parsedUrl=result.sourceUrl;}
+    showGallery({...original,directory:saved.directory,draftId:saved.draftId,images:[image,...(original?.images||[])]},new Set([0,...[...selected].map(index=>index+1)]));
     $('galleryGrid').scrollTop=0;$('captureStatus').textContent='截图已放到第一张并选中，可预览或选择格式下载。';$('captureStatus').dataset.state='success';
   }catch(error){$('captureStatus').dataset.state='error';$('captureStatus').textContent='截图失败：'+(typeof Recovery!=='undefined'?Recovery.normalize(error).details:error.message);}
   finally{busy=false;activeOperation='';controls();}

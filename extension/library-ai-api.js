@@ -7,7 +7,7 @@
   if(!r.ok){const e=Error(r.code||r.error||'本地程序未完成操作，请运行“开始使用.cmd → 更新 / 修复”。');e.result=r;throw e;}
   return r;
  }
- Object.assign(messages,{QUOTA_EXCEEDED:'服务返回 API 额度不足。API Key 的额度与 ChatGPT / Codex 订阅余量独立，请检查该 Key 所属 API 账户的余额和用量限制。',REGION_UNSUPPORTED:'服务不支持当前请求所在地区。',PERMISSION_DENIED:'当前密钥没有访问权限，请检查项目和模型权限。',API_REQUEST_REJECTED:'接口拒绝请求参数，请检查协议、接口地址和模型 ID。',SERVICE_UNAVAILABLE:'模型服务暂时不可用，请稍后重试。',MODEL_NOT_TESTED:'请先测试该模型并保存，再设为默认。',DEFAULT_MODEL_REQUIRED:'请在模型管理中为一个已配置模型点击“设为默认”。',IMPORT_UNAVAILABLE:'未读取到可用配置。请检查 WorkBuddy 配置，或选择 CC-Switch 导入。',IMPORT_CHANGED:'来源或本地配置已变化，请重新读取再导入。',IMPORT_CONFLICT:'此项有本地修改，请明确勾选覆盖后再导入。',MODELS_UNAVAILABLE:'接口不支持读取模型清单。',CONFIG_LIMIT:'最多保存 200 份配置，每份最多 200 个模型。'});
+ Object.assign(messages,{AI_VISION_UPDATE_REQUIRED:'本地程序尚未更新图片能力测试功能，请运行“开始使用.cmd → 更新 / 修复”；当前 OCR 叉号表示尚无测试结果。',VISION_NOT_TESTED:'请在模型设置中勾选 OCR 并测试，或点击模型行内“测图”；OCR 通过后再提取文字。',IMAGE_NOT_RECOGNIZED:'图片识别测试失败：模型未读出测试图片中的字符，可能不支持图片输入或接口未传递图片。',QUOTA_EXCEEDED:'服务返回 API 额度不足。API Key 的额度与 ChatGPT / Codex 订阅余量独立，请检查该 Key 所属 API 账户的余额和用量限制。',REGION_UNSUPPORTED:'服务不支持当前请求所在地区。',PERMISSION_DENIED:'当前密钥没有访问权限，请检查项目和模型权限。',API_REQUEST_REJECTED:'接口拒绝请求参数，请检查协议、接口地址和模型 ID。',SERVICE_UNAVAILABLE:'模型服务暂时不可用，请稍后重试。',MODEL_NOT_TESTED:'请先测试该模型并保存，再设为默认。',DEFAULT_MODEL_REQUIRED:'请在模型管理中为一个已配置模型点击“设为默认”。',IMPORT_UNAVAILABLE:'未读取到可用配置。请检查 WorkBuddy 配置，或选择 CC-Switch 导入。',IMPORT_CHANGED:'来源或本地配置已变化，请重新读取再导入。',IMPORT_CONFLICT:'此项有本地修改，请明确勾选覆盖后再导入。',MODELS_UNAVAILABLE:'接口不支持读取模型清单。',CONFIG_LIMIT:'最多保存 200 份配置，每份最多 200 个模型。'});
  Object.assign(messages,{
   MICROSOFT_NETWORK_ERROR:'微软翻译连接失败，未收到服务响应。请检查浏览器网络或代理，或更换翻译路径。',
   TRANSLATION_NETWORK_ERROR:'翻译服务连接失败，请检查网络或更换翻译路径。',
@@ -22,7 +22,7 @@
   'siliconflow-free':{provider:'custom',label:'硅基流动 · 免费模型',baseUrl:'https://api.siliconflow.cn/v1',protocol:'chat-completions',auth:'bearer',model:'THUDM/GLM-4-9B-0414',models:[{id:'THUDM/GLM-4-9B-0414',label:'GLM-4-9B · 翻译 / 摘要'},{id:'Qwen/Qwen2.5-7B-Instruct',label:'Qwen2.5-7B · 翻译 / 摘要'}],tags:['免费预设'],keyUrl:'https://cloud.siliconflow.cn/account/ak',docsUrl:'https://docs.siliconflow.cn/docs/userguide/introduction'}
  };
  function presetFor(p){return Object.entries(freePresets).find(([,v])=>p?.baseUrl?.replace(/\/+$/,'')===v.baseUrl&&p.protocol===v.protocol&&(p.models?.length?p.models:[{id:p.model}]).every(m=>v.models.some(x=>x.id===m.id)))?.[0]||'';}
- const catalogGroups={balanced:'日常摘要 · 均衡',strong:'复杂分析 · 高能力参考',fast:'批量处理 · 轻量快速',special:'专用模型 · 非普通摘要',unknown:'未分类 · 请核对用途'};
+ const catalogGroups={balanced:'日常摘要 · 均衡',strong:'复杂分析 · 高能力参考',fast:'批量处理 · 轻量快速',special:'专用模型 · 非普通摘要',unknown:''};
  function catalogGroup(id){
   const n=id.toLowerCase();
   if(Object.values(freePresets).some(p=>p.models.some(m=>m.id.toLowerCase()===n)))return 'fast';
@@ -32,6 +32,6 @@
   if(/pro|astra|^o[134](?:-|$)|^gpt-[56]/.test(n)&&!/-sol/.test(n))return 'strong';
   return 'balanced';
  }
- function modelChoice(m){return '【'+catalogGroups[catalogGroup(m.id)]+'】'+(m.label===m.id?m.id:m.label+' · '+m.id)}
+ function modelChoice(m){return !m.label||m.label===m.id?m.id:m.label+' · '+m.id}
 window.LibraryAiApi={send,explain,modelChoice,catalogGroups,catalogGroup,freePresets,presetFor};
 })();

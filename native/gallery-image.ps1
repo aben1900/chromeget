@@ -62,7 +62,12 @@ function Resolve-GalleryCapture([string]$token,[string]$jobs) {
     return $path
 }
 function Save-GalleryCapture($message,[string]$jobs,[string]$directory) {
-    $draft=Read-GalleryDraft $message $jobs
+    if($message.draftId){$draft=Read-GalleryDraft $message $jobs}
+    else {
+        $source=Assert-GalleryWebUrl ([string]$message.sourceUrl)
+        $title=[string]$message.sourceTitle
+        $draft=[pscustomobject]@{title=$title.Substring(0,[Math]::Min(200,$title.Length));noteId='';url=$source;images=@();created=(Get-Date).ToUniversalTime().ToString('o');sourceKind='webpage';siteName=([Uri]$source).DnsSafeHost}
+    }
     if(@($draft.images|Where-Object{$_.url -clike 'capture:*'}).Count -ge 20){throw '每个图集最多添加 20 张截图。'}
     $png=$message.png
     if($png -isnot [string] -or $png.Length -gt 11184834 -or $png -cnotmatch '\Adata:image/png;base64,([A-Za-z0-9+/]*={0,2})\z'){throw '截图必须是 8 MB 以内的 PNG。'}

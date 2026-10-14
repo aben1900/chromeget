@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict');
+const {normalizeConfig,publicConfig,updateConfig}=require('../native/ai-config-model.cjs');
+const p=normalizeConfig({profileId:'openai',provider:'openai',protocol:'chat-completions',baseUrl:'https://example.com/v1',auth:'bearer',model:'vision',label:'Test',revision:'r1',connectionRevision:'c1',ciphertext:'protected',models:[{id:'vision',lastVisionTest:{ok:true,code:'OK',connectionRevision:'c1',at:'2026-10-13'}}]});
+assert.equal(publicConfig(p).models[0].lastVisionTest?.ok,true,'image capability result must survive public serialization');
+const renamed=updateConfig(p,{label:'Renamed'},p.ciphertext);
+assert.equal(publicConfig(renamed).models[0].lastVisionTest.ok,true);
+const changed=updateConfig(p,{baseUrl:'https://other.example/v1'},p.ciphertext);
+assert.equal(publicConfig(changed).models[0].lastVisionTest,undefined);
+assert.equal(publicConfig(p).models[0].lastTest,undefined,'vision pass must not imply text test');
+console.log('PASS vision capability persistence, revision refresh and connection invalidation');
+const {applyCandidate}=require('../native/ai-model-import.cjs');
+const candidate={...p,source:'workbuddy',sourceId:'fixture',fingerprint:'new-metadata',credentialFingerprint:'same',model:'vision',tags:[]};
+p.models[0].origins=[{source:'workbuddy',sourceId:'fixture',fingerprint:'old',credentialFingerprint:'same'}];
+const settings={profiles:{openai:p},imports:{ignored:[]}};
+applyCandidate(settings,candidate,'protected','openai',['openai']);
+assert.equal(settings.profiles.openai.models[0].lastVisionTest?.ok,true,'metadata import on same connection must preserve vision result');
+console.log('PASS import refresh preserves independent image test');

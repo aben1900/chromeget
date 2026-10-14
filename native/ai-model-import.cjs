@@ -74,9 +74,9 @@ function applyCandidate(settings,c,ciphertext,targetId,matchingIds){
  if(!target){if(Object.keys(settings.profiles).length>=200)throw Error('CONFIG_LIMIT');target={...c,profileId:crypto.randomUUID(),model:c.model,models:[],tags:c.tags||[],label:c.tags?.includes('SMEC')?'SMEC 网关':c.label};}
  const previous=target.models.find(m=>m.id===c.model);
  const connectionSame=target.ciphertext&&matchingIds.includes(target.profileId)&&['provider','baseUrl','protocol','auth'].every(k=>target[k]===c[k]);
- if(!connectionSame){target.connectionRevision=crypto.randomUUID();for(const m of target.models)delete m.lastTest;}
+ if(!connectionSame){target.connectionRevision=crypto.randomUUID();for(const m of target.models){delete m.lastTest;delete m.lastVisionTest;}}
  if(original&&original.id!==c.model&&target===old){if(remainingOrigins.length)original.origins=remainingOrigins;else target.models=target.models.filter(m=>m.id!==original.id);}
- const entry={id:c.model,label:previous?.locallyEdited?previous.label:c.label,origins:[...(previous?.origins||[]).filter(o=>!(o.source===c.source&&o.sourceId===c.sourceId)),origin],locallyEdited:false,...(connectionSame&&previous?.lastTest?{lastTest:previous.lastTest}:{})};
+ const entry={id:c.model,label:previous?.locallyEdited?previous.label:c.label,origins:[...(previous?.origins||[]).filter(o=>!(o.source===c.source&&o.sourceId===c.sourceId)),origin],locallyEdited:false,...Object.fromEntries(['lastTest','lastVisionTest'].filter(f=>connectionSame&&previous?.[f]).map(f=>[f,previous[f]]))};
  target.models=target.models.filter(m=>m.id!==c.model);target.models.push(entry);
  for(const field of ['provider','protocol','baseUrl','auth'])target[field]=c[field];
  if(!target.models.some(m=>m.id===target.model))target.model=c.model;

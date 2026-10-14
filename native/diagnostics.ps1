@@ -39,6 +39,13 @@ function Get-SetupDiagnostics {
     finally{if($probe -and [IO.File]::Exists($probe)){[IO.File]::Delete($probe)}}
     $bin=[IO.Path]::Combine($HostRoot,'bin');$missing=@('node.exe','yt-dlp.exe','aria2c.exe','ffmpeg.exe','ffprobe.exe')|Where-Object{-not(Test-Path -LiteralPath ([IO.Path]::Combine($bin,$_)) -PathType Leaf)}
     $checks.Add(@{id='engines';state=$(if(@($missing).Count){'fail'}else{'pass'});message=$(if(@($missing).Count){'引擎需要修复：'+($missing -join '、')}else{'引擎文件齐全'})})
+    $engineVersions=@{}
+    foreach($engineId in @('node','yt-dlp','aria2','ffmpeg')){
+        try{
+            $receipt=Get-Content -LiteralPath (Join-Path $bin ($engineId+'-installed.json')) -Raw -Encoding UTF8|ConvertFrom-Json
+            if($receipt.id -eq $engineId -and [string]$receipt.version -match '^[0-9]+(?:\.[0-9]+){1,3}$'){$engineVersions[$engineId]=[string]$receipt.version}
+        }catch{}
+    }
     $integrity='pending';$integrityMessage='可选：尚未核对下载组件文件，日常使用不必执行'
     if($FullIntegrity){
         try{
@@ -70,5 +77,5 @@ function Get-SetupDiagnostics {
         $match=[regex]::Match($hostSource,"version='([0-9]+\.[0-9]+\.[0-9]+)'")
         if($match.Success){$hostVersion=$match.Groups[1].Value}
     } catch {}
-    return @{ok=$true;checks=@($checks.ToArray());hostVersion=$hostVersion;capabilities=@('setup-diagnostics','structured-errors')}
+    return @{ok=$true;checks=@($checks.ToArray());hostVersion=$hostVersion;engineVersions=$engineVersions;capabilities=@('setup-diagnostics','structured-errors')}
 }

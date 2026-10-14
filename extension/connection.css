@@ -1,0 +1,74 @@
+#connectionDialog{width:min(1120px,calc(100vw - 28px));max-height:calc(100dvh - 28px);padding:28px 32px;border:1px solid #e2e7ed;border-radius:16px;background:#fff;color:#263449;font-size:14px;box-shadow:0 18px 50px #18294226}
+#connectionDialog .home-dialog-heading{align-items:flex-start;margin-bottom:14px}
+#connectionDialog .home-dialog-heading h2{font-size:25px;letter-spacing:-.3px;line-height:1.25}
+#connectionDialog .connection-intro{margin:8px 0 0;font-size:15px;color:#697789;line-height:1.55}
+#connectionDialog .connection-header-actions button,#connectionDialog #checkConnection,#connectionDialog #copyConnectionId{display:grid;place-items:center;width:32px;height:32px;min-width:32px;min-height:32px;padding:0;border:0;border-radius:8px;background:transparent;color:#546477;cursor:pointer}
+#connectionDialog .connection-header-actions button:hover,#connectionDialog #checkConnection:hover,#connectionDialog #copyConnectionId:hover{background:#eef2f6;box-shadow:inset 0 2px 4px #1d34551e}
+#connectionDialog #connectionPanel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin:0;padding:0;max-height:none;border:0;background:transparent;overflow:visible;font-size:14px}
+.connection-step{min-width:0;padding:20px;border:1px solid #e1e7ef;border-radius:14px;background:#fff}
+.connection-step:last-child{grid-column:1/-1}
+.connection-step-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.connection-step-heading>div{display:flex;align-items:center;gap:10px;min-width:0}
+.connection-step-number{flex:none;padding:4px 8px;border-radius:6px;background:#eaf1fc;color:#426db4;font-size:11px;font-weight:700;white-space:nowrap}
+.connection-step-heading h3{margin:0;font-size:18px;font-weight:650;line-height:1.4}
+#connectionPanel .connection-step-hint{margin:9px 0 14px;font-size:14px;color:#596b80;line-height:1.6}
+.connection-result{display:flex;align-items:center;gap:11px;padding:9px 12px;margin-bottom:9px;border-radius:10px;background:#f6f8fb}
+#connectionPanel[data-state=ready] .connection-result{background:#f1f8f0}
+#connectionPanel[data-state=unavailable] .connection-result{background:#fff2ed}
+.connection-indicator{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border-radius:9px;background:#f5eddb;color:#8a783c}
+.connection-indicator svg{width:22px;height:22px}
+#connectionPanel[data-state=ready] .connection-indicator{background:#dcefd9;color:#497c48}
+#connectionPanel[data-state=unavailable] .connection-indicator{background:#ffe3d9;color:#aa4a39}
+#connectionPanel #connectionConclusion{margin:0;font-size:18px;font-weight:650;line-height:1.35;color:#273448}
+#connectionPanel #connectionExplanation{margin:3px 0 0;font-size:12px;line-height:1.5;color:#687789}
+#connectionExplanation:empty,#connectionActionStatus:empty,#copyHint:empty{display:none}
+.connection-capabilities{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.connection-download-status{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:0 0 12px}
+.connection-download-status .connection-capability{min-height:82px}
+.connection-download-status small{font-size:12px;line-height:1.4;color:#647387;overflow-wrap:anywhere}
+.connection-capability{display:flex;flex-direction:column;justify-content:space-between;gap:6px;min-width:0;min-height:64px;padding:10px 12px;background:#fbfcff;border:1px solid #e2e8ef;border-left:3px solid #c1cad8;border-radius:8px}
+.connection-capability>span{font-size:13px;color:#667487;white-space:nowrap}
+.connection-capability>strong{font-size:15px;font-weight:650;white-space:nowrap;color:#8c793c}
+.connection-capability[data-state=pass]{background:#f9fcf9;border-left-color:#9fcca3}
+.connection-capability[data-state=fail]{background:#fff9f7;border-left-color:#e3a08f}
+.connection-capability[data-state=pass]>strong{color:#497c48}
+.connection-capability[data-state=fail]>strong{color:#aa4a39}
+.connection-pending{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:9px 12px;background:#fff9ed;border:1px solid #efdfbd;border-radius:8px;color:#886630}
+#connectionPanel>section>details{margin:8px 0 0;border:1px solid #e4eaf0;border-radius:8px;padding:0;background:#fff}
+#connectionPanel>section>details>summary{padding:10px 12px;font-size:12px;font-weight:500;color:#536783;cursor:pointer}
+#connectionPanel>section>details[open]>summary{border-bottom:1px solid #edf0f4}
+#connectionPanel #connectionChecks{margin:4px 12px;padding:0;list-style:none}
+#connectionChecks>li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:6px 0;border-bottom:1px solid #f0f2f5;font-size:12px;font-weight:400;color:#566173}
+#connectionChecks>li>span:last-of-type{color:#497c48}
+#connectionChecks>li[data-state=pending]>span:last-of-type{color:#8993a1}
+#connectionChecks>li[data-state=fail]>span:last-of-type{color:#aa4a39}
+#connectionChecks>li>small{grid-column:1/-1;color:#a55b44}
+.connection-details{display:grid;grid-template-columns:80px minmax(0,1fr);gap:6px 10px;margin:0;padding:12px;border-top:1px solid #edf0f4;font-size:12px;line-height:1.5}
+.connection-details dt{color:#7b8695}
+.connection-details dd{margin:0;overflow-wrap:anywhere;color:#49576a}
+#connectionPanel #connectionSavePath,#connectionPanel #connectionHostPath{font:11px/1.5 ui-monospace,Consolas,monospace;user-select:text}
+.connection-versions{padding:16px;border:1px solid #e2e8ef;border-radius:10px;background:#f8fafc}
+.connection-version-grid{display:grid;grid-template-columns:repeat(2,max-content minmax(0,1fr));gap:12px 9px;align-items:center}
+.connection-version-grid>span{width:max-content;max-width:100%;padding:4px 7px;border-radius:6px;background:#eaf0f8;color:#4c6280;font-size:13px;line-height:1.3}
+.connection-version-grid>strong{color:#233b5b;font-size:14px;font-weight:700;white-space:nowrap}
+.connection-versions #versionRelationship{margin:12px 0 0;font-size:12px;font-weight:600;color:#567089}
+.connection-versions small{display:block;margin-top:7px;font-size:13px;color:#657789;line-height:1.5}
+.connection-step-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px}
+#connectionPanel #fullConnectionCheck{margin:0;padding:8px 14px;border:1px solid #bfd1e8;border-radius:7px;background:#eff5fc;color:#355f9b;font-size:12px;font-weight:600}
+#connectionPanel #fullConnectionCheck:hover:not(:disabled){background:#e1edfa;box-shadow:inset 0 2px 4px #2e51731a}
+#connectionPanel #connectionActionStatus{margin:0;font-size:12px;color:#657587}
+#connectionPanel #connectionRepair{margin:0 0 12px;padding:8px 14px;border:1px solid #b7c8e4;border-radius:7px;background:#edf3fd;color:#355f9b;font-size:12px;font-weight:600}
+#connectionPanel .connection-step:last-child #connectionNextStep{margin:10px 0 12px;padding:11px 14px;border-left:4px solid #9cb5d9;border-radius:7px;background:#f3f7fc}
+#connectionPanel[data-state=ready] .connection-step:last-child #connectionNextStep{border-left-color:#9ac99f;background:#f1f8f0}
+.connection-guide{padding:12px 14px 4px}
+.connection-guide h4{margin:0;font-size:12px;font-weight:650}
+#connectionPanel .connection-guide p{margin:5px 0 8px;font-size:12px;color:#737e8d;line-height:1.6}
+#connectionPanel .connection-guide label{margin:8px 0 4px;font-size:11px}
+#connectionPanel .connection-id{margin:0;gap:6px}
+#connectionPanel .connection-id input{font-size:11px;padding:7px;min-width:0}
+#connectionPanel #openExtensions{margin:4px 14px 12px;font-size:12px}
+@media(max-width:900px){#connectionDialog #connectionPanel{grid-template-columns:minmax(0,1fr)}.connection-step:last-child{grid-column:auto}#connectionDialog{padding:20px 24px}}
+@media(max-width:650px){#connectionDialog{padding:18px 20px}.connection-version-grid{grid-template-columns:repeat(2,max-content minmax(0,1fr))}}
+@media(max-width:500px){.connection-version-grid{grid-template-columns:minmax(0,1fr) auto}.connection-version-grid>span{width:auto;overflow-wrap:anywhere}.connection-version-grid>strong{white-space:normal}.connection-step-heading>div{flex-wrap:wrap}.connection-capabilities{grid-template-columns:repeat(2,minmax(0,1fr))}.connection-capabilities .connection-capability:last-child{grid-column:1/-1}}
+@media(max-width:390px){.connection-download-status{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:360px){#connectionDialog{padding:15px}.connection-step{padding:14px}.connection-step-heading h3{font-size:14px}.connection-version-grid{gap:8px 5px}.connection-capability{padding:8px}}

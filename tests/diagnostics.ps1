@@ -31,6 +31,13 @@ foreach($id in @('node','yt-dlp','aria2','ffmpeg')){
 @{engines=$engines}|ConvertTo-Json -Depth 6|Set-Content (Join-Path $fixture 'engines.lock.json') -Encoding UTF8
 $r=Get-SetupDiagnostics -HostRoot $fixture -RegistrationPaths @() -FullIntegrity
 if(-not($r.checks|Where-Object{$_.id -eq 'integrity' -and $_.state -eq 'pass'})){throw 'Intact fixture rejected'}
+$nodeReceipt=Join-Path $bin 'node-installed.json'
+$record=Get-Content -LiteralPath $nodeReceipt -Raw -Encoding UTF8|ConvertFrom-Json
+$record|Add-Member -NotePropertyName id -NotePropertyValue 'node'
+$record|Add-Member -NotePropertyName version -NotePropertyValue '24.14.0'
+$record|ConvertTo-Json -Depth 5|Set-Content -LiteralPath $nodeReceipt -Encoding UTF8
+$r=Get-SetupDiagnostics -HostRoot $fixture -RegistrationPaths @()
+if($r.engineVersions.node -ne '24.14.0'){throw 'Installed engine version missing'}
 [IO.File]::AppendAllText((Join-Path $bin 'node.exe'),'tampered')
 $r=Get-SetupDiagnostics -HostRoot $fixture -RegistrationPaths @() -FullIntegrity
 if(-not($r.checks|Where-Object{$_.id -eq 'integrity' -and $_.state -eq 'fail'})){throw 'Tampered engine accepted'}

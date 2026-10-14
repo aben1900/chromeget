@@ -28,6 +28,14 @@ $meta=Save-AiSettings $PSScriptRoot @{profileId=$id;expectedRevision=$back.profi
 if(-not $meta.profiles.$id.lastTest.ok){throw 'metadata invalidates test'}
 $key=Save-AiSettings $PSScriptRoot @{profileId=$id;expectedRevision=$meta.profiles.$id.revision;key='sk-fixture-new'}
 if($key.profiles.$id.lastTest){throw 'new key keeps old test'}
+try{Resolve-AiProfile $PSScriptRoot $id 'b' -Vision;throw 'untested vision accepted'}catch{if($_.Exception.Message -ne 'VISION_NOT_TESTED'){throw}}
+try{Resolve-AiProfile $PSScriptRoot $id 'missing' -VisionTest;throw 'missing vision accepted'}catch{if($_.Exception.Message -ne 'CONFIG_CHANGED'){throw}}
+$vision=Resolve-AiProfile $PSScriptRoot $id 'b' -VisionTest
+Save-AiTestResult $PSScriptRoot $vision @{ok=$true;code='OK';at='fixture'} -Vision
+$resolved=Resolve-AiProfile $PSScriptRoot $id 'b' -Vision
+if($resolved.model -cne 'b'){throw 'vision selection lost'}
+$visionPublic=Get-AiPublicSettings $PSScriptRoot
+if($visionPublic.profiles.$id.model -cne 'a' -or -not $visionPublic.profiles.$id.models[1].lastVisionTest.ok -or $visionPublic.profiles.$id.models[1].lastTest){throw 'vision changed default or text result'}
 if(($key|ConvertTo-Json -Depth 20) -match 'ciphertext|connectionRevision|credentialFingerprint|sk-fixture'){throw 'private fields leaked'}
 Write-Output 'PASS multi-model native save, switch, per-model status, concurrency and privacy'
 `);const r=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(root,'test.ps1')],{encoding:'utf8',windowsHide:true});process.stdout.write(r.stdout);process.stderr.write(r.stderr);assert.equal(r.status,0);

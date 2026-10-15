@@ -161,6 +161,9 @@ function Invoke-VideoActionCore($message) {
     }
     $jobs = Join-Path $PSScriptRoot 'video-jobs'
     [IO.Directory]::CreateDirectory($jobs) | Out-Null
+    if($message.action -eq 'video-companion-stage-cover'){return Stage-VideoCompanionCover ([string]$message.draftId) ([string]$message.imageId) $jobs}
+    if($message.action -eq 'video-companion-choose'){return Show-VideoCompanionFilePicker ([string]$message.draftId) $jobs}
+    if($message.action -eq 'video-companion-capture'){return Add-VideoCompanionCapture ([string]$message.draftId) ([string]$message.png) ([string]$message.sourceUrl) $jobs}
     if ($message.action -eq 'video-gallery-preview') { return Save-WebGalleryPreview $message $jobs $(if($settings.autoClassify){Join-Path $settings.directory '图片'}else{$settings.directory}) }
     if ($message.action -eq 'video-gallery-capture') { return Save-GalleryCapture $message $jobs $(if($settings.autoClassify){Join-Path $settings.directory '图片'}else{$settings.directory}) }
     if ($message.action -eq 'video-gallery-image-info') { return Get-GalleryImageInfo $message $jobs }

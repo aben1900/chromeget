@@ -124,7 +124,7 @@ function Resolve-GallerySystemProxy([string]$url,$settings) {
     if(-not [Uri]::TryCreate($server,[UriKind]::Absolute,[ref]$proxy) -or $proxy.Scheme -notin @('http','https') -or $proxy.UserInfo){throw '系统代理配置不受支持。'}
     return $proxy.AbsoluteUri
 }
-function Invoke-GalleryNetwork([string]$url,[string]$sourceKind,[string]$method,[string]$destination='') {
+function Invoke-GalleryNetwork([string]$url,[string]$sourceKind,[string]$method,[string]$destination='',[int]$maxBytes=33554432) {
     $proxySettings=Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
     $proxyUrl=Resolve-GallerySystemProxy $url $proxySettings
     $process=New-Object Diagnostics.Process
@@ -135,7 +135,7 @@ function Invoke-GalleryNetwork([string]$url,[string]$sourceKind,[string]$method,
     $process.StartInfo.StandardOutputEncoding=New-Object Text.UTF8Encoding($false)
     try{
         $null=$process.Start();$stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync()
-        $payload=[Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject @{url=$url;sourceKind=$sourceKind;method=$method;destination=$destination;proxyUrl=$proxyUrl} -Compress))
+        $payload=[Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject @{url=$url;sourceKind=$sourceKind;method=$method;destination=$destination;proxyUrl=$proxyUrl;maxBytes=$maxBytes} -Compress))
         $process.StandardInput.BaseStream.Write($payload,0,$payload.Length);$process.StandardInput.Close()
         $timeout=if($method -eq 'HEAD'){12000}else{65000}
         if(-not $process.WaitForExit($timeout)){try{$process.Kill()}catch{};throw '图片网络请求超时。'}

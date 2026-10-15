@@ -294,7 +294,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     })().then(reply,e=>reply({ok:false,error:e.message}));return true;
   }
 
-  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-gallery-image-info','video-gallery-capture','video-page-media','video-image-preview','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','download-page-links','hover-download-set'].includes(message.action)) {
+  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-gallery-image-info','video-gallery-capture','video-page-media','video-image-preview','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','download-page-links','hover-download-set','video-companion-stage-cover','video-companion-choose','video-companion-capture','video-companion-retry'].includes(message.action)) {
     (async()=>{
       if(message.action==='hover-download-set')return setHoverDownload(message.enabled===true,message.windowId);
       if(message.action==='download-page-links')return downloadPageLinks(message.windowId);
@@ -303,6 +303,15 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if (!host.capabilities?.includes('video-multisite')) throw Error('请运行“开始使用.cmd → 更新 / 修复”更新多平台视频功能。');
       if(message.site==='toutiao' && !host.capabilities?.includes('video-toutiao')) throw Error('请运行“开始使用.cmd → 更新 / 修复”更新头条视频下载功能。');
       if (!host.capabilities?.includes('gallery')) throw Error('请运行“开始使用.cmd → 更新 / 修复”更新图集下载功能。');
+      if(message.action.startsWith('video-companion-')){
+        if(sender.url!==chrome.runtime.getURL('video.html')&&!sender.url?.startsWith(chrome.runtime.getURL('video.html?')))throw Error('配套资料只能从视频下载页操作。');
+        if(!host.capabilities?.includes('video-companion-v1'))throw Error('本地程序需要更新 / 修复后才能使用视频配套图文。');
+        if(!/^[a-f0-9]{32}$/.test(message.draftId||message.id||''))throw Error('配套资料编号无效。');
+        if(message.action==='video-companion-capture')return native({action:message.action,draftId:message.draftId,png:message.png,sourceUrl:message.sourceUrl});
+        if(message.action==='video-companion-choose')return native({action:message.action,draftId:message.draftId});
+        if(message.action==='video-companion-stage-cover')return native({action:message.action,draftId:message.draftId,imageId:message.imageId});
+        if(message.action==='video-companion-retry')return native({action:message.action,id:message.id});
+      }
       if(message.site==='youtube' && !host.capabilities?.includes('video-youtube')) throw Error('请运行开始使用.cmd → 更新 / 修复 更新 YouTube 下载功能。');
       if(['video-jobs','video-resume','video-delete'].includes(message.action) && !host.capabilities?.includes('video-tasks')) throw Error('本机下载程序版本较旧。请运行项目中的“开始使用.cmd → 更新 / 修复”，然后在 chrome://extensions 重新加载扩展；只刷新扩展无法更新本地程序。');
       if(['video-start','video-resume','video-delete'].includes(message.action) && !host.capabilities?.includes('task-reuse')) throw Error('请运行开始使用.cmd → 更新 / 修复 更新任务复用和删除功能。');
@@ -340,7 +349,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(message.transferMode==='extreme'&&!host.capabilities?.includes('range64'))throw Error('请更新本地程序以使用原生 64 路下载。');
       if(message.quality&&!host.capabilities?.includes('video-quality-v1'))throw Error('请在管理中心更新 / 修复本地程序，启用按画质档位下载。');
       if(message.mediaMode==='audio'&&!host.capabilities?.includes('audio-download'))throw Error('请更新本地程序以使用仅音频下载。');
-      const result=await native({action:message.action,url:message.url,height:message.height,quality:message.quality,mediaMode:message.mediaMode,audioFormat:message.audioFormat,id:message.id,directory:message.directory,site:message.site,cookieText,draftId:message.draftId,confirmed:message.confirmed,selectedIndexes:message.selectedIndexes,index:message.index,imageFormat:message.imageFormat,title:message.title,statusFilter:message.statusFilter,offset:message.offset,transferMode:message.transferMode,genericFile:message.genericFile,filename:message.filename,checksum:message.checksum,genericMedia:message.genericMedia,referer:message.referer,maxActive:message.maxActive,autoClassify:message.autoClassify,adaptive:message.adaptive});
+      const result=await native({action:message.action,url:message.url,height:message.height,quality:message.quality,mediaMode:message.mediaMode,audioFormat:message.audioFormat,id:message.id,directory:message.directory,site:message.site,cookieText,draftId:message.draftId,confirmed:message.confirmed,selectedIndexes:message.selectedIndexes,index:message.index,imageFormat:message.imageFormat,title:message.title,statusFilter:message.statusFilter,offset:message.offset,transferMode:message.transferMode,genericFile:message.genericFile,filename:message.filename,checksum:message.checksum,genericMedia:message.genericMedia,referer:message.referer,maxActive:message.maxActive,autoClassify:message.autoClassify,adaptive:message.adaptive,companionDraftId:message.companionDraftId,companionTitle:message.companionTitle,companionText:message.companionText,companionImageIds:message.companionImageIds});
       if(['video-start','video-gallery-start','video-file-start','video-resume'].includes(message.action)) await chrome.storage.local.set({lastVideoJob:result.id,lastVideoSelection:{url:message.url,height:message.height,quality:message.quality,mediaMode:message.mediaMode,audioFormat:message.audioFormat}});
       return {...result,hostVersion:host.version,hostPath:host.hostPath};
     })().then(reply,error=>reply(Recovery.response(error)));

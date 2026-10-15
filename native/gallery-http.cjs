@@ -42,6 +42,7 @@ function proxyAgent(proxyValue,url,signal){
 }
 async function fetchImage(input,deps={}){
  if(!['GET','HEAD'].includes(input.method))throw new Error('图片请求方法无效。');
+ const limit=Number.isSafeInteger(input.maxBytes)&&input.maxBytes>0&&input.maxBytes<=LIMIT?input.maxBytes:LIMIT;
  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),input.method==='HEAD'?8000:60000);const seen=new Set();let file=null;let created=false;
  try{
   let url=validateUrl(input.url,input.sourceKind);
@@ -68,10 +69,10 @@ async function fetchImage(input,deps={}){
    if(status<200||status>=300){response.destroy();throw new Error('图片服务器未返回成功响应。')}
    const length=Number(response.headers['content-length']);const bytes=Number.isSafeInteger(length)&&length>=0?length:null;const info={ok:true,format:format(response.headers,url),bytes};
    if(input.method==='HEAD'){response.destroy();return info}
-   if(bytes>LIMIT){response.destroy();throw new Error('单张图片超过 32 MB 限制。')}
+   if(bytes>limit){response.destroy();throw new Error('单张图片超过大小限制。')}
    try{file=await fs.promises.open(input.destination,'wx');created=true}catch(error){response.destroy();throw error}
    let count=0;
-   try{for await(const chunk of response){count+=chunk.length;if(count>LIMIT)throw new Error('单张图片超过 32 MB 限制。');await file.write(chunk)}}finally{response.destroy()}
+   try{for await(const chunk of response){count+=chunk.length;if(count>limit)throw new Error('单张图片超过大小限制。');await file.write(chunk)}}finally{response.destroy()}
    await file.close();file=null;return {...info,bytes:count};
   }
  }catch(error){if(file)await file.close().catch(()=>{});if(created)await fs.promises.unlink(input.destination).catch(()=>{});throw error}

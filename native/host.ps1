@@ -28,7 +28,7 @@ try {
     $length = [BitConverter]::ToUInt32((Read-Exact 4), 0)
     if ($length -lt 2 -or $length -gt 12582912) { throw '单条消息不能超过 12 MB。' }
     $message = $utf8.GetString((Read-Exact ([int]$length))) | ConvertFrom-Json
-    if ($length -gt 1048576 -and $message.action -cnotin @('video-gallery-capture','capture-ocr','capture-save','ai-capture-ocr')) { throw '单条记录不能超过 1 MB。' }
+    if ($length -gt 1048576 -and $message.action -cnotin @('video-gallery-capture','video-companion-capture','capture-ocr','capture-save','ai-capture-ocr')) { throw '单条记录不能超过 1 MB。' }
     if ($message.action -eq 'diagnostics') {
         . (Join-Path $PSScriptRoot 'diagnostics.ps1')
         $response=Get-SetupDiagnostics -HostRoot $PSScriptRoot -ExpectedExtensionId $message.extensionId -FullIntegrity:($message.fullIntegrity -eq $true) -ConnectedHost
@@ -60,7 +60,7 @@ try {
         . (Join-Path $PSScriptRoot 'video.ps1')
         $response = Invoke-VideoAction $message
     } elseif ($message.action -eq 'status') {
-        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.39.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('ai-vision-test-v1','capture-ai-ocr-v1','capture-save-v1','capture-ocr-v1','video-quality-v1','free-translation-native-v1','ai-translation-v1','library-delete-v1','bookmark-metadata-v1','ai-config-models-v2','ai-models-v1','ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','gallery-image-options-v1','gallery-image-types-v1','webpage-gallery-v1','gallery-capture-v1','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.39.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('video-companion-v1','ai-vision-test-v1','capture-ai-ocr-v1','capture-save-v1','capture-ocr-v1','video-quality-v1','free-translation-native-v1','ai-translation-v1','library-delete-v1','bookmark-metadata-v1','ai-config-models-v2','ai-models-v1','ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','gallery-image-options-v1','gallery-image-types-v1','webpage-gallery-v1','gallery-capture-v1','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
         try{$installedConfig=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'config.json') -Raw -Encoding UTF8|ConvertFrom-Json;$response.extensionRoot=$installedConfig.extensionRoot;if($installedConfig.extensionRoot){$response.diskExtensionVersion=(Get-Content -LiteralPath (Join-Path $installedConfig.extensionRoot 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json).version}}catch{}
     } elseif ($message.action -eq 'choose-json') {
         Add-Type -AssemblyName System.Windows.Forms

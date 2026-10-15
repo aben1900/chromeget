@@ -23,7 +23,8 @@ function call(message) {
 }
 (async()=>{
   const status=await call({action:'status'});
-  if(status.version!=='1.20.0'||status.storageFormat!=='json')throw Error('Installed host must be JSON-only 1.20.0');
+  const installedVersion=String(status.version||'').split('.').map(Number);
+  if(status.storageFormat!=='json'||installedVersion.length!==3||installedVersion.some(n=>!Number.isInteger(n))||installedVersion[0]!==1||installedVersion[1]<20)throw Error('Installed host must be JSON-only v1.20.0 or newer');
   if(!status.path.endsWith('.json'))throw Error('Save path must be JSON');
   const video=await call({action:'video-status'});
   if(!video.directory)throw Error('Video backend unavailable');

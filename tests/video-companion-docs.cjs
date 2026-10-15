@@ -1,0 +1,10 @@
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const features=fs.readFileSync('showcase/features.json','utf8'),guide=fs.readFileSync('使用说明.md','utf8');
+assert.match(features,/视频配套图文/);
+assert.match(features,/悬浮下载按钮/);
+assert.match(guide,/只自动带入当前视频/);
+assert.match(guide,/配套图片.*失败/);
+assert.match(guide,/仅视频模式/);
+assert.equal(JSON.parse(fs.readFileSync('extension/manifest.json')).version,'1.40.0');
+assert.match(fs.readFileSync('native/host.ps1','utf8'),/version='1\.40\.0'/);
+console.log('PASS video companion documentation and paired 1.40.0 versions');

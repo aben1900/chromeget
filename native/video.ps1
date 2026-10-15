@@ -1,4 +1,5 @@
 ﻿. (Join-Path $PSScriptRoot 'gallery-image.ps1')
+if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'video-companion.ps1')){. (Join-Path $PSScriptRoot 'video-companion.ps1')}
 function Get-VideoParseError([string]$site,[string]$engineError) {
     $reason=$engineError.Trim()
     if(-not $reason){$reason='下载引擎未返回具体原因，请重试。'}
@@ -352,7 +353,12 @@ function Invoke-VideoActionCore($message) {
             }
             $notice=''
             if($site -eq 'bilibili' -and $qualities.Count -and -not @($qualities|Where-Object{$_.quality -ge 112}).Count){$notice='未返回高码率档位；大会员请重新获取浏览器登录态后重试。'}
-            return @{ok=$true; title=$info.title; heights=$heights; qualities=$qualities; qualityNotice=$notice; directory=$settings.directory}
+            $companion=$null
+            if(Get-Command New-VideoCompanionDraft -ErrorAction SilentlyContinue){
+                $sourcePage=if($message.referer){Assert-MediaPageUrl ([string]$message.referer)}else{$url}
+                $companion=New-VideoCompanionDraft $info $url $sourcePage $jobs $site
+            }
+            return @{ok=$true; title=$info.title; heights=$heights; qualities=$qualities; qualityNotice=$notice; directory=$settings.directory;companion=$companion}
         } finally { foreach ($path in @($out,$err)) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } } }
     }
     if ($message.action -ne 'video-start') { throw '不支持的视频操作。' }

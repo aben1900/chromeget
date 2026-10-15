@@ -294,7 +294,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     })().then(reply,e=>reply({ok:false,error:e.message}));return true;
   }
 
-  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-gallery-image-info','video-gallery-capture','video-page-media','video-image-preview','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','download-page-links','hover-download-set','video-companion-stage-cover','video-companion-choose','video-companion-capture','video-companion-retry'].includes(message.action)) {
+  if (sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('video.html') || sender.url?.startsWith(chrome.runtime.getURL('video.html?')) || sender.url===chrome.runtime.getURL('download.html')) && ['video-status','video-info','video-start','video-job','video-folder','video-set-folder','video-cookies','video-clear-cookies','video-open-recent','video-browser-cookies','video-gallery-start','video-gallery-image-info','video-gallery-capture','video-jobs','video-resume','video-delete','video-pause','video-open-task','video-hf-info','video-file-start','video-file-probe','video-transfer-settings','download-page-links','hover-download-set','video-companion-stage-cover','video-companion-choose','video-companion-capture','video-companion-remove','video-companion-retry','video-page-media','video-image-preview'].includes(message.action)) {
     (async()=>{
       if(message.action==='hover-download-set')return setHoverDownload(message.enabled===true,message.windowId);
       if(message.action==='download-page-links')return downloadPageLinks(message.windowId);
@@ -310,6 +310,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         if(message.action==='video-companion-capture')return native({action:message.action,draftId:message.draftId,png:message.png,sourceUrl:message.sourceUrl});
         if(message.action==='video-companion-choose')return native({action:message.action,draftId:message.draftId});
         if(message.action==='video-companion-stage-cover')return native({action:message.action,draftId:message.draftId,imageId:message.imageId});
+        if(message.action==='video-companion-remove')return native({action:message.action,draftId:message.draftId,imageId:message.imageId});
         if(message.action==='video-companion-retry')return native({action:message.action,id:message.id});
       }
       if(message.site==='youtube' && !host.capabilities?.includes('video-youtube')) throw Error('请运行开始使用.cmd → 更新 / 修复 更新 YouTube 下载功能。');

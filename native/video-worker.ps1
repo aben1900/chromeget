@@ -115,7 +115,10 @@ if($job.state -eq 'completed' -and (Test-Path -LiteralPath (Join-Path $PSScriptR
     try {
         . (Join-Path $PSScriptRoot 'library.ps1')
         $libraryConfig=Read-VideoJson (Join-Path $PSScriptRoot 'config.json')
-        $null=Invoke-LibraryAction ([pscustomobject]@{action='library-snapshot'}) $libraryConfig.directory
-    } catch { } # Library can rebuild from the completed job; download success remains independent.
+        $indexed=Invoke-LibraryAction ([pscustomobject]@{action='library-snapshot';id=[IO.Path]::GetFileNameWithoutExtension($JobPath)}) $libraryConfig.directory
+        if(-not $indexed.ok -or -not $indexed.snapshotted){throw '资料库未能建立下载索引。'}
+        if($job.companion){$job|Add-Member -NotePropertyName libraryWarning -NotePropertyValue '' -Force}
+    } catch {if($job.companion){$job|Add-Member -NotePropertyName libraryWarning -NotePropertyValue ('资料库索引未更新：'+$_.Exception.Message) -Force}} # Media and sidecar files remain complete.
+    if($job.companion -and -not (Test-Path -LiteralPath ($JobPath+'.deleted'))){Write-VideoJson $JobPath $job}
 }
 Invoke-DownloadQueue

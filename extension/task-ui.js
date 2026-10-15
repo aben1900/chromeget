@@ -68,6 +68,7 @@ function renderTaskCard(task,send,poll){
     card.append(taskNode('p','monitor-note companion-task-status',label+detail));
     if(task.companionStatus==='partial'&&task.companionError)card.append(taskNode('p','task-error',task.companionError));
   }
+  if(task.libraryWarning)card.append(taskNode('p','task-error',task.libraryWarning+'；可重试配套资料以更新索引。'));
   const segments=taskNode('details','segment-details');segments.open=expandedTasks.has(task.id);segments.addEventListener('toggle',()=>{segments.open?expandedTasks.add(task.id):expandedTasks.delete(task.id);});segments.append(taskNode('summary','','分段进度与日志'));
   const files=(m.files||[]).filter(f=>f.groups?.length);
   const panel=taskNode('div','segment-panel'+(m.source==='range64'?' native-ranges':''));

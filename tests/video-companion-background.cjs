@@ -6,6 +6,7 @@ const sender={id:'test',url:chrome.runtime.getURL('video.html')};const send=(mes
 const id='a'.repeat(32),png='data:image/png;base64,TEST';
 assert.equal((await send({action:'video-companion-capture',draftId:id,png,sourceUrl:'https://public.example/post'})).ok,true);
 assert.equal(requests.at(-1).png,png);assert.equal(requests.at(-1).action,'video-companion-capture');
+assert.equal((await send({action:'video-companion-remove',draftId:id,imageId:id})).ok,true);assert.equal(requests.at(-1).action,'video-companion-remove');assert.equal(requests.at(-1).imageId,id);
 const before=requests.length;assert.equal(await send({action:'video-companion-capture',draftId:id,png},{...sender,url:'https://public.example/post'}),null);assert.equal(requests.length,before);
 await send({action:'video-start',url:'https://public.example/video.mp4',png:'SECRET',paths:['C:/secret'],companionDraftId:id,companionText:'Test'});
 assert.equal(requests.at(-1).png,undefined);assert.equal(requests.at(-1).paths,undefined);assert.equal(requests.at(-1).companionDraftId,id);

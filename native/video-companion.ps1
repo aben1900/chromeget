@@ -50,6 +50,45 @@ function Read-VideoCompanionDraft([string]$draftId,[string]$url,[string]$jobs){
     if([DateTime]::Parse($draft.created).ToUniversalTime().AddMinutes(30) -lt (Get-Date).ToUniversalTime()){throw '配套资料草稿已过期，请重新获取视频。'}
     return $draft
 }
+function Update-VideoCompanionDraft([string]$draftId,[string]$url,[string]$jobs,[scriptblock]$edit){
+    $mutex=[Threading.Mutex]::new($false,('Local\JingcaiClipperCompanionDraft_'+$draftId))
+    $locked=$false
+    try{
+        try{$locked=$mutex.WaitOne(70000)}catch [Threading.AbandonedMutexException]{$locked=$true}
+        if(-not $locked){throw '配套资料正在处理，请稍后重试。'}
+        $current=Read-VideoCompanionDraft $draftId $url $jobs
+        & $edit $current
+        Write-VideoJson (Join-Path $jobs ($draftId+'.companion.json')) $current
+        return $current
+    }finally{if($locked){$mutex.ReleaseMutex()};$mutex.Dispose()}
+}
+function Clear-VideoCompanionGarbage([string]$jobs){
+    if(-not (Test-Path -LiteralPath $jobs -PathType Container)){return}
+    $root=[IO.Path]::GetFullPath($jobs).TrimEnd('\','/')+'\'
+    $protected=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach($entry in @(Get-ChildItem -LiteralPath $jobs -Filter '*.json' -File|Where-Object{$_.BaseName -match '^[a-f0-9]{32}$'})){
+        if(Test-Path -LiteralPath ($entry.FullName+'.deleted')){continue}
+        try{
+            $job=Read-VideoJson $entry.FullName
+            if(-not $job.companion -or ($job.state -eq 'completed' -and $job.companion.status -ne 'partial' -and -not $job.libraryWarning)){continue}
+            foreach($image in @($job.companion.images)){
+                $path=[IO.Path]::GetFullPath([string]$image.stagedPath)
+                if($path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)){$null=$protected.Add($path)}
+            }
+        }catch{continue}
+    }
+    $cutoff=(Get-Date).ToUniversalTime().AddHours(-1)
+    foreach($entry in @(Get-ChildItem -LiteralPath $jobs -Filter '*.companion.json' -File)){
+        if($entry.Name -cnotmatch '^[a-f0-9]{32}\.companion\.json$'){continue}
+        try{$draft=Read-VideoJson $entry.FullName;$created=[DateTime]::Parse([string]$draft.created).ToUniversalTime()}
+        catch{$created=$entry.LastWriteTimeUtc}
+        if($created -lt $cutoff){Remove-Item -LiteralPath $entry.FullName -Force -ErrorAction SilentlyContinue}
+    }
+    foreach($entry in @(Get-ChildItem -LiteralPath $jobs -Filter '*.companion-image' -File)){
+        if($entry.Name -cnotmatch '^[a-f0-9]{32}\.[a-f0-9]{32}\.companion-image$'){continue}
+        if($entry.LastWriteTimeUtc -lt $cutoff -and -not $protected.Contains($entry.FullName)){Remove-Item -LiteralPath $entry.FullName -Force -ErrorAction SilentlyContinue}
+    }
+}
 function Get-CompanionImageMetadata([string]$path){
     $item=Get-Item -LiteralPath $path -ErrorAction Stop
     if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -lt 12 -or $item.Length -gt 8388608){throw '配套图片必须是 8 MB 以内的普通文件。'}
@@ -62,10 +101,32 @@ function Get-CompanionImageMetadata([string]$path){
         try{$image=[Drawing.Image]::FromStream($stream,$true,$true);if($image.Width -lt 1 -or $image.Height -lt 1 -or ([long]$image.Width*$image.Height) -gt 40000000){throw '图片尺寸无效。'}}
         catch{throw '图片内容损坏或无法解码。'}
         finally{if($image){$image.Dispose()};$stream.Dispose()}
-    }elseif($bytes.Length -lt 20 -or [Text.Encoding]::ASCII.GetString($bytes,12,4) -notin @('VP8 ','VP8L','VP8X')){throw 'WEBP 图片内容无效。'}
+    }else{
+        if($bytes.Length -lt 20 -or [Text.Encoding]::ASCII.GetString($bytes,12,4) -notin @('VP8 ','VP8L','VP8X')){throw 'WEBP 图片内容无效。'}
+        $probe=Join-Path $PSScriptRoot 'bin\ffprobe.exe'
+        if(-not (Test-Path -LiteralPath $probe)){$command=Get-Command ffprobe.exe -ErrorAction SilentlyContinue;if($command){$probe=$command.Source}else{throw '缺少 FFprobe，无法验证 WEBP 图片。'}}
+        try{$output=& $probe -v quiet -select_streams v:0 -show_entries stream=codec_name,width,height -of json -i $path | Out-String;$result=ConvertFrom-Json $output}
+        catch{throw 'WEBP 图片内容损坏或无法解码。'}
+        $stream=@($result.streams)|Select-Object -First 1
+        if($LASTEXITCODE -ne 0 -or -not $stream -or $stream.codec_name -ne 'webp' -or $stream.width -lt 1 -or $stream.height -lt 1 -or ([long]$stream.width*$stream.height) -gt 40000000){throw 'WEBP 图片内容损坏或尺寸无效。'}
+        $decoder=Join-Path $PSScriptRoot 'bin\ffmpeg.exe'
+        if(-not (Test-Path -LiteralPath $decoder)){$command=Get-Command ffmpeg.exe -ErrorAction SilentlyContinue;if($command){$decoder=$command.Source}else{throw '缺少 FFmpeg，无法解码 WEBP 图片。'}}
+        $null=& $decoder -v quiet -xerror -err_detect explode -i $path -frames:v 1 -f null NUL
+        if($LASTEXITCODE -ne 0){throw 'WEBP 图片内容损坏或无法解码。'}
+    }
     return @{format=$format;bytes=$bytes.Length}
 }
 function Get-CompanionImagePreview([string]$path){
+    if((Get-GalleryImageExtension ([IO.File]::ReadAllBytes($path))) -eq 'webp'){
+        $decoder=Join-Path $PSScriptRoot 'bin\ffmpeg.exe'
+        if(-not (Test-Path -LiteralPath $decoder)){$command=Get-Command ffmpeg.exe -ErrorAction SilentlyContinue;if($command){$decoder=$command.Source}else{return ''}}
+        $thumbnail=Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N')+'.jpg')
+        try{
+            $null=& $decoder -v quiet -y -i $path -vf 'scale=180:180:force_original_aspect_ratio=decrease' -frames:v 1 -q:v 5 $thumbnail
+            if($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $thumbnail)){$bytes=[IO.File]::ReadAllBytes($thumbnail);if($bytes.Length -le 40960){return 'data:image/jpeg;base64,'+[Convert]::ToBase64String($bytes)}}
+        }catch{}finally{if(Test-Path -LiteralPath $thumbnail){Remove-Item -LiteralPath $thumbnail -Force}}
+        return ''
+    }
     Add-Type -AssemblyName System.Drawing
     $source=$null;$bitmap=$null;$graphics=$null;$output=$null
     try{
@@ -81,6 +142,7 @@ function Get-CompanionImagePreview([string]$path){
     return ''
 }
 function Add-VideoCompanionFiles([string]$draftId,[string[]]$paths,[string]$jobs){
+    if($draftId -cnotmatch '^[a-f0-9]{32}$'){throw '配套资料草稿编号无效。'}
     if($paths.Count -lt 1 -or $paths.Count -gt 10){throw '每次请选择 1–10 张图片。'}
     $draft=Read-VideoCompanionDraft $draftId ((Read-VideoJson (Join-Path $jobs ($draftId+'.companion.json'))).url) $jobs
     if(@($draft.images).Count+$paths.Count -gt 10){throw '配套图片最多 10 张（含封面）。'}
@@ -95,12 +157,16 @@ function Add-VideoCompanionFiles([string]$draftId,[string[]]$paths,[string]$jobs
             $image=@{id=$id;role='extra';source='本地图片';format=$metadata.format;staged=$true;stagedPath=$target;previewData=(Get-CompanionImagePreview $target)}
             $added+=,$image
         }
-        $draft.images=@($draft.images)+@($added)
-        Write-VideoJson (Join-Path $jobs ($draftId+'.companion.json')) $draft
+        $null=Update-VideoCompanionDraft $draftId $draft.url $jobs {
+            param($current)
+            if(@($current.images).Count+$added.Count -gt 10){throw '配套图片最多 10 张（含封面）。'}
+            $current.images=@($current.images)+@($added)
+        }
         return @{ok=$true;images=@($added|ForEach-Object{@{id=$_.id;role=$_.role;format=$_.format;source=$_.source;previewData=$_.previewData}})}
     }catch{foreach($target in $created){if(Test-Path -LiteralPath $target){Remove-Item -LiteralPath $target -Force}};throw}
 }
 function Add-VideoCompanionCapture([string]$draftId,[string]$png,[string]$sourceUrl,[string]$jobs){
+    if($draftId -cnotmatch '^[a-f0-9]{32}$'){throw '配套资料草稿编号无效。'}
     $draft=Read-VideoCompanionDraft $draftId ((Read-VideoJson (Join-Path $jobs ($draftId+'.companion.json'))).url) $jobs
     if((Get-CompanionPublicUrl $sourceUrl) -cne $draft.sourcePageUrl){throw '截图来源已变化，请返回原视频帖重新框选。'}
     if(@($draft.images).Count -ge 10){throw '配套图片最多 10 张（含封面）。'}
@@ -112,12 +178,16 @@ function Add-VideoCompanionCapture([string]$draftId,[string]$png,[string]$source
     try{
         [IO.File]::WriteAllBytes($target,$bytes)
         $image=@{id=$id;role='extra';source='区域截图';format='png';staged=$true;stagedPath=$target;previewData=(Get-CompanionImagePreview $target)}
-        $draft.images=@($draft.images)+@($image)
-        Write-VideoJson (Join-Path $jobs ($draftId+'.companion.json')) $draft
+        $null=Update-VideoCompanionDraft $draftId $draft.url $jobs {
+            param($current)
+            if(@($current.images).Count -ge 10){throw '配套图片最多 10 张（含封面）。'}
+            $current.images=@($current.images)+@($image)
+        }
         return @{ok=$true;images=@(@{id=$id;role='extra';format='png';source='区域截图';previewData=$image.previewData})}
     }catch{if(Test-Path -LiteralPath $target){Remove-Item -LiteralPath $target -Force};throw}
 }
 function Stage-VideoCompanionCover([string]$draftId,[string]$imageId,[string]$jobs){
+    if($draftId -cnotmatch '^[a-f0-9]{32}$' -or $imageId -cnotmatch '^[a-f0-9]{32}$'){throw '配套资料草稿或图片编号无效。'}
     $draft=Read-VideoCompanionDraft $draftId ((Read-VideoJson (Join-Path $jobs ($draftId+'.companion.json'))).url) $jobs
     $image=@($draft.images|Where-Object{$_.id -ceq $imageId -and $_.role -eq 'cover'})|Select-Object -First 1
     if(-not $image){throw '封面编号无效，请重新获取视频。'}
@@ -128,14 +198,29 @@ function Stage-VideoCompanionCover([string]$draftId,[string]$imageId,[string]$jo
     try{
         $null=Invoke-GalleryNetwork $image.url $kind 'GET' $target 8388608
         $metadata=Get-CompanionImageMetadata $target
-        $image|Add-Member -NotePropertyName format -NotePropertyValue $metadata.format -Force
-        $image|Add-Member -NotePropertyName stagedPath -NotePropertyValue $target -Force
-        $image.staged=$true
-        Write-VideoJson (Join-Path $jobs ($draftId+'.companion.json')) $draft
+        $null=Update-VideoCompanionDraft $draftId $draft.url $jobs {
+            param($current)
+            $cover=@($current.images|Where-Object{$_.id -ceq $imageId -and $_.role -eq 'cover'})|Select-Object -First 1
+            if(-not $cover){throw '封面已移除。'}
+            $cover|Add-Member -NotePropertyName format -NotePropertyValue $metadata.format -Force
+            $cover|Add-Member -NotePropertyName stagedPath -NotePropertyValue $target -Force
+            $cover.staged=$true
+        }
         return @{ok=$true;images=@(@{id=$image.id;role='cover';format=$metadata.format;source='视频信息';previewData=(Get-CompanionImagePreview $target)})}
     }catch{if(Test-Path -LiteralPath $target){Remove-Item -LiteralPath $target -Force};throw}
 }
+function Remove-VideoCompanionImage([string]$draftId,[string]$imageId,[string]$jobs){
+    if($draftId -cnotmatch '^[a-f0-9]{32}$' -or $imageId -cnotmatch '^[a-f0-9]{32}$'){throw '配套资料草稿或图片编号无效。'}
+    $draft=Read-VideoCompanionDraft $draftId ((Read-VideoJson (Join-Path $jobs ($draftId+'.companion.json'))).url) $jobs
+    $null=Update-VideoCompanionDraft $draftId $draft.url $jobs {
+        param($current)
+        if(-not @($current.images|Where-Object{$_.id -ceq $imageId}).Count){throw '配套图片已移除。'}
+        $current.images=@($current.images|Where-Object{$_.id -cne $imageId})
+    }
+    return @{ok=$true}
+}
 function Show-VideoCompanionFilePicker([string]$draftId,[string]$jobs){
+    if($draftId -cnotmatch '^[a-f0-9]{32}$'){throw '配套资料草稿编号无效。'}
     $null=Read-VideoCompanionDraft $draftId ((Read-VideoJson (Join-Path $jobs ($draftId+'.companion.json'))).url) $jobs
     Add-Type -AssemblyName System.Windows.Forms
     $dialog=New-Object Windows.Forms.OpenFileDialog

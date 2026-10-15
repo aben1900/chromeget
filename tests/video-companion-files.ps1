@@ -34,6 +34,11 @@ $retry=Invoke-VideoActionCore ([pscustomobject]@{action='video-companion-retry';
 if($retry.companionStatus -ne 'complete' -or -not (Test-Path -LiteralPath $savedImage)){throw '重试未仅补齐配图'}
 $status=Invoke-VideoActionCore ([pscustomobject]@{action='video-job';id=$id})
 if($status.companionStatus -ne 'complete' -or $status.companionRetryable){throw '任务状态未显示配套结果'}
+$job=Read-VideoJson $jobPath;$job|Add-Member -NotePropertyName libraryWarning -NotePropertyValue '资料库索引未更新' -Force;Write-VideoJson $jobPath $job
+$warning=Invoke-VideoActionCore ([pscustomobject]@{action='video-job';id=$id})
+if($warning.libraryWarning -ne '资料库索引未更新' -or -not $warning.companionRetryable){throw '资料库索引错误未反馈重试入口'}
+$unfinished=Invoke-VideoActionCore ([pscustomobject]@{action='video-jobs';statusFilter='unfinished';offset=0})
+if(@($unfinished.items|Where-Object{$_.id -eq $id}).Count -ne 1){throw '资料库索引错误的任务未出现在未完成筛选'}
 $outside=Join-Path $root 'outside';[IO.Directory]::CreateDirectory($outside)|Out-Null
 $linked=Join-Path $directory 'linked';New-Item -ItemType Junction -Path $linked -Target $outside|Out-Null
 $outsideMedia=Join-Path $outside 'escape.mp4';[IO.File]::WriteAllBytes($outsideMedia,[byte[]](1,2,3))

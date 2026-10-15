@@ -161,9 +161,11 @@ function Invoke-VideoActionCore($message) {
     }
     $jobs = Join-Path $PSScriptRoot 'video-jobs'
     [IO.Directory]::CreateDirectory($jobs) | Out-Null
+    if($message.action -in @('video-status','video-info') -and (Get-Command Clear-VideoCompanionGarbage -ErrorAction SilentlyContinue)){try{Clear-VideoCompanionGarbage $jobs}catch{}}
     if($message.action -eq 'video-companion-stage-cover'){return Stage-VideoCompanionCover ([string]$message.draftId) ([string]$message.imageId) $jobs}
     if($message.action -eq 'video-companion-choose'){return Show-VideoCompanionFilePicker ([string]$message.draftId) $jobs}
     if($message.action -eq 'video-companion-capture'){return Add-VideoCompanionCapture ([string]$message.draftId) ([string]$message.png) ([string]$message.sourceUrl) $jobs}
+    if($message.action -eq 'video-companion-remove'){return Remove-VideoCompanionImage ([string]$message.draftId) ([string]$message.imageId) $jobs}
     if($message.action -eq 'video-companion-retry'){
         if($message.id -cnotmatch '^[a-f0-9]{32}$'){throw '下载任务编号无效。'}
         $jobPath=Join-Path $jobs ($message.id+'.json')
@@ -171,13 +173,18 @@ function Invoke-VideoActionCore($message) {
         $job=Read-VideoJson $jobPath
         if($job.state -ne 'completed' -or -not $job.companion){throw '视频或配套资料尚不能重试。'}
         Write-VideoCompanionFiles $job $jobPath;Write-VideoJson $jobPath $job
-        if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'library.ps1')){
-            . (Join-Path $PSScriptRoot 'library.ps1')
-            $config=Read-VideoJson (Join-Path $PSScriptRoot 'config.json')
-            $refreshed=Invoke-LibraryAction ([pscustomobject]@{action='library-refresh-download';id=$message.id}) $config.directory
-            if(-not $refreshed.ok){throw $(if($refreshed.error){[string]$refreshed.error}else{'资料库记录未能刷新，请打开资料库重试。'})}
-        }
-        return @{ok=$true;companionStatus=$job.companion.status;companionError=(@($job.companion.errors)-join '；');companionRetryable=($job.companion.status -eq 'partial')}
+        try{
+            if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'library.ps1')){
+                . (Join-Path $PSScriptRoot 'library.ps1')
+                $config=Read-VideoJson (Join-Path $PSScriptRoot 'config.json')
+                $snapshot=Invoke-LibraryAction ([pscustomobject]@{action='library-snapshot';id=$message.id}) $config.directory
+                if(-not $snapshot.ok -or -not $snapshot.snapshotted){throw '资料库记录未能建立。'}
+                $refreshed=Invoke-LibraryAction ([pscustomobject]@{action='library-refresh-download';id=$message.id}) $config.directory
+                if(-not $refreshed.ok){throw $(if($refreshed.error){[string]$refreshed.error}else{'资料库记录未能刷新。'})}
+            }
+            $job|Add-Member -NotePropertyName libraryWarning -NotePropertyValue '' -Force;Write-VideoJson $jobPath $job
+        }catch{$job|Add-Member -NotePropertyName libraryWarning -NotePropertyValue ('资料库索引未更新：'+$_.Exception.Message) -Force;Write-VideoJson $jobPath $job;throw}
+        return @{ok=$true;companionStatus=$job.companion.status;companionError=(@($job.companion.errors)-join '；');companionRetryable=($job.companion.status -eq 'partial');libraryWarning=$job.libraryWarning}
     }
     if ($message.action -eq 'video-gallery-preview') { return Save-WebGalleryPreview $message $jobs $(if($settings.autoClassify){Join-Path $settings.directory '图片'}else{$settings.directory}) }
     if ($message.action -eq 'video-gallery-capture') { return Save-GalleryCapture $message $jobs $(if($settings.autoClassify){Join-Path $settings.directory '图片'}else{$settings.directory}) }
@@ -237,7 +244,7 @@ function Invoke-VideoActionCore($message) {
         $filter=if($message.statusFilter){[string]$message.statusFilter}else{'all'}
         if($filter -notin @('all','unfinished','active','queued','starting','running','paused','failed','completed')){throw '任务状态筛选无效。'}
         $items=@($items|Where-Object {
-            $filter -eq 'all' -or ($filter -eq 'unfinished' -and ($_.state -ne 'completed' -or $_.companionStatus -eq 'partial')) -or ($filter -eq 'active' -and $_.state -in @('starting','running')) -or $_.state -eq $filter
+            $filter -eq 'all' -or ($filter -eq 'unfinished' -and ($_.state -ne 'completed' -or $_.companionStatus -eq 'partial' -or $_.libraryWarning)) -or ($filter -eq 'active' -and $_.state -in @('starting','running')) -or $_.state -eq $filter
         }|Sort-Object @{Expression={$_.createdAt};Descending=$true},@{Expression={$_.id};Descending=$true})
         $offset=[Math]::Max(0,[int]$message.offset)
         return @{ok=$true;items=@($items|Select-Object -Skip $offset -First 50);total=$items.Count;offset=$offset}
@@ -326,7 +333,7 @@ function Invoke-VideoActionCore($message) {
         $createdAt=if($job.createdAt){([DateTime]$job.createdAt).ToUniversalTime().ToString('o')}else{(Get-Item -LiteralPath $jobPath).CreationTimeUtc.ToString('o')}
         $source=if($job.source){$job.source}elseif($job.arguments){@($job.arguments)[-1]}else{''}
         $metrics=$null;$metricsPath=Join-Path $jobs ($message.id+'.metrics.json');if(Test-Path -LiteralPath $metricsPath){try{$metrics=Read-VideoJson $metricsPath}catch{}}
-        return @{ok=$true; metrics=$metrics;phase=$job.phase;probeSummary=@{total=@($job.probes).Count;success=@($job.probes|Where-Object{$_.ok}).Count;ranges=@($job.probes|Where-Object{$_.ok -and $_.rangeSupported}).Count};recoveryNote=$job.recoveryNote;validation=$job.validation;canPause=($job.state -in @('queued','starting','running')); state=$job.state; error=$job.error; code=$job.code; retryable=$job.retryable; details=$job.details; progress=$progress; directory=$job.directory; file=$job.file; siteName=$job.siteName; createdAt=$createdAt; title=$job.title; source=$source; height=$job.height; companionStatus=$(if($job.companion){[string]$job.companion.status}else{''});companionError=$(@($job.companion.errors)-join '；');companionRetryable=$($job.companion -and $job.companion.status -eq 'partial'); canResume=($job.state -eq 'paused' -or ($job.state -eq 'failed' -and $job.kind -ne 'gallery' -and ($job.arguments -contains '--continue' -or $job.arguments -contains '--continue=true')))}
+        return @{ok=$true; metrics=$metrics;phase=$job.phase;probeSummary=@{total=@($job.probes).Count;success=@($job.probes|Where-Object{$_.ok}).Count;ranges=@($job.probes|Where-Object{$_.ok -and $_.rangeSupported}).Count};recoveryNote=$job.recoveryNote;validation=$job.validation;canPause=($job.state -in @('queued','starting','running')); state=$job.state; error=$job.error; code=$job.code; retryable=$job.retryable; details=$job.details; progress=$progress; directory=$job.directory; file=$job.file; siteName=$job.siteName; createdAt=$createdAt; title=$job.title; source=$source; height=$job.height; companionStatus=$(if($job.companion){[string]$job.companion.status}else{''});companionError=$(@($job.companion.errors)-join '；');libraryWarning=$job.libraryWarning;companionRetryable=$($job.companion -and ($job.companion.status -eq 'partial' -or $job.libraryWarning)); canResume=($job.state -eq 'paused' -or ($job.state -eq 'failed' -and $job.kind -ne 'gallery' -and ($job.arguments -contains '--continue' -or $job.arguments -contains '--continue=true')))}
     }
     $tools = Get-VideoTools
     $url = if($genericMedia){Assert-MediaPageUrl $message.url}else{Assert-VideoUrl $message.url}

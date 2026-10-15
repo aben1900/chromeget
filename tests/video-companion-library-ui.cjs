@@ -1,0 +1,7 @@
+const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=require('playwright');
+(async()=>{const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});try{
+ const page=await browser.newPage(),html=fs.readFileSync('extension/library.html','utf8');await page.setContent(html.replace(/<script[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link[^>]*>/g,''));
+ await page.evaluate(()=>{window.chrome={runtime:{sendMessage:async message=>{if(message.action==='library-query')return {ok:true,total:1,revision:'1',items:[{id:'download:'+'a'.repeat(32),type:'视频',title:'测试视频',preview:'正文',time:'今天',source:'example.com',tags:[],collections:[],fileCount:3}],facets:{types:['视频'],sources:['example.com'],tags:[],collections:[]}};if(message.action==='library-read')return {ok:true,item:{id:'download:'+'a'.repeat(32),type:'视频',title:'测试视频',time:'今天',author:'作者',sourceUrl:'https://example.com',files:[],tags:[],collections:[]},content:'配套正文',nextOffset:4,total:4};return {ok:true};}}};});
+ await page.addScriptTag({path:'extension/library-model.js'});await page.addScriptTag({path:'extension/library.js'});await page.waitForSelector('.item-open');await page.click('.item-open');assert.equal(await page.locator('#contentLabel').textContent(),'视频说明');
+ console.log('PASS video companion body is labeled as video description');
+}finally{await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});

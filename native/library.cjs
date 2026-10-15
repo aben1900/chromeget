@@ -21,13 +21,21 @@ async function locked(directory,fn){
 function names(values){if(!Array.isArray(values)||values.length>30)throw Error('最多选择 30 个分类');return [...new Set(values.map(name))];}
 function name(value){if(typeof value!=='string'||!value.trim()||value.trim().length>60||/[\r\n\x00-\x1f]/.test(value))throw Error('分类名称需要 1–60 字的单行文字');return value.trim();}
 function metadata(directory){const p=path.join(directory,'资料库索引.json');if(!fs.existsSync(p))return {schemaVersion:1,tags:[],collections:[],annotations:{},downloads:{}};const s=readJson(p);if(s.schemaVersion!==1||!Array.isArray(s.tags)||!Array.isArray(s.collections)||!s.annotations||!s.downloads||Array.isArray(s.annotations)||Array.isArray(s.downloads))throw Error('资料库索引格式损坏，请从备份恢复，原始资料未改动');return s;}
+function downloadFromJob(j,id){
+ const directory=String(j.directory||'');if(!path.isAbsolute(directory))throw Error('无效目录');
+ let paths=j.kind==='files'?j.expectedFiles:j.kind==='gallery'?j.savedFiles:[j.file];
+ if(j.kind==='gallery'&&(!Array.isArray(paths)||!paths.length)){const manifest=path.join(directory,'图集信息.json');noLinks(manifest);if(fs.existsSync(manifest)){const images=readJson(manifest).images;if(Array.isArray(images))paths=images.map(i=>path.join(directory,String(i.file)));}}
+ if(!Array.isArray(paths)||!paths.length){if(j.kind==='gallery')throw Error('旧图集缺少完整文件清单，请保留原目录，重新下载后可完整索引');return null;}
+ if(j.kind!=='gallery'&&j.kind!=='files'&&j.mediaMode!=='audio')paths=[...paths,...(Array.isArray(j.companion?.files)?j.companion.files:[])];
+ const files=[...new Set(paths)].map(p=>fileInfo(p,directory));const rawSource=j.companion?.publicSourceUrl||j.source||j.arguments?.at(-1)||'';
+ const source=j.kind==='files'&&j.siteName!=='Hugging Face'?(sourceUrl(rawSource)?new URL(sourceUrl(rawSource)).origin:''):sourceUrl(rawSource);
+ const video=j.kind!=='gallery'&&j.kind!=='files'&&j.mediaMode!=='audio';
+ return {id,type:j.kind==='gallery'?'图片':j.kind==='files'?(j.siteName==='Hugging Face'?'模型':'文件'):j.mediaMode==='audio'?'音频':'视频',title:String(video&&j.companion?.title||j.title||path.basename(paths[0])),time:j.createdAt||'',sourceUrl:source,sourceTitle:String(j.title||''),author:String(video&&j.companion?.author||j.author||''),directory,files,content:video&&typeof j.companion?.text==='string'?j.companion.text:''};
+}
 function load(ctx,s){const warnings=[],journal=path.join(ctx.directory,'摘录数据.json');let records=[];if(fs.existsSync(journal)){records=readJson(journal);if(!Array.isArray(records))throw Error('摘录数据格式损坏');const seen=new Set();for(const r of records){if(!r||!ID.test('clip:'+r.id)||typeof r.content!=='string'||typeof r.type!=='string'||seen.has(r.id))throw Error('摘录数据含无效或重复记录');seen.add(r.id);}}
  const jobs=path.join(ctx.root,'video-jobs');let changed=false;
  if(fs.existsSync(jobs))for(const filename of fs.readdirSync(jobs).filter(n=>/^[a-f0-9]{32}\.json$/.test(n))){try{const j=readJson(path.join(jobs,filename));if(j.state!=='completed')continue;const id='download:'+filename.slice(0,32);if(s.downloads[id]||s.deletedDownloads?.[id])continue;
- const directory=String(j.directory||'');if(!path.isAbsolute(directory))throw Error('无效目录');let paths=j.kind==='files'?j.expectedFiles:j.kind==='gallery'?j.savedFiles:[j.file];if(j.kind==='gallery'&&(!Array.isArray(paths)||!paths.length)){const manifest=path.join(directory,'图集信息.json');noLinks(manifest);if(fs.existsSync(manifest)){const images=readJson(manifest).images;if(Array.isArray(images))paths=images.map(i=>path.join(directory,String(i.file)));}}
- if(!Array.isArray(paths)||!paths.length){if(j.kind==='gallery')throw Error('旧图集缺少完整文件清单，请保留原目录，重新下载后可完整索引');continue;}
- const files=[...new Set(paths)].map(p=>fileInfo(p,directory));const rawSource=j.source||j.arguments?.at(-1)||'';const source=j.kind==='files'&&j.siteName!=='Hugging Face'?(sourceUrl(rawSource)?new URL(sourceUrl(rawSource)).origin:''):sourceUrl(rawSource);
- const item={id,type:j.kind==='gallery'?'图片':j.kind==='files'?(j.siteName==='Hugging Face'?'模型':'文件'):j.mediaMode==='audio'?'音频':'视频',title:String(j.title||path.basename(paths[0])),time:j.createdAt||'',sourceUrl:source,sourceTitle:String(j.title||''),author:String(j.author||''),directory,files,content:''};s.downloads[id]=item;changed=true;
+ const item=downloadFromJob(j,id);if(!item)continue;s.downloads[id]=item;changed=true;
  }catch(e){warnings.push('部分下载记录未能索引：'+e.message);}}
  const items=records.map(r=>({id:'clip:'+r.id,type:r.type,title:r.title||(r.type==='网页地址'?sourceUrl(r.content):r.content).slice(0,65),content:r.content,time:r.time,sourceUrl:sourceUrl(r.sourceUrl||(r.type==='网页地址'?r.content:'')),sourceTitle:r.sourceTitle||'',author:r.author||'',note:typeof r.note==='string'?r.note:'',files:[]}));
  for(const item of Object.values(s.downloads)){if(!ID.test(item.id)||!Array.isArray(item.files))throw Error('下载索引损坏');const files=item.files.map(f=>{try{return fileInfo(f.path,item.directory);}catch{return {...f,exists:false,unsafe:true};}});items.push({...item,files});}
@@ -43,6 +51,12 @@ async function dispatch(message,ctx){if(!ctx?.directory||!ctx.root)throw Error('
  if(message.action.startsWith('library-ai-'))return require('./library-ai.cjs').dispatch(message,ctx,items,s);
  const revision=crypto.createHash('sha256').update(JSON.stringify([items,s.tags,s.collections])).digest('hex').slice(0,24);
  if(message.action==='library-snapshot')return {ok:true,warnings:warnings.slice(0,50),snapshotted:message.id?!!s.downloads['download:'+message.id]:true};
+ if(message.action==='library-refresh-download'){
+  if(!/^[a-f0-9]{32}$/.test(message.id||''))throw Error('下载任务编号无效');
+  const id='download:'+message.id;if(!s.downloads[id]||s.deletedDownloads?.[id])throw Error('下载资料记录不存在');
+  const job=readJson(path.join(ctx.root,'video-jobs',message.id+'.json'));if(job.state!=='completed')throw Error('视频尚未完成');
+  const item=downloadFromJob(job,id);if(!item)throw Error('视频文件不存在');s.downloads[id]=item;atomic(index,s);return {ok:true,id};
+ }
  if(message.action==='library-query'){
   if(message.revision&&message.revision!==revision)throw Error('资料已变化，请刷新列表后翻页');
   const query=String(message.query||'').toLocaleLowerCase();let filtered=items.filter(i=>(!message.type||i.type===message.type)&&(!message.source||i.source===message.source)&&(!message.tag||i.tags.includes(message.tag))&&(!message.collection||i.collections.includes(message.collection))&&[i.title,i.content,i.note,i.aiSummaryText,i.author,i.sourceUrl,i.sourceTitle,...i.tags,...i.collections,...i.files.map(f=>f.name)].join('\n').toLocaleLowerCase().includes(query));

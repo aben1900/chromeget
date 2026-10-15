@@ -101,6 +101,11 @@ try {
 
     }
     }
+    if($job.companion){
+        try{Write-VideoCompanionFiles $job $JobPath}
+        catch{$job.companion.status='partial';$job.companion.errors=@($_.Exception.Message)}
+        Write-VideoJson $JobPath $job
+    }
     $job.state='completed'
 } catch { $job.state='failed'; $job.error=$_.Exception.Message; $failure=New-RecoveryError -Message $job.error -Code $_.Exception.Data['code']; foreach($key in @('code','retryable','details')){$job|Add-Member -NotePropertyName $key -NotePropertyValue $failure[$key] -Force} }
 finally {if($downloadLocked){$downloadMutex.ReleaseMutex()};if($downloadMutex){$downloadMutex.Dispose()}}

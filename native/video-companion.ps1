@@ -146,3 +146,93 @@ function Show-VideoCompanionFilePicker([string]$draftId,[string]$jobs){
         return Add-VideoCompanionFiles $draftId @($dialog.FileNames) $jobs
     }finally{$dialog.Dispose()}
 }
+function Commit-VideoCompanion($message,[string]$url,[string]$jobs){
+    $draft=Read-VideoCompanionDraft ([string]$message.companionDraftId) $url $jobs
+    $titleValue=if($null -ne $message.companionTitle){[string]$message.companionTitle}else{[string]$draft.title}
+    $bodyValue=if($null -ne $message.companionText){[string]$message.companionText}else{[string]$draft.text}
+    $title=Limit-VideoCompanionText ($titleValue -replace '[\r\n]+',' ') 120 1024
+    $body=Limit-VideoCompanionText $bodyValue 20000 65536
+    $author=Limit-VideoCompanionText (([string]$draft.author) -replace '[\r\n]+',' ') 120 1024
+    $ids=@($message.companionImageIds);if($ids.Count -gt 10){throw '配套图片最多 10 张。'}
+    $seen=@{};$images=@();$root=[IO.Path]::GetFullPath($jobs).TrimEnd('\','/')+'\'
+    foreach($id in $ids){
+        if($id -isnot [string] -or $id -cnotmatch '^[a-f0-9]{32}$' -or $seen.ContainsKey($id)){throw '所选配套图片编号无效。'}
+        $seen[$id]=$true
+        $image=@($draft.images|Where-Object{$_.id -ceq $id})|Select-Object -First 1
+        if(-not $image -or -not $image.staged -or -not $image.stagedPath){throw '配套图片尚未准备完成，请移除或重新添加。'}
+        $path=[IO.Path]::GetFullPath([string]$image.stagedPath)
+        if(-not $path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)){throw '配套图片位置无效。'}
+        $metadata=Get-CompanionImageMetadata $path
+        if($metadata.format -cne [string]$image.format){throw '配套图片内容已变化，请重新添加。'}
+        $images+=@{id=$id;role=[string]$image.role;format=$metadata.format;source=[string]$image.source;stagedPath=$path;savedPath=''}
+    }
+    $public=Get-CompanionPublicUrl ([string]$draft.sourcePageRaw)
+    $digestInput=ConvertTo-Json -InputObject @($title.value,$body.value,$author.value,$public,@($images|ForEach-Object{$_.id})) -Compress -Depth 5
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try{$digest=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($digestInput)))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+    return @{title=$title.value;text=$body.value;author=$author.value;publicSourceUrl=$public;digest=$digest;images=$images;status='pending';files=@();errors=@()}
+}
+function Test-CompanionSameFile([string]$left,[string]$right){
+    if(-not [IO.File]::Exists($left) -or -not [IO.File]::Exists($right)){return $false}
+    if((Get-Item -LiteralPath $left).Length -ne (Get-Item -LiteralPath $right).Length){return $false}
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try{
+        $a=[IO.File]::OpenRead($left);try{$aHash=[BitConverter]::ToString($sha.ComputeHash($a))}finally{$a.Dispose()}
+        $b=[IO.File]::OpenRead($right);try{$bHash=[BitConverter]::ToString($sha.ComputeHash($b))}finally{$b.Dispose()}
+        return $aHash -ceq $bHash
+    }finally{$sha.Dispose()}
+}
+function Assert-CompanionNoLinks([string]$path){
+    $current=[IO.Path]::GetFullPath($path)
+    while($true){
+        if(Test-Path -LiteralPath $current){
+            $item=Get-Item -LiteralPath $current -Force
+            if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw '配套资料路径包含链接，请使用普通本地目录。'}
+        }
+        $parent=[IO.Path]::GetDirectoryName($current)
+        if(-not $parent -or $parent -eq $current){break}
+        $current=$parent
+    }
+}
+function Write-VideoCompanionFiles($job,[string]$jobPath){
+    if(-not $job.companion){return}
+    $companion=$job.companion
+    if(-not $companion.text -and @($companion.images).Count -eq 0){$companion.status='complete';$companion.files=@();$companion.errors=@();return}
+    $directory=[IO.Path]::GetFullPath([string]$job.directory).TrimEnd('\','/')
+    $media=[IO.Path]::GetFullPath([string]$job.file)
+    if(-not $media.StartsWith($directory+'\',[StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path -LiteralPath $media -PathType Leaf)){throw '视频文件不在所选下载目录内。'}
+    Assert-CompanionNoLinks $media
+    $id=[IO.Path]::GetFileNameWithoutExtension($jobPath)
+    if($id -cnotmatch '^[a-f0-9]{32}$'){throw '任务编号无效。'}
+    $stem=[IO.Path]::GetFileNameWithoutExtension($media);if($stem.Length -gt 60){$stem=$stem.Substring(0,60)}
+    $folder=Join-Path ([IO.Path]::GetDirectoryName($media)) ($stem+'-'+$id.Substring(0,8)+'-配套资料')
+    if(Test-Path -LiteralPath $folder){if((Get-Item -LiteralPath $folder).Attributes -band [IO.FileAttributes]::ReparsePoint){throw '配套目录不能是链接。'}}
+    else{[IO.Directory]::CreateDirectory($folder)|Out-Null}
+    $saved=@();$errors=@()
+    $note=Join-Path $folder '说明.txt'
+    $text=@("标题：$($companion.title)","作者：$($companion.author)","来源：$($companion.publicSourceUrl)",'',"正文：",[string]$companion.text) -join "`r`n"
+    $temp=$note+'.'+[Guid]::NewGuid().ToString('N')+'.tmp'
+    try{
+        if(-not [IO.File]::Exists($note)){[IO.File]::WriteAllText($temp,$text,[Text.UTF8Encoding]::new($false));[IO.File]::Move($temp,$note)}
+        elseif([IO.File]::ReadAllText($note,[Text.Encoding]::UTF8) -cne $text){throw '已有说明文件内容不同，未覆盖。'}
+        $saved+=,$note
+    }catch{$errors+=,$_.Exception.Message}
+    finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
+    $extra=0
+    foreach($image in @($companion.images)){
+        if($image.role -ne 'cover'){$extra++}
+        $name=if($image.role -eq 'cover'){'封面'}else{'配图-'+$extra.ToString('00')}
+        $destination=Join-Path $folder ($name+'.'+[string]$image.format)
+        $temp=$destination+'.'+[Guid]::NewGuid().ToString('N')+'.tmp'
+        try{
+            $source=[string]$image.stagedPath
+            $metadata=Get-CompanionImageMetadata $source
+            if($metadata.format -cne [string]$image.format){throw '图片格式发生变化。'}
+            if(-not [IO.File]::Exists($destination)){[IO.File]::Copy($source,$temp,$false);[IO.File]::Move($temp,$destination)}
+            elseif(-not (Test-CompanionSameFile $source $destination)){throw '已有配图内容不同，未覆盖。'}
+            $image.savedPath=$destination;$saved+=,$destination
+        }catch{$errors+=,($name+'：'+$_.Exception.Message)}
+        finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
+    }
+    $companion.files=@($saved);$companion.errors=@($errors);$companion.status=if($errors.Count){'partial'}else{'complete'}
+}

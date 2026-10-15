@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),crypto=require('crypto'),assert=require('assert/strict'),{spawn}=require('child_process');
 const root=path.resolve('work/engine-'+Date.now()),jobs=path.join(root,'video-jobs'),media=path.join(root,'media');fs.mkdirSync(media,{recursive:true});fs.mkdirSync(jobs,{recursive:true});fs.mkdirSync(path.join(root,'bin'));
-for(const f of ['recovery.ps1','gallery-image.ps1','video.ps1','video-worker.ps1','transfer.ps1','transfer-probe.ps1','telemetry.ps1'])fs.copyFileSync('native/'+f,path.join(root,f));
+for(const f of ['recovery.ps1','gallery-image.ps1','video-companion.ps1','video.ps1','video-worker.ps1','transfer.ps1','transfer-probe.ps1','telemetry.ps1'])fs.copyFileSync('native/'+f,path.join(root,f));
 const engineBin=path.resolve(process.env.NATIVE_TEST_BIN||'native/bin');
 for(const f of fs.readdirSync(engineBin).filter(n=>/\.(exe|dll)$/.test(n)))fs.copyFileSync(path.join(engineBin,f),path.join(root,'bin',f));
 fs.writeFileSync(path.join(root,'video-settings.json'),JSON.stringify({directory:path.join(root,'downloads'),maxActive:1,autoClassify:true,transferMode:'fast'}));
@@ -42,7 +42,9 @@ async function complete(id,ms=90000){const start=Date.now();while(Date.now()-sta
  assert.equal(a.probes[0].rangeSupported,true);assert.equal(b.probes[0].rangeSupported,false);assert.ok(b.directory.endsWith('其他'));assert.ok(peak>1);
  for(const file of ['encrypted.m3u8','stream.mpd']){
   const info=await call({action:'video-info',url:base+'/'+file,genericMedia:true});assert.ok(info.heights.length);
-  const started=await call({action:'video-start',url:base+'/'+file,genericMedia:true,height:0,title:file});const done=await complete(started.id);assert.ok(done.validation?.includes('FFprobe'));assert.ok(fs.statSync(done.file).size>10000);
+  let companion={};if(file==='encrypted.m3u8'){const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lWQAAAAASUVORK5CYII=';const staged=await call({action:'video-companion-capture',draftId:info.companion.draftId,png,sourceUrl:base+'/'+file});companion={companionDraftId:info.companion.draftId,companionTitle:'配套标题',companionText:'配套正文',companionImageIds:[staged.images[0].id]};}
+  const started=await call({action:'video-start',url:base+'/'+file,genericMedia:true,height:0,title:file,...companion});const done=await complete(started.id);assert.ok(done.validation?.includes('FFprobe'));assert.ok(fs.statSync(done.file).size>10000);
+  if(file==='encrypted.m3u8'){assert.equal(done.companion?.status,'complete');assert.equal(done.companion.files.length,2);assert.ok(fs.readFileSync(done.companion.files.find(name=>name.endsWith('.txt')),'utf8').includes('配套正文'));}
  }
  const audio=await call({action:'video-start',url:base+'/sample.mp4',genericMedia:true,height:0,mediaMode:'audio',audioFormat:'mp3',title:'Audio fixture'});
  const audioDone=await complete(audio.id);assert.ok(audioDone.file.endsWith('.mp3'));assert.ok(audioDone.directory.endsWith('音乐'));assert.ok(audioDone.validation.includes('audio'));

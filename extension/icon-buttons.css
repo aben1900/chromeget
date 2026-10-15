@@ -1,11 +1,18 @@
 /* Icon-only actions share the region-capture button's proportions. */
 html body :is(button,a):has(>svg:only-child){display:inline-flex!important;align-items:center!important;justify-content:center!important;box-sizing:border-box!important;flex:0 0 32px!important;width:32px!important;min-width:32px!important;max-width:32px!important;height:32px!important;min-height:32px!important;max-height:32px!important;padding:5px!important;border:0!important;border-radius:7px!important;line-height:1!important;box-shadow:none!important;vertical-align:middle}
-html body :is(button,a):has(>svg:only-child):not(#pageTranslationToggle){background:transparent!important;color:#333!important}
-html body :is(button,a):has(>svg:only-child):not(:disabled):not(#pageTranslationToggle):hover{background:#e6e6e6!important}
+html body :is(button,a):has(>svg:only-child):not(#pageTranslationToggle):not(#hoverToggle){background:transparent!important;color:#333!important}
+html body :is(button,a):has(>svg:only-child):not(:disabled):not(#pageTranslationToggle):not(#hoverToggle):hover{background:#e6e6e6!important}
 html body :is(button,a):has(>svg:only-child)>svg{display:block!important;flex:0 0 20px!important;width:20px!important;height:20px!important;min-width:20px!important;min-height:20px!important;pointer-events:none;stroke-width:1.6}
 html body :is(button,a):has(>svg:only-child):focus-visible{outline:2px solid var(--blue,#416fc4);outline-offset:2px}
 html body button:not(:disabled):hover,html body a:has(>svg:only-child):hover{box-shadow:inset 0 2px 4px #0003,inset 0 -1px 0 #ffffff40!important}
 html body button:not(:disabled):active,html body a:has(>svg:only-child):active{box-shadow:inset 0 3px 5px #0004!important}
+html body #hoverToggle{position:relative;background:#eceff3!important;color:#596679!important;cursor:pointer}
+html body #hoverToggle[aria-pressed="true"]{background:#e1f2e4!important;color:#24733f!important}
+html body #hoverToggle::after{content:'×';position:absolute;right:1px;bottom:0;display:grid;place-items:center;width:12px;height:12px;border-radius:50%;background:#788498;color:white;font-size:10px;font-weight:700;line-height:1}
+html body #hoverToggle[aria-pressed="true"]::after{content:'✓';background:#349658}
+html body #hoverToggle:not(:disabled):hover{background:#dfe3e9!important;box-shadow:inset 0 2px 4px #0003,inset 0 -1px 0 #ffffff40!important}
+html body #hoverToggle[aria-pressed="true"]:not(:disabled):hover{background:#cdebd3!important;color:#1c6335!important;box-shadow:inset 0 2px 4px #19572d36,inset 0 -1px 0 #ffffff50!important}
+html body #hoverToggle[aria-busy="true"]{cursor:wait;opacity:.75}
 html body nav[role="tablist"]>button{font-size:15px;font-weight:600}
 html body nav[role="tablist"]>button[aria-selected="true"]{font-weight:700}
 html body nav[role="tablist"]>#collectTab{flex:.85}

@@ -37,9 +37,9 @@ $('hfDownload').addEventListener('click',()=>transferTask($('hfDownload'),async(
 }
 if($('hoverToggle')){
   const toggle=$('hoverToggle');let hoverRevision=0,hoverBusy=false;
-  function showHoverState(enabled){hoverRevision++;toggle.setAttribute('aria-pressed',String(!!enabled));toggle.title=enabled?'悬浮下载按钮已开启，点击关闭':'悬浮下载按钮已关闭，点击开启';if(!hoverBusy)toggle.disabled=false;}
+  function showHoverState(enabled){hoverRevision++;toggle.setAttribute('aria-pressed',String(!!enabled));toggle.title=enabled?'悬浮下载按钮已开启，点击关闭':'悬浮下载按钮已关闭，点击开启';toggle.setAttribute('aria-label',toggle.title);if(!hoverBusy)toggle.disabled=false;}
   const initialRevision=hoverRevision;
-  chrome.storage.local.get('hoverDownloadEnabled').then(d=>{if(initialRevision===hoverRevision)showHoverState(d.hoverDownloadEnabled);}).catch(()=>{toggle.disabled=false;toggle.title='无法读取状态，点击开启悬浮下载按钮';});
+  chrome.storage.local.get('hoverDownloadEnabled').then(d=>{if(initialRevision===hoverRevision)showHoverState(d.hoverDownloadEnabled);}).catch(()=>{toggle.disabled=false;toggle.title='无法读取状态，点击开启悬浮下载按钮';toggle.setAttribute('aria-label',toggle.title);});
   chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.hoverDownloadEnabled)showHoverState(changes.hoverDownloadEnabled.newValue);});
   toggle.addEventListener('click',()=>{
     if(hoverBusy)return;

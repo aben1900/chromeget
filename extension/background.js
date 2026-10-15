@@ -351,7 +351,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(message.mediaMode==='audio'&&!host.capabilities?.includes('audio-download'))throw Error('请更新本地程序以使用仅音频下载。');
       const result=await native({action:message.action,url:message.url,height:message.height,quality:message.quality,mediaMode:message.mediaMode,audioFormat:message.audioFormat,id:message.id,directory:message.directory,site:message.site,cookieText,draftId:message.draftId,confirmed:message.confirmed,selectedIndexes:message.selectedIndexes,index:message.index,imageFormat:message.imageFormat,title:message.title,statusFilter:message.statusFilter,offset:message.offset,transferMode:message.transferMode,genericFile:message.genericFile,filename:message.filename,checksum:message.checksum,genericMedia:message.genericMedia,referer:message.referer,maxActive:message.maxActive,autoClassify:message.autoClassify,adaptive:message.adaptive,companionDraftId:message.companionDraftId,companionTitle:message.companionTitle,companionText:message.companionText,companionImageIds:message.companionImageIds});
       if(['video-start','video-gallery-start','video-file-start','video-resume'].includes(message.action)) await chrome.storage.local.set({lastVideoJob:result.id,lastVideoSelection:{url:message.url,height:message.height,quality:message.quality,mediaMode:message.mediaMode,audioFormat:message.audioFormat}});
-      return {...result,hostVersion:host.version,hostPath:host.hostPath};
+        return {...result,hostVersion:host.version,hostPath:host.hostPath,companionAvailable:host.capabilities?.includes('video-companion-v1')===true};
     })().then(reply,error=>reply(Recovery.response(error)));
     return true;
   }

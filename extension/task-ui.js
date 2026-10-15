@@ -62,6 +62,12 @@ function renderTaskCard(task,send,poll){
   if(task.probeSummary?.total){const p=task.probeSummary;card.append(taskNode('p','monitor-note',`探测 ${p.success}/${p.total} 个文件 · ${p.ranges} 个支持分段`));}
   if(task.recoveryNote)card.append(taskNode('p','monitor-note',task.recoveryNote));
   if(task.validation&&task.state==='completed')card.append(taskNode('p','monitor-note',task.validation));
+  if(task.companionStatus){
+    const label=task.state==='completed'?'视频已完成 · ':'';
+    const detail=task.companionStatus==='complete'?'配套资料已保存':task.companionStatus==='partial'?'配套资料部分失败':'配套资料待保存';
+    card.append(taskNode('p','monitor-note companion-task-status',label+detail));
+    if(task.companionStatus==='partial'&&task.companionError)card.append(taskNode('p','task-error',task.companionError));
+  }
   const segments=taskNode('details','segment-details');segments.open=expandedTasks.has(task.id);segments.addEventListener('toggle',()=>{segments.open?expandedTasks.add(task.id):expandedTasks.delete(task.id);});segments.append(taskNode('summary','','分段进度与日志'));
   const files=(m.files||[]).filter(f=>f.groups?.length);
   const panel=taskNode('div','segment-panel'+(m.source==='range64'?' native-ranges':''));
@@ -90,7 +96,7 @@ function renderTaskCard(task,send,poll){
   logs.append(taskNode('summary','','原始下载日志'),taskNode('pre','monitor-log',typeof Recovery!=='undefined'?Recovery.redact(task.progress||'暂无日志'):task.progress||'暂无日志'));segments.append(logs);card.append(segments);
   if(task.error){const problem=taskNode('div','task-error');if(typeof renderTaskRecovery==='function')renderTaskRecovery(problem,task,send,poll);else problem.textContent=typeof Recovery!=='undefined'?Recovery.redact(task.error):task.error;card.append(problem);}
   const actions=taskNode('div','task-actions');
-  for(const [label,action,shown] of [['暂停','video-pause',taskCanPause(task)],['继续','video-resume',taskCanResume(task)],['打开目录','video-open-task',true],['删除','video-delete',true]]){
+  for(const [label,action,shown] of [['暂停','video-pause',taskCanPause(task)],['继续','video-resume',taskCanResume(task)],['重试配套资料','video-companion-retry',task.companionRetryable===true],['打开目录','video-open-task',true],['删除','video-delete',true]]){
     if(!shown)continue;const b=taskNode('button','',label);b.disabled=pendingTaskActions.has(task.id);b.dataset.action=action;
     if(action==='video-delete')b.title=taskCanPause(task)?'停止此任务并删除记录，保留已下载文件':'删除此任务记录，保留已下载文件';
     b.addEventListener('click',async()=>{

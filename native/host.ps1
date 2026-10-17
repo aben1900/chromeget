@@ -60,8 +60,36 @@ try {
         . (Join-Path $PSScriptRoot 'video.ps1')
         $response = Invoke-VideoAction $message
     } elseif ($message.action -eq 'status') {
-        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.40.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('video-companion-v1','ai-vision-test-v1','capture-ai-ocr-v1','capture-save-v1','capture-ocr-v1','video-quality-v1','free-translation-native-v1','ai-translation-v1','library-delete-v1','bookmark-metadata-v1','ai-config-models-v2','ai-models-v1','ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','gallery-image-options-v1','gallery-image-types-v1','webpage-gallery-v1','gallery-capture-v1','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
+        $response = @{ok = $true; path = $journal; journalPath=$defaultJournal; version='1.40.0'; hostPath=$PSCommandPath; storageFormat='json'; capabilities=@('collect-directory-v1','video-companion-v1','ai-vision-test-v1','capture-ai-ocr-v1','capture-save-v1','capture-ocr-v1','video-quality-v1','free-translation-native-v1','ai-translation-v1','library-delete-v1','bookmark-metadata-v1','ai-config-models-v2','ai-models-v1','ai-summary-v1','library-backup-v1','library-v1','setup-diagnostics','structured-errors','list','read','delete','choose-json','video-api-2','browser-cookies','video-multisite','video-toutiao','gallery','video-youtube','video-tasks','task-reuse','task-directory','gallery-select','gallery-image-options-v1','gallery-image-types-v1','webpage-gallery-v1','gallery-capture-v1','parallel-files','generic-files','task-progress','download-suite','audio-download','range64')}
         try{$installedConfig=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'config.json') -Raw -Encoding UTF8|ConvertFrom-Json;$response.extensionRoot=$installedConfig.extensionRoot;if($installedConfig.extensionRoot){$response.diskExtensionVersion=(Get-Content -LiteralPath (Join-Path $installedConfig.extensionRoot 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json).version}}catch{}
+    } elseif ($message.action -eq 'collect-choose-directory') {
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        try {
+            $dialog.Description = '设置摘录、资料库和备份的保存目录（文件名为摘录数据.json）'
+            $dialog.SelectedPath = $directory
+            if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+                $selected = [IO.Path]::GetFullPath([string]$dialog.SelectedPath)
+                if ($selected -notmatch '^[a-zA-Z]:[\\/]') { throw '请选择本地磁盘目录。' }
+                [IO.Directory]::CreateDirectory($selected) | Out-Null
+                $selectedJournal = Join-Path $selected '摘录数据.json'
+                if ([IO.File]::Exists($selectedJournal)) {
+                    $raw = [IO.File]::ReadAllText($selectedJournal, $utf8)
+                    if (-not $raw.TrimStart().StartsWith('[')) { throw '所选目录已有摘录数据.json，但内容不是记录数组。请先检查该文件。' }
+                    $parsed = ConvertFrom-Json -InputObject $raw -ErrorAction Stop
+                    if ($raw -notmatch '^\s*\[\s*\]\s*$') {
+                        foreach ($entry in @($parsed)) {
+                            if ($null -eq $entry -or $entry.id -isnot [string] -or $entry.id -notmatch '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$' -or $entry.content -isnot [string] -or $entry.time -isnot [string] -or $entry.type -isnot [string]) { throw '所选目录的摘录数据.json 不是有效的精彩摘录文件。' }
+                        }
+                    }
+                }
+                $probe = Join-Path $selected ('.jingcai-write-test-' + [Guid]::NewGuid().ToString('N'))
+                try { [IO.File]::WriteAllText($probe, '', $utf8) } finally { if ([IO.File]::Exists($probe)) { [IO.File]::Delete($probe) } }
+                $config.directory = $selected
+                Write-Atomic (Join-Path $PSScriptRoot 'config.json') (ConvertTo-Json -InputObject $config -Depth 8)
+                $response = @{ok=$true; journalPath=$selectedJournal; directory=$selected}
+            } else { $response = @{ok=$true; cancelled=$true; journalPath=$defaultJournal} }
+        } finally { $dialog.Dispose() }
     } elseif ($message.action -eq 'choose-json') {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = New-Object System.Windows.Forms.OpenFileDialog

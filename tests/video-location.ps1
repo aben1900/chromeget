@@ -6,6 +6,7 @@ $folder=Join-Path $root 'folder with spaces'
 [IO.Directory]::CreateDirectory($folder)|Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\video.ps1') -Destination (Join-Path $root 'video.ps1')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\gallery-image.ps1') -Destination $root
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\video-companion.ps1') -Destination $root
 . (Join-Path $root 'video.ps1')
 $rejected=$false;try{Get-RecentVideoLocation $jobs|Out-Null}catch{$rejected=$true}
 if(-not $rejected){throw 'Empty jobs not rejected'}
@@ -37,3 +38,10 @@ if($launch.arguments -ne (Quote-VideoArg $galleryFolder)){throw 'Gallery did not
 $rejected=$false;try{Invoke-VideoAction ([pscustomobject]@{action='video-open-task';id=$id})|Out-Null}catch{$rejected=$true}
 if(-not $rejected){throw 'Deleted task opened'}
 Write-Output 'PASS per-task folders for all states, gallery folder and deleted-task rejection'
+$nested=Join-Path $folder 'video and companion';[IO.Directory]::CreateDirectory($nested)|Out-Null
+$nestedMedia=Join-Path $nested 'movie.mp4';[IO.File]::WriteAllBytes($nestedMedia,[byte[]](1,2,3))
+$id=[Guid]::NewGuid().ToString('N')
+Write-VideoJson (Join-Path $jobs ($id+'.json')) @{state='completed';fileLayout='video-folder-v1';file=$nestedMedia;directory=$folder}
+$result=Invoke-VideoAction ([pscustomobject]@{action='video-open-task';id=$id})
+if($result.directory -ne $nested -or $launch.arguments -ne (Quote-VideoArg $nested)){throw 'Grouped video task did not open its own folder'}
+Write-Output 'PASS grouped video task opens its video and companion folder'

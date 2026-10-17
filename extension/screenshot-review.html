@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>截图确认</title><link rel="stylesheet" href="ocr-review.css"><link rel="stylesheet" href="screenshot-confirm.css"><link rel="stylesheet" href="icon-buttons.css"></head>
+<body class="screenshot-review-page">
+<header class="review-heading"><h1>截图确认</h1><div><button type="button" id="retakeScreenshot" class="icon-button" title="重新截图" aria-label="重新截图"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 4H6a2 2 0 0 0-2 2v2m12-4h2a2 2 0 0 1 2 2v2M4 16v2a2 2 0 0 0 2 2h2m12-4v2a2 2 0 0 1-2 2h-2"/><path d="M12 8v8m-4-4h8"/></svg></button><button type="button" id="closeScreenshot" class="icon-button" title="关闭截图确认" aria-label="关闭截图确认"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></header>
+<main class="review-layout"><section class="review-image"><img id="ocrImage" alt="区域截图预览"></section><section class="review-controls screenshot-controls">
+<div class="screenshot-source"><strong id="screenshotSourceTitle">截图预览</strong><span id="screenshotDimensions"></span></div>
+<div id="homeScreenshotFields"><label for="screenshotName">图片名称（PNG）</label><input id="screenshotName" maxlength="120"><label for="screenshotDirectory">保存目录</label><input id="screenshotDirectory" readonly><button type="button" id="chooseScreenshotDirectory">选择目录</button></div>
+<p id="screenshotStatus" role="status" aria-live="polite"></p><p id="galleryScreenshotHint" hidden>确认后将此截图加入当前图集待下载区。</p>
+<div class="screenshot-actions"><button type="button" id="cancelScreenshot">取消</button><button type="button" id="confirmScreenshot">保存图片</button></div>
+</section></main>
+<script src="ocr-image-view.js"></script><script src="screenshot-review.js"></script>
+</body></html>

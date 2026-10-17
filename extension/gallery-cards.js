@@ -8,23 +8,24 @@
   try{return normalize(new URL(info.url).pathname.match(/\.([a-z]+)$/i)?.[1]);}catch{return '';}
  }
  function render(container,images,options){
-  let busy=false,disposed=false,openMenu=null,running=0,filterOpen=false,initialized=false,defaultFilter=true;const filters=new Set(),waiting=[],items=[],checks=[],blobUrls=[];
-  let filterButton,filterMenu,filterProgress;const filterChoices=[];
+  let busy=false,disposed=false,openMenu=null,running=0,filterOpen=false,initialized=false,defaultFilter=true,minSizeKb=0;const filters=new Set(),waiting=[],items=[],checks=[],blobUrls=[];
+  let filterButton,filterMenu,filterProgress,sizeSelect;const filterChoices=[];
   const make=(tag,cls,text)=>{const el=document.createElement(tag);if(cls)el.className=cls;if(text)el.textContent=text;return el;};
   function closeMenu(){if(!openMenu)return;openMenu.menu.remove();openMenu.button.setAttribute('aria-expanded','false');openMenu=null;}
   function queueMetadata(item){if(item.removed||item.requested||disposed)return;item.requested=true;waiting.push(item);pump();}
   async function pump(){if(disposed||running>=3||!waiting.length)return;const item=waiting.shift();running++;pump();try{const data=await options.metadata(item.index);if(!disposed){item.info={...item.info,...data,format:normalize(data.format)||item.info.format};showInfo(item);}}catch{if(!disposed){item.info.bytes=null;showInfo(item);}}finally{item.resolved=true;running--;if(!disposed)refreshFilter();pump();}}
   const remainingItems=()=>items.filter(item=>!item.removed);
-  const matchesFilter=item=>defaultFilter?imageType(item.info)!=='svg':!filters.size||filters.has(imageType(item.info));
+  const matchesSize=item=>!minSizeKb||(Number.isFinite(Number(item.info.bytes))&&Number(item.info.bytes)>=minSizeKb*1024);
+  const matchesFilter=item=>matchesSize(item)&&(defaultFilter?imageType(item.info)!=='svg':!filters.size||filters.has(imageType(item.info)));
   const visibleIndexes=()=>remainingItems().filter(matchesFilter).map(item=>item.index);
   function closeFilter(focus=false){filterOpen=false;if(filterMenu)filterMenu.hidden=true;if(filterButton){filterButton.setAttribute('aria-expanded','false');if(focus)filterButton.focus();}}
   function refreshFilter(notify=true){
    if(!initialized)return;
-   const remaining=remainingItems(),counts={any:remaining.length};for(const item of remaining){const type=imageType(item.info);if(type)counts[type]=(counts[type]||0)+1;item.figure.hidden=!matchesFilter(item);}counts.default=remaining.length-(counts.svg||0);
+   const remaining=remainingItems(),sizeMatches=remaining.filter(matchesSize),counts={any:sizeMatches.length};for(const item of remaining){if(matchesSize(item)){const type=imageType(item.info);if(type)counts[type]=(counts[type]||0)+1;}item.figure.hidden=!matchesFilter(item);}counts.default=sizeMatches.length-(counts.svg||0);
    for(const choice of filterChoices){const count=counts[choice.value]||0,selected=choice.value==='default'?defaultFilter:!defaultFilter&&(choice.value==='any'?!filters.size:filters.has(choice.value));choice.button.textContent=(selected?'✓ ':'　 ')+choice.label+' ('+count+')';choice.button.setAttribute('aria-label',choice.label+' ('+count+')');choice.button.disabled=busy||(!count&&!selected);choice.button.setAttribute('aria-checked',String(selected));}
    if(filterProgress){const resolved=remaining.filter(item=>item.resolved).length;filterProgress.textContent=resolved<remaining.length?'确认类型 '+resolved+'/'+remaining.length:'';filterProgress.hidden=resolved===remaining.length;}
    if(filterButton){const labels=Object.keys(formats).filter(type=>filters.has(type)).map(type=>formats[type]);filterButton.textContent='Type · '+(defaultFilter?'默认（不含 SVG）':labels.length?labels.slice(0,2).join('、')+(labels.length>2?' 等 '+labels.length+' 种':''):'Any')+' ('+visibleIndexes().length+') ⌄';filterButton.title='多选图片类型：'+(defaultFilter?'默认不显示 SVG，可选择 SVG 或 Any 查看':labels.join('、')||'Any（全部）')+'；类型未知的图片保留在默认和 Any 中';}
-   empty.hidden=visibleIndexes().length>0;empty.textContent=remaining.length?'所选类型暂无图片，请选择其他类型。':'图集中已无图片，可重新获取或添加截图。';
+   empty.hidden=visibleIndexes().length>0;empty.textContent=remaining.length?'所选类型或大小暂无图片，请调整筛选条件。':'图集中已无图片，可重新获取或添加截图。';
    if(notify)options.onFilterChange?.();
   }
   function setFilter(value){if(!['any','default'].includes(value)&&!formats[value])return;defaultFilter=value==='default';filters.clear();if(formats[value])filters.add(value);closeMenu();closeFilter();refreshFilter();}
@@ -69,12 +70,17 @@
    for(const [value,label]of [['default','默认（不含 SVG）'],['any','Any'],...Object.entries(formats)]){const button=make('button');button.type='button';button.setAttribute('role','menuitemcheckbox');button.onclick=()=>toggleFilter(value);filterMenu.append(button);filterChoices.push({value,label,button});}
    filterButton.onclick=()=>{if(busy)return;closeMenu();filterOpen=!filterOpen;filterMenu.hidden=!filterOpen;filterButton.setAttribute('aria-expanded',String(filterOpen));if(filterOpen)filterChoices.find(c=>c.button.getAttribute('aria-checked')==='true'&&!c.button.disabled)?.button.focus();};filterProgress=make('span','gallery-type-progress');filterProgress.setAttribute('role','status');options.filterContainer.replaceChildren(filterButton,filterProgress,filterMenu);
   }
+  if(options.sizeFilterContainer){
+   options.sizeFilterContainer.classList.add('gallery-size-filter');sizeSelect=make('select','gallery-size-select');sizeSelect.setAttribute('aria-label','最小图片大小');sizeSelect.title='按原图文件大小筛选；大小未知的图片在设置下限后暂不显示';
+   for(const [value,label]of [['0','大小不限'],['50','≥50 KB'],['100','≥100 KB'],['200','≥200 KB'],['500','≥500 KB'],['1024','≥1 MB']]){const option=make('option','',label);option.value=value;sizeSelect.append(option);}
+   sizeSelect.onchange=()=>{minSizeKb=Number(sizeSelect.value)||0;refreshFilter();};options.sizeFilterContainer.replaceChildren(sizeSelect);
+  }
   initialized=true;refreshFilter(false);
   for(const item of remainingItems()){if(observer)observer.observe(item.figure);else queueMetadata(item);if(options.filterContainer||!imageType(item.info))queueMetadata(item);}
   function outside(e){if(openMenu&&!openMenu.menu.contains(e.target)&&!openMenu.button.contains(e.target))closeMenu();if(filterOpen&&!options.filterContainer.contains(e.target))closeFilter();}
   function keyboard(e){if(e.key==='Escape'){if(openMenu){const button=openMenu.button;closeMenu();button.focus();e.preventDefault();}else if(filterOpen){closeFilter(true);e.preventDefault();}}else if(filterOpen&&['ArrowDown','ArrowUp','Home','End'].includes(e.key)){const buttons=filterChoices.map(c=>c.button).filter(b=>!b.disabled),i=buttons.indexOf(document.activeElement);const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next]?.focus();e.preventDefault();}}
   document.addEventListener('click',outside);document.addEventListener('keydown',keyboard);
-  return {checks,getCount:()=>remainingItems().length,getVisibleIndexes:visibleIndexes,setFilter,setBusy(value){busy=value;if(busy){closeMenu();closeFilter();}if(filterButton)filterButton.disabled=busy;for(const item of items){item.check.disabled=busy;item.download.disabled=busy;item.remove.disabled=busy;item.figure.dataset.selected=String(item.check.checked);}refreshFilter(false);},destroy(){disposed=true;waiting.length=0;observer?.disconnect();closeMenu();closeFilter();for(const url of blobUrls)URL.revokeObjectURL(url);document.removeEventListener('click',outside);document.removeEventListener('keydown',keyboard);}};
+  return {checks,getCount:()=>remainingItems().length,getVisibleIndexes:visibleIndexes,setFilter,setBusy(value){busy=value;if(busy){closeMenu();closeFilter();}if(filterButton)filterButton.disabled=busy;if(sizeSelect)sizeSelect.disabled=busy;for(const item of items){item.check.disabled=busy;item.download.disabled=busy;item.remove.disabled=busy;item.figure.dataset.selected=String(item.check.checked);}refreshFilter(false);},destroy(){disposed=true;waiting.length=0;observer?.disconnect();closeMenu();closeFilter();for(const url of blobUrls)URL.revokeObjectURL(url);document.removeEventListener('click',outside);document.removeEventListener('keydown',keyboard);}};
  }
  window.GalleryCards={render};
 })();

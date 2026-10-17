@@ -14,4 +14,6 @@ async function restoreHoverDownload(){
   if(!await chrome.permissions.contains({origins:['http://*/*','https://*/*']}))return;
   if(!(await chrome.scripting.getRegisteredContentScripts({ids:[HOVER_SCRIPT.id]})).length)await chrome.scripting.registerContentScripts([HOVER_SCRIPT]);
   else await chrome.scripting.updateContentScripts([HOVER_SCRIPT]);
+  const tabs=await chrome.tabs.query({});
+  await Promise.allSettled(tabs.filter(tab=>Number.isInteger(tab.id)&&webpageUrl(tab.url)).map(tab=>chrome.scripting.executeScript({target:{tabId:tab.id,allFrames:true},files:['video-hover.js']})));
 }

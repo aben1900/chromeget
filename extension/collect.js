@@ -1,8 +1,8 @@
 (() => {
   const el=id=>document.getElementById(id);
-  let windowId,draft=null,edits=Promise.resolve(),editError=null,busy=false,saved=false,sequence=0,epoch=0,replacement=null;
+  let windowId,draft=null,edits=Promise.resolve(),editError=null,busy=false,saved=false,sequence=0,epoch=0,replacement=null,savePath='';
   async function send(action,extra={}){
-    let timer;try{const r=await Promise.race([chrome.runtime.sendMessage({action,windowId,...extra}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('提交结果尚未确认，请检查保存状态')),20000);})]);if(!r?.ok)throw (typeof Recovery!=='undefined'?Recovery.toError(r):Error(r?.error||'操作未完成'));return r;}finally{clearTimeout(timer);}
+    let timer;try{const r=await Promise.race([chrome.runtime.sendMessage({action,windowId,...extra}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(action==='collect-choose-save-directory'?'选择目录超时，请重试':'提交结果尚未确认，请检查保存状态')),action==='collect-choose-save-directory'?300000:20000);})]);if(!r?.ok)throw (typeof Recovery!=='undefined'?Recovery.toError(r):Error(r?.error||'操作未完成'));return r;}finally{clearTimeout(timer);}
   }
   function render(){
     const c=Collect.classify(el('collectInput').value),isUrl=c.kind==='url';
@@ -14,7 +14,7 @@
     el('saveCollect').textContent=saved?'已保存':busy?'正在保存…':isUrl?'保存为网址':'确认保存';
     for(const id of ['collectInput','collectType','collectTitle','bookmarkTitle','bookmarkNote','bookmarkAuthor','useCurrentPage'])el(id).disabled=busy||!Number.isInteger(windowId);
     el('saveCollect').disabled=busy||!Number.isInteger(windowId)||c.kind==='empty';
-    el('downloadCollect').disabled=busy;el('collectHint').textContent=isUrl?'保存网址只收藏地址。下载内容会先打开对应预览，不会直接下载。':c.kind==='multi'?'也可以把这些网址作为文字保存。':'原文保留在本机；标题可在保存前修改。';
+    el('downloadCollect').disabled=busy;el('chooseSaveFile').disabled=busy||!Number.isInteger(windowId);el('collectHint').textContent='保存文件：'+(savePath||'正在读取…');el('collectHint').title=savePath;
   }
   function persist(source){
     el('duplicatePanel').hidden=true;saved=false;const token=++sequence,editEpoch=epoch,snapshot={text:el('collectInput').value,type:el('collectType').value,title:el('collectTitle').value,bookmarkTitle:el('bookmarkTitle').value,note:el('bookmarkNote').value,author:el('bookmarkAuthor').value,...(source||{})};
@@ -34,6 +34,7 @@
     catch(e){if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;el('checkCollect').hidden=!draft;}finally{finish();}
   }
   el('saveCollect').addEventListener('click',()=>save(false));
+  el('chooseSaveFile').addEventListener('click',async()=>{if(busy)return;busy=true;render();try{await edits;if(editError)throw editError;const r=await send('collect-choose-save-directory');if(!r.cancelled){savePath=r.journalPath;el('collectStatus').textContent='已设置保存文件：'+savePath;el('collectError').textContent='';}}catch(e){if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;}finally{busy=false;render();}});
   el('saveDuplicate').addEventListener('click',()=>save(true));
   el('checkCollect').addEventListener('click',async()=>{if(busy||!draft)return;busy=true;el('checkCollect').disabled=true;render();try{await edits;let r=await send('collect-state',{id:draft.id});if(r.state==='pending'||r.state==='unknown')r=await send('collect-retry',{id:draft.id});displayState(r);}catch(e){if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;}finally{el('checkCollect').disabled=false;finish();}});
   async function route(batch=false){
@@ -43,6 +44,6 @@
   }
   el('downloadCollect').addEventListener('click',()=>route());el('batchCollect').addEventListener('click',()=>route(true));
   el('useCurrentPage').addEventListener('click',async()=>{try{const [tab]=await chrome.tabs.query({active:true,windowId});if(!Collect.classify(tab?.url).url)throw Error('当前页面不能收集，请切换到普通网页');el('collectInput').value=tab.url;el('bookmarkTitle').value=String(tab.title||'').slice(0,120);await persist({sourceUrl:tab.url,sourceTitle:tab.title||''});}catch(e){if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;}});
-  chrome.windows.getCurrent().then(async w=>{windowId=w.id;const token=sequence;const r=await send('collect-load');if(sequence===token)load(r.draft);chrome.storage.onChanged.addListener((changes,area)=>{const d=changes[`collect-draft:${windowId}`]?.newValue;if(area==='session'&&d?.sourceUrl&&d.id!==draft?.id){if(busy)replacement=d;else load(d);}});render();}).catch(e=>{if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;});
+  chrome.windows.getCurrent().then(async w=>{windowId=w.id;const token=sequence;const [loaded,location]=await Promise.allSettled([send('collect-load'),send('collect-save-location')]);if(loaded.status==='fulfilled'&&sequence===token)load(loaded.value.draft);if(location.status==='fulfilled')savePath=location.value.journalPath||'';else savePath='暂不可读取';if(loaded.status==='rejected'||location.status==='rejected')el('collectError').textContent=(loaded.status==='rejected'?loaded.reason:location.reason).message;chrome.storage.onChanged.addListener((changes,area)=>{const d=changes[`collect-draft:${windowId}`]?.newValue;if(area==='session'&&d?.sourceUrl&&d.id!==draft?.id){if(busy)replacement=d;else load(d);}});render();}).catch(e=>{if(typeof Recovery!=='undefined')Recovery.setError(el('collectError'),e);else el('collectError').textContent=e.message;});
   render();
 })();

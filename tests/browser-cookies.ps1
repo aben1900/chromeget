@@ -3,6 +3,7 @@ $root=Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ('work\cookie
 [IO.Directory]::CreateDirectory($root)|Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\video.ps1') -Destination (Join-Path $root 'video.ps1')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\gallery-image.ps1') -Destination $root
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\video-companion.ps1') -Destination $root
 . (Join-Path $root 'video.ps1')
 $text="# Netscape HTTP Cookie File`n#HttpOnly_.bilibili.com`tTRUE`t/`tTRUE`t0`tSESSDATA`tsynthetic`n"
 $result=Invoke-VideoAction ([pscustomobject]@{action='video-browser-cookies';cookieText=$text})

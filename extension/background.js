@@ -252,6 +252,12 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if(['collect-load','collect-edit','collect-save','collect-state','collect-retry'].includes(message.action)&&sender.id===chrome.runtime.id&&(['collect.html','popup.html','app.html'].some(p=>sender.url===chrome.runtime.getURL(p))||ocrReviewSender)){
     exclusive(()=>collectionRequest(message,sender.url===chrome.runtime.getURL('collect.html')?'collect-draft':'content-ocr-draft')).then(reply,error=>reply(Recovery.response(error)));return true;
   }
+  if(['collect-save-location','collect-choose-save-directory'].includes(message.action)&&topExtensionPage(sender,['collect.html'])){
+    const run=async()=>{const status=await native({action:'status'});if(!status.capabilities?.includes('collect-directory-v1'))throw Error('本地程序需要更新，请运行“开始使用.cmd → 更新 / 修复”。');if(message.action==='collect-save-location')return {ok:true,journalPath:status.journalPath};
+      await flush();const {pending=[]}=await chrome.storage.local.get('pending');if(pending.length)throw Error('还有待保存的摘录，请先检查保存状态，再切换保存目录。');
+      const result=await native({action:'collect-choose-directory'});if(!result.cancelled)await chrome.storage.local.set({libraryPath:'',path:result.journalPath});return result;
+    };(message.action==='collect-save-location'?run():exclusive(run)).then(reply,error=>reply(Recovery.response(error)));return true;
+  }
   if(message.action==='retry-pending' && sender.id===chrome.runtime.id && ['app.html','connection-window.html'].some(p=>sender.url?.split('?')[0]===chrome.runtime.getURL(p))){
     exclusive(async()=>{await flush();const {pending=[],lastError=''}=await chrome.storage.local.get(['pending','lastError']);return {ok:!pending.length,pendingCount:pending.length,error:Recovery.redact(lastError)};}).then(reply,e=>reply(Recovery.response(e)));return true;
   }
@@ -392,7 +398,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         const path = message.action === 'default-json' ? undefined : choice.journalPath;
         const result = await native({action:'list', journalPath:path, offset:0});
         await chrome.storage.local.set({libraryPath:path || ''});
-        return result;
+        return {...result,defaultJournalPath:status.journalPath};
       }
       const {libraryPath} = await chrome.storage.local.get('libraryPath');
       const journalPath = libraryPath || status.journalPath;
@@ -403,7 +409,8 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         if (pending.length) throw new Error('请先重试并保存待处理记录，再删除，避免记录重试后重新出现。');
         return native({action: 'delete', ids: message.ids, journalPath});
       }
-      return native({action: message.action, id: message.id, offset: message.offset, journalPath: libraryPath});
+      const result=await native({action: message.action, id: message.id, offset: message.offset, journalPath: libraryPath});
+      return message.action==='list'?{...result,defaultJournalPath:status.journalPath}:result;
     }).then(reply, error => reply({ok: false, error: error.message}));
     return true;
   }

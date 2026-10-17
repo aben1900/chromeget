@@ -32,5 +32,8 @@ const assert=require('assert/strict'),fs=require('fs'),{chromium}=require('playw
  assert.equal(await page.evaluate(()=>captureShadow.querySelectorAll('canvas').length),1,'only current screenshot is painted');
  assert.equal(await page.evaluate(()=>captureShadow.querySelector('.previous-region').textContent),'上次范围');
  await page.keyboard.press('Escape');await page.waitForFunction(()=>result?.cancelled);
+ await page.evaluate(png=>{result=null;GalleryCapture.selectRegion(png,{width:800,height:600,x:0,y:0,url:location.href}).then(r=>result=r)},png);
+ await page.locator('[data-chromeget-capture]').waitFor({state:'attached'});await page.mouse.move(100,80);await page.mouse.down();await page.mouse.move(400,280);await page.mouse.up();
+ assert.equal(await page.evaluate(()=>captureShadow.querySelector('[aria-label="滚动长截图"]').getAttribute('aria-pressed')),'false');await page.evaluate(()=>captureShadow.querySelector('[aria-label="滚动长截图"]').click());await page.waitForFunction(()=>result?.long===true);assert.equal(await page.locator('[data-chromeget-capture]').count(),0);
  assert.deepEqual(errors,[]);console.log('PASS region crop, cancel, strict CSP and transparent previous-range outline');
 }finally{await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});

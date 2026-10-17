@@ -1,5 +1,5 @@
 ﻿. (Join-Path $PSScriptRoot 'gallery-image.ps1')
-if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'video-companion.ps1')){. (Join-Path $PSScriptRoot 'video-companion.ps1')}
+. (Join-Path $PSScriptRoot 'video-companion.ps1')
 function Get-VideoParseError([string]$site,[string]$engineError) {
     $reason=$engineError.Trim()
     if(-not $reason){$reason='下载引擎未返回具体原因，请重试。'}
@@ -198,6 +198,12 @@ function Invoke-VideoActionCore($message) {
         if($job.directory -notmatch '^[a-zA-Z]:[\\/]' -or $job.directory -match '[\r\n]'){throw '任务保存目录无效。'}
         $directory=[IO.Path]::GetFullPath($job.directory)
         if(-not (Test-Path -LiteralPath $directory -PathType Container)){throw '任务保存目录已移动或删除。'}
+        if($job.fileLayout -eq 'video-folder-v1' -and $job.file){
+            $media=[IO.Path]::GetFullPath([string]$job.file)
+            if(-not $media.StartsWith($directory.TrimEnd('\','/')+'\',[StringComparison]::OrdinalIgnoreCase)){throw '视频文件不在任务保存目录内。'}
+            $videoFolder=[IO.Path]::GetDirectoryName($media)
+            if(Test-Path -LiteralPath $videoFolder -PathType Container){Assert-CompanionNoLinks $videoFolder;$directory=$videoFolder}
+        }
         Start-Process -FilePath (Join-Path $env:SystemRoot 'explorer.exe') -ArgumentList (Quote-VideoArg $directory) -WindowStyle Normal|Out-Null
         return @{ok=$true;directory=$directory}
     }
@@ -378,11 +384,8 @@ function Invoke-VideoActionCore($message) {
             }
             $notice=''
             if($site -eq 'bilibili' -and $qualities.Count -and -not @($qualities|Where-Object{$_.quality -ge 112}).Count){$notice='未返回高码率档位；大会员请重新获取浏览器登录态后重试。'}
-            $companion=$null
-            if(Get-Command New-VideoCompanionDraft -ErrorAction SilentlyContinue){
-                $sourcePage=if($message.referer){Assert-MediaPageUrl ([string]$message.referer)}else{$url}
-                $companion=New-VideoCompanionDraft $info $url $sourcePage $jobs $site
-            }
+            $sourcePage=if($message.referer){Assert-MediaPageUrl ([string]$message.referer)}else{$url}
+            $companion=New-VideoCompanionDraft $info $url $sourcePage $jobs $site
             return @{ok=$true; title=$info.title; heights=$heights; qualities=$qualities; qualityNotice=$notice; directory=$settings.directory;companion=$companion}
         } finally { foreach ($path in @($out,$err)) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } } }
     }
@@ -408,9 +411,15 @@ function Invoke-VideoActionCore($message) {
         $outputIndex=[Array]::IndexOf($arguments,'-o');$arguments[$outputIndex+1]=('【'+$siteName+'】%(title).100B [%(id)s] [音频-'+$audioFormat+'].%(ext)s')
         $arguments=@('--extract-audio','--audio-format',$audioFormat,'--audio-quality','0')+$arguments
     }
-    $newJob=@{mediaMode=$(if($audio){'audio'}else{'video'});audioFormat=$audioFormat;ffprobe=([IO.Path]::Combine([IO.Path]::GetDirectoryName($tools.ffmpeg),'ffprobe.exe'));createdAt=(Get-Date).ToUniversalTime().ToString('o');state='starting'; directory=$settings.directory; arguments=$arguments; engine=$tools.engine; error=''; file=''; siteName=$siteName;title=([string]$message.title);height=$height;source=$url}
+    $newJob=@{fileLayout='';mediaMode=$(if($audio){'audio'}else{'video'});audioFormat=$audioFormat;ffprobe=([IO.Path]::Combine([IO.Path]::GetDirectoryName($tools.ffmpeg),'ffprobe.exe'));createdAt=(Get-Date).ToUniversalTime().ToString('o');state='starting'; directory=$settings.directory; arguments=$arguments; engine=$tools.engine; error=''; file=''; siteName=$siteName;title=([string]$message.title);height=$height;source=$url}
     if(-not $audio -and $message.companionDraftId){$newJob.companion=Commit-VideoCompanion $message $url $jobs}
     elseif(-not $audio -and ($message.companionTitle -or $message.companionText -or @($message.companionImageIds|Where-Object{$_}).Count)){throw '请先获取视频配套资料后再下载。'}
+    if($newJob.companion -and (-not [string]::IsNullOrWhiteSpace([string]$newJob.companion.text) -or @($newJob.companion.images).Count -gt 0)){
+        $outputIndex=[Array]::IndexOf($arguments,'-o')
+        $folderName='【'+$siteName+'】%(title).60B [%(id)s] - '+$id.Substring(0,8)
+        $arguments[$outputIndex+1]=[IO.Path]::Combine($folderName,[string]$arguments[$outputIndex+1])
+        $newJob.fileLayout='video-folder-v1'
+    }
     $existing=Find-ExistingDownload $jobs $newJob $false
     if($existing){
         $oldJob=Read-VideoJson (Join-Path $jobs ($existing+'.json'))

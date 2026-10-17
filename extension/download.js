@@ -11,7 +11,7 @@ function suggestedName(url){try{return safeName(decodeURIComponent(new URL(url).
 function refreshDownloadButton(){
   const b=$('fileDownload'),url=inputUrl();b.hidden=prepared?.kind==='model';
   b.disabled=submitBusy||probeBusy||!url||(!directoryReady&&prepared?.kind==='file');
-  b.textContent=submitBusy?'正在加入下载…':probeBusy?'正在识别…':queuedUrl&&queuedUrl===url?'查看下载任务':!url?'开始下载':!prepared?'识别链接':prepared.kind==='video'?'前往视频 / 图集':prepared.kind==='webpage'?'尝试解析视频':!directoryReady?'正在读取保存位置…':prepared.unverified?'仍按文件链接下载':'开始下载';
+  b.textContent=submitBusy?'正在加入下载…':probeBusy?'正在识别…':queuedUrl&&queuedUrl===url?'查看下载任务':!url?'开始下载':!prepared?'识别链接':prepared.kind==='video'?'前往视频 / 图集':prepared.kind==='webpage'?'尝试解析视频':!directoryReady?'正在读取保存位置…':prepared.unverified?'仍按文件链接下载':'仅下载文件';
 }
 function displayPrepared(){
   const p=prepared;$('filePreview').hidden=!p;if(!p){refreshDownloadButton();return;}

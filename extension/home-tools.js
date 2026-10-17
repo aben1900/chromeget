@@ -1,5 +1,5 @@
 (() => {
- const el=id=>document.getElementById(id),menu=el('homeMenu');let image=null,imageBusy=false,connectionOpening=false;
+ const el=id=>document.getElementById(id),menu=el('homeMenu');let imageBusy=false,connectionOpening=false;
  function status(text){el('homeCaptureStatus').textContent=text}
  async function send(action,extra={}){let timer;try{const r=await Promise.race([chrome.runtime.sendMessage({action,...extra}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('操作超时，请重试。')),action==='capture-directory'?300000:30000)})]);if(!r?.ok)throw Error(r?.error||'操作失败');return r;}finally{clearTimeout(timer)}}
  document.addEventListener('connection-state',event=>{const {state,title}=event.detail,button=el('connectionToggle');button.dataset.state=state;button.title=button.ariaLabel=title+' · 判定可用';button.querySelector('path').setAttribute('d',state==='ready'?'M5 12l4 4L19 6':state==='unavailable'?'M6 6l12 12M18 6L6 18':state==='attention'?'M12 5v9M12 18h.01':'M12 6v6l4 2');});
@@ -15,9 +15,14 @@
  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});
  document.querySelectorAll('[data-close-dialog]').forEach(button=>button.onclick=()=>el(button.dataset.closeDialog).close());
  document.addEventListener('content-saved',()=>{document.querySelector('#clips iframe')?.contentDocument?.getElementById('reload')?.click()});
- el('homeImageCapture').onclick=async()=>{if(imageBusy)return;imageBusy=true;el('homeImageCapture').disabled=true;status('请框选网页区域，确认截图后编辑名称和保存目录。');try{const result=await GalleryCapture.capture(chrome.windows.getCurrent().then(w=>w.id),{confirmLabel:'确认截图'});if(result.cancelled){status('已取消截图');return;}image=result;el('saveHomeImage').disabled=true;el('homeImagePreview').src=result.png;el('homeImageName').value='截图-'+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);el('imageSaveStatus').textContent='';el('imageDialog').showModal();el('homeImageDirectory').value='';el('imageSaveStatus').textContent='正在读取视频/图集保存目录…';const setting=await send('video-status');if(!setting.directory)throw Error('未读取到视频/图集保存目录，请选择目录后保存。');el('homeImageDirectory').value=setting.directory;el('saveHomeImage').disabled=false;el('imageSaveStatus').textContent='';status('');}catch(e){if(el('imageDialog').open)el('imageSaveStatus').textContent='读取保存目录失败：'+e.message;else status('截图失败：'+e.message)}finally{imageBusy=false;el('homeImageCapture').disabled=false}};
- el('chooseHomeImageDirectory').onclick=async()=>{el('chooseHomeImageDirectory').disabled=true;try{const r=await send('capture-directory',{directory:el('homeImageDirectory').value});if(!r.cancelled){el('homeImageDirectory').value=r.directory;el('saveHomeImage').disabled=!image||!r.directory;el('imageSaveStatus').textContent='';}}catch(e){el('imageSaveStatus').textContent=e.message}finally{el('chooseHomeImageDirectory').disabled=false}};
- el('saveHomeImage').onclick=async()=>{if(!image)return;el('saveHomeImage').disabled=true;el('chooseHomeImageDirectory').disabled=true;try{const saved=await send('capture-save',{png:image.png,name:el('homeImageName').value,directory:el('homeImageDirectory').value});el('imageSaveStatus').textContent='已保存：'+saved.path;image=null;status('截图已保存到指定目录。');}catch(e){el('imageSaveStatus').textContent='保存失败：'+e.message}finally{el('saveHomeImage').disabled=!image||!el('homeImageDirectory').value;el('chooseHomeImageDirectory').disabled=false}};
- el('imageDialog').addEventListener('close',()=>{image=null;el('homeImagePreview').removeAttribute('src')});
- el('imageDialog').addEventListener('cancel',()=>status('已取消截图保存。'));
+ el('homeImageCapture').onclick=async()=>{if(imageBusy)return;imageBusy=true;el('homeImageCapture').disabled=true;status('请框选网页区域，确认截图后编辑名称和保存目录。');try{
+  let result=await GalleryCapture.capture(chrome.windows.getCurrent().then(w=>w.id),{confirmLabel:'确认截图'});if(result.cancelled){status('已取消截图');return;}
+  let directory='';try{directory=(await send('video-status')).directory||''}catch{}
+  while(result&&!result.cancelled){const review=await ScreenshotConfirm.open(result,{mode:'home',directory,name:'截图-'+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19),onChooseDirectory:current=>send('capture-directory',{directory:current}),onSave:data=>send('capture-save',{png:result.png,name:data.name,directory:data.directory})});
+   if(review.action==='saved'){status('截图已保存到：'+review.path);return;}
+   if(review.action!=='retake'){status('已取消截图保存。');return;}
+   result=await GalleryCapture.capture(chrome.windows.getCurrent().then(w=>w.id),{confirmLabel:'确认截图',previousRegion:result.region});
+  }
+  status('已取消截图');
+ }catch(e){status('截图失败：'+e.message)}finally{imageBusy=false;el('homeImageCapture').disabled=false}};
 })();

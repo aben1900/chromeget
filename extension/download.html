@@ -3,13 +3,13 @@
 <div class="composer-heading"><span class="step-icon" aria-hidden="true">↓</span><h1>文件下载</h1></div>
 <input id="fileUrl" type="url" placeholder="粘贴文件或模型链接" aria-label="下载链接" autocomplete="off" spellcheck="false">
 
-<div class="actions link-shortcuts"><button id="currentLink">本页网址</button><button id="pageLinks">查找本页文件</button></div>
+<div class="actions link-shortcuts"><button id="currentLink">识别当前网页</button><button id="pageLinks">识别本页文件</button></div>
 <section id="linkResults" hidden><p id="linkCount" role="status"></p><div id="linkList"></div></section>
 <div id="filePreview" class="file-preview" hidden aria-live="polite"><span id="previewIcon" class="file-icon">↓</span><div class="preview-copy"><span id="previewKind" class="preview-kind"></span><strong id="previewName"></strong><p id="previewMeta" class="hint"></p></div></div>
 <p id="previewHint" class="hint" role="status"></p>
-<div class="destination-row"><div><span class="hint">保存到</span><p id="directoryDisplay" title="">正在读取保存位置…</p></div><button id="folder" title="选择保存目录" aria-label="选择保存目录">选择目录</button></div>
+<div class="destination-row"><div><span class="hint">保存到</span><p id="directoryDisplay" title="">正在读取保存位置…</p></div><button id="folder" type="button" title="设置保存目录" aria-label="设置保存目录"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z"/><path d="M12 11v5m-2-2 2 2 2-2"/></svg></button></div>
 <p id="destinationHint" class="hint"></p>
-<section id="hfSection" hidden><input id="hfUrl" type="hidden"><div class="model-heading"><h2>仓库文件</h2><button id="hfInspect" title="刷新仓库文件" aria-label="刷新仓库文件">↻</button></div><div class="model-selection"><p id="hfSelection" role="status">未选择文件</p><div><button id="hfAll">全选</button><button id="hfNone">清空</button></div></div><div id="hfFiles"></div><button id="hfDownload" disabled>下载所选</button></section>
+<section id="hfSection" hidden><input id="hfUrl" type="hidden"><div class="model-heading"><h2>仓库文件</h2><div class="model-heading-actions"><button id="hfInspect" type="button" title="刷新仓库文件" aria-label="刷新仓库文件">↻</button><button id="hfSizeSort" type="button" title="文件大小：默认顺序" aria-label="文件大小：默认顺序" data-sort="default" disabled><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h10M5 17h6"/></svg></button></div></div><div class="model-selection"><p id="hfSelection" role="status">未选择文件</p><div><button id="hfAll">全选</button><button id="hfNone">清空</button></div></div><div id="hfFiles"></div><button id="hfDownload" disabled>下载所选</button></section>
 <button id="fileDownload" class="main-download" disabled>开始下载</button>
 <p id="transferStatus" role="status"></p><p id="transferError" role="alert"></p>
 

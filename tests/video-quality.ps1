@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference='Stop'
 $root=Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ('work\quality-'+[Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($root)|Out-Null
-foreach($name in @('video.ps1','gallery-image.ps1')){Copy-Item (Join-Path $PSScriptRoot ('..\native\'+$name)) $root}
+foreach($name in @('video.ps1','gallery-image.ps1','video-companion.ps1')){Copy-Item (Join-Path $PSScriptRoot ('..\native\'+$name)) $root}
 . (Join-Path $root 'video.ps1')
 function Get-VideoSettings {return [pscustomobject]@{directory=(Join-Path $root 'files');cookies=''}}
 function Get-VideoTools {return @{engine='mock';ffmpeg=(Join-Path $root 'ffmpeg.exe')}}

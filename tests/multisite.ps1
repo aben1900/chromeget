@@ -3,6 +3,7 @@ $root=Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ('work\multis
 [IO.Directory]::CreateDirectory($root)|Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\video.ps1') -Destination (Join-Path $root 'video.ps1')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\gallery-image.ps1') -Destination $root
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\native\video-companion.ps1') -Destination $root
 . (Join-Path $root 'video.ps1')
 Write-VideoJson (Join-Path $root 'video-settings.json') @{directory=$root;cookies=''}
 $url=Assert-VideoUrl 'http://www.xiaohongshu.com/user/profile/abc/def?xsec_token=a%2Bb&xsec_source=pc'

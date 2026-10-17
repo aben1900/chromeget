@@ -282,7 +282,7 @@ function Assert-CompanionNoLinks([string]$path){
 function Write-VideoCompanionFiles($job,[string]$jobPath){
     if(-not $job.companion){return}
     $companion=$job.companion
-    if(-not $companion.text -and @($companion.images).Count -eq 0){$companion.status='complete';$companion.files=@();$companion.errors=@();return}
+    if([string]::IsNullOrWhiteSpace([string]$companion.text) -and @($companion.images).Count -eq 0){$companion.status='complete';$companion.files=@();$companion.errors=@();return}
     $directory=[IO.Path]::GetFullPath([string]$job.directory).TrimEnd('\','/')
     $media=[IO.Path]::GetFullPath([string]$job.file)
     if(-not $media.StartsWith($directory+'\',[StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path -LiteralPath $media -PathType Leaf)){throw '视频文件不在所选下载目录内。'}
@@ -290,7 +290,7 @@ function Write-VideoCompanionFiles($job,[string]$jobPath){
     $id=[IO.Path]::GetFileNameWithoutExtension($jobPath)
     if($id -cnotmatch '^[a-f0-9]{32}$'){throw '任务编号无效。'}
     $stem=[IO.Path]::GetFileNameWithoutExtension($media);if($stem.Length -gt 60){$stem=$stem.Substring(0,60)}
-    $folder=Join-Path ([IO.Path]::GetDirectoryName($media)) ($stem+'-'+$id.Substring(0,8)+'-配套资料')
+    $folder=if($job.fileLayout -eq 'video-folder-v1'){[IO.Path]::GetDirectoryName($media)}else{Join-Path ([IO.Path]::GetDirectoryName($media)) ($stem+'-'+$id.Substring(0,8)+'-配套资料')}
     if(Test-Path -LiteralPath $folder){if((Get-Item -LiteralPath $folder).Attributes -band [IO.FileAttributes]::ReparsePoint){throw '配套目录不能是链接。'}}
     else{[IO.Directory]::CreateDirectory($folder)|Out-Null}
     $saved=@();$errors=@()

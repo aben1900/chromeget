@@ -1,5 +1,6 @@
 (()=>{
   if(globalThis.__jingcaiVideoHover)return;globalThis.__jingcaiVideoHover=true;
+  document.getElementById('jingcai-video-download')?.remove();
   let enabled=false,video=null,hideTimer;
   const host=document.createElement('div');host.id='jingcai-video-download';host.style.cssText='position:fixed;z-index:2147483647;display:none';
   const shadow=host.attachShadow({mode:'closed'}),style=document.createElement('style');
@@ -45,6 +46,6 @@
   button.addEventListener('click',async event=>{
     event.preventDefault();event.stopPropagation();button.disabled=true;clearTimeout(hideTimer);
     try{if(!video?.isConnected)throw Error('视频已切换，请重新移到目标视频上。');const pageUrl=videoPage(video);if(!pageUrl)throw Error('未找到当前视频的帖子链接，请打开该帖子后重试。');const result=await chrome.runtime.sendMessage({action:'page-video-download',pageUrl,mediaUrl:video?.currentSrc||video?.src||''});if(!result?.ok)throw Error(result?.error||'无法打开下载面板');status.textContent='侧栏已接收，正在获取视频；结果或错误将在侧栏显示。';}
-    catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+    catch(e){if(/Extension context invalidated/i.test(e?.message||String(e))){status.textContent='扩展已更新，请刷新当前网页后重试悬浮下载。';return;}status.textContent=e.message;}finally{if(!status.textContent.includes('刷新当前网页'))button.disabled=false;}
   });
 })();

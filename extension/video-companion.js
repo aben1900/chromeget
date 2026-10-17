@@ -1,10 +1,10 @@
 window.VideoCompanion=(()=>{
   const byId=id=>document.getElementById(id);
-  function create({send,capture}){
+  function create({send,capture,onChange=()=>{}}){
     const card=byId('companionCard'),title=byId('companionTitle'),body=byId('companionText'),author=byId('companionAuthor'),imagesBox=byId('companionImages'),status=byId('companionStatus');
     let draft=null,images=[],revision=0,busy=false,externalBusy=false,unsupported=false,initial='',submitted='',sourceUrl='';
     function signature(){return JSON.stringify([title.value,body.value,images.filter(i=>i.selected).map(i=>i.id)]);}
-    function summary(){byId('companionSummary').textContent=`${body.value.trim()?'正文已带入':'正文待补充'} · ${images.some(i=>i.role==='cover'&&i.selected)?'封面已带入':'封面待补充'} · ${images.filter(i=>i.selected).length} 张图片`;}
+    function summary(){byId('companionSummary').textContent=`${body.value.trim()?'正文已带入':'正文待补充'} · ${images.some(i=>i.role==='cover'&&i.selected)?'封面已带入':'封面待补充'} · ${images.filter(i=>i.selected).length} 张图片`;onChange();}
     function updateButtons(){byId('companionChoose').disabled=busy||externalBusy||!draft||images.length>=10;byId('companionCapture').disabled=busy||externalBusy||!draft||images.length>=10;}
     function render(){imagesBox.replaceChildren();for(const item of images){
       const row=document.createElement('div');row.className='companion-image';
@@ -24,7 +24,7 @@ window.VideoCompanion=(()=>{
     function hasChanges(){return !!draft&&signature()!==initial;}
     function hasUnsubmittedChanges(){return !!draft&&signature()!==submitted;}
     function markSubmitted(){submitted=signature();initial=submitted;}
-    function setDisabled(value){externalBusy=!!value;title.disabled=externalBusy||unsupported;body.disabled=externalBusy||unsupported;render();}
+    function setDisabled(value){if(externalBusy===!!value)return;externalBusy=!!value;title.disabled=externalBusy||unsupported;body.disabled=externalBusy||unsupported;render();}
     async function add(action,extra){if(!draft||busy)return;const token=revision;busy=true;updateButtons();status.textContent=action==='video-companion-choose'?'正在打开图片选择框…':'请在当前视频帖页框选图片；Esc 取消。';
       try{const result=await send(action,{draftId:draft.draftId,...extra});if(token!==revision)return;if(result.cancelled){status.textContent='已取消';return;}for(const image of result.images||[])images.push({...image,selected:true,pending:false});status.textContent='图片已加入配套资料，下载前仍可移除。';render();}
       catch(error){if(token===revision)status.textContent='添加图片失败：'+error.message;}
@@ -37,7 +37,7 @@ window.VideoCompanion=(()=>{
       finally{busy=false;updateButtons();}
     });
     for(const field of [title,body])field.addEventListener('input',summary);
-    return{show,showUnsupported,reset,selection,hasChanges,hasUnsubmittedChanges,markSubmitted,setDisabled,isActive:()=>!!draft||unsupported,sourceUrl:()=>sourceUrl};
+    return{show,showUnsupported,reset,selection,hasChanges,hasUnsubmittedChanges,markSubmitted,setDisabled,hasContent:()=>!!draft&&(!!body.value.trim()||images.some(i=>i.selected)),isActive:()=>!!draft||unsupported,sourceUrl:()=>sourceUrl};
   }
   return{create};
 })();

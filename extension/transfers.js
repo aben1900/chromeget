@@ -12,23 +12,31 @@ send('video-status').then(r=>{$('transferMode').value=r.transferMode||'fast';}).
 if($('hfInspect')){
 $('hfInspect').addEventListener('click',inspectModelFiles);
 }
+if($('hfSizeSort')){
+ const button=$('hfSizeSort'),paths={default:'M5 7h14M5 12h10M5 17h6',desc:'M4 6h10M4 11h7M4 16h4m11-9v11m-3-3 3 3 3-3',asc:'M4 6h10M4 11h7M4 16h4m11 11V7m-3 3 3-3 3 3'};
+ let sizeSort='default';
+ function showSizeSort(){button.dataset.sort=sizeSort;const label=sizeSort==='desc'?'文件大小：从大到小':sizeSort==='asc'?'文件大小：从小到大':'文件大小：默认顺序';button.title=label;button.setAttribute('aria-label',label);button.querySelector('svg').innerHTML='<path d="'+paths[sizeSort]+'"/>';button.disabled=!fileDraft?.files?.length;}
+ function arrangeFiles(){const ordered=[...fileChecks];if(sizeSort!=='default')ordered.sort((a,b)=>(sizeSort==='desc'?Number(b.file.size||0)-Number(a.file.size||0):Number(a.file.size||0)-Number(b.file.size||0))||a.ordinal-b.ordinal);else ordered.sort((a,b)=>a.ordinal-b.ordinal);$('hfFiles').append(...ordered.map(item=>item.label));showSizeSort();}
+ button.addEventListener('click',()=>{sizeSort=sizeSort==='default'?'desc':sizeSort==='desc'?'asc':'default';arrangeFiles();});
+ window.resetModelSizeSort=()=>{sizeSort='default';showSizeSort();};window.arrangeModelFiles=arrangeFiles;
+}
 function inspectModelFiles(){return transferTask($('hfInspect'),async()=>{
   const requestRevision=++fileDraftRevision,requestedUrl=$('hfUrl').value.trim();
-  fileDraft=null;fileChecks=[];$('hfFiles').replaceChildren();$('hfDownload').disabled=true;
+  fileDraft=null;fileChecks=[];$('hfFiles').replaceChildren();$('hfDownload').disabled=true;window.resetModelSizeSort?.();
   $('transferStatus').textContent='正在读取仓库文件…';
   let r;try{r=await send('video-hf-info',{url:requestedUrl});}catch(e){if(requestRevision!==fileDraftRevision)return;throw e;}if(requestRevision!==fileDraftRevision)return;fileDraft=r;
-  for(const file of r.files){
+  for(const [ordinal,file] of r.files.entries()){
     const label=document.createElement('label');label.className='file-choice';
     const check=document.createElement('input');check.type='checkbox';check.value=file.index;
-    check.addEventListener('change',updateFileSelection);fileChecks.push({check,file});
+    check.addEventListener('change',updateFileSelection);fileChecks.push({check,file,label,ordinal});
     const name=document.createElement('span');name.textContent=file.name+' · '+bytes(file.size);label.append(check,name);$('hfFiles').append(label);
   }
-  $('transferStatus').textContent=r.title+' · '+r.files.length+' 个文件 · '+bytes(r.totalBytes);updateFileSelection();if(typeof onModelLoaded==='function')onModelLoaded(r);
+  window.arrangeModelFiles?.();$('transferStatus').textContent=r.title+' · '+r.files.length+' 个文件 · '+bytes(r.totalBytes);updateFileSelection();if(typeof onModelLoaded==='function')onModelLoaded(r);
 });}
 if($('hfInspect')){
 function updateFileSelection(){const selected=fileChecks.filter(x=>x.check.checked);$('hfSelection').textContent=selected.length?'已选 '+selected.length+' 项 · '+bytes(selected.reduce((n,x)=>n+x.file.size,0)):'未选择文件';$('hfDownload').disabled=!selected.length||(typeof directoryReady!=='undefined'&&!directoryReady);$('hfDownload').textContent=$('fileUrl')?'下载所选':selected.length?'下载所选 '+selected.length+' 个文件':'请先勾选要下载的文件';}
 for(const [id,checked] of [['hfAll',true],['hfNone',false]])$(id).addEventListener('click',()=>{fileChecks.forEach(x=>x.check.checked=checked);updateFileSelection();});
-$('hfUrl').addEventListener('input',()=>{fileDraftRevision++;fileDraft=null;fileChecks=[];$('hfFiles').replaceChildren();updateFileSelection();});
+$('hfUrl').addEventListener('input',()=>{fileDraftRevision++;fileDraft=null;fileChecks=[];$('hfFiles').replaceChildren();window.resetModelSizeSort?.();updateFileSelection();});
 $('hfDownload').addEventListener('click',()=>transferTask($('hfDownload'),async()=>{
   if(!fileDraft)throw Error('请先获取文件清单。');
   const result=await send('video-file-start',{draftId:fileDraft.draftId,selectedIndexes:fileChecks.filter(x=>x.check.checked).map(x=>x.file.index),confirmed:true});

@@ -51,6 +51,7 @@
     {
       "resources": [
         "ocr-review.html",
+        "screenshot-review.html",
         "connection-window.html",
         "translate.html",
         "model-settings.html"

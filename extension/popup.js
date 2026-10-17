@@ -1,6 +1,14 @@
 const $ = id => document.getElementById(id);
-let records = [], offset = 0, total = 0, busy = false, journalPath;
+let records = [], offset = 0, total = 0, busy = false, journalPath, defaultJournalPath;
 const selected = new Set();
+function showJournalLocation(result) {
+  journalPath = result.journalPath;
+  defaultJournalPath = result.defaultJournalPath || defaultJournalPath || journalPath;
+  const normalize = path => String(path || '').replace(/\\/g, '/').toLowerCase();
+  $('jsonSwitchLabel').textContent = normalize(journalPath) === normalize(defaultJournalPath) ? '当前已是默认保存文件' : '正在查看其他摘录文件';
+  $('jsonPath').textContent = journalPath;
+  $('jsonPath').title = journalPath;
+}
 async function request(action, extra = {}) {
   const result = await chrome.runtime.sendMessage({action, ...extra});
   if (!result?.ok) throw new Error(result?.error || '操作失败，请重试');
@@ -68,7 +76,8 @@ function render() {
     detail.addEventListener('toggle', () => { if (detail.open && !loaded) loadContent(); });
     detail.append(summary, meta, bookmarkMeta, contentLabel, content, more); row.append(checkbox, detail); $('records').append(row);
   }
-  $('listStatus').textContent = total ? `共 ${total} 次保存 · 每项是一整次保存，点击展开原文` : '此 JSON 暂无保存记录，可选择其他 JSON 文件';
+  $('listStatus').textContent = total ? '' : '此 JSON 暂无保存记录，可选择其他 JSON 文件';
+  $('totalRecords').textContent = `共 ${total} 条记录`;
   $('pageInfo').textContent = total ? `${Math.floor(offset / 10) + 1} / ${Math.ceil(total / 10)}` : '0 / 0';
   controls();
 }
@@ -81,7 +90,7 @@ async function loadRecords(newOffset = offset) {
       result = await request('list', {offset: newOffset});
     }
     records = result.records.slice(0,10); total = result.total; offset = newOffset; selected.clear(); render();
-    journalPath = result.journalPath; $('jsonPath').textContent = journalPath;
+    showJournalLocation(result);
   } catch (error) { if(typeof Recovery!=='undefined')Recovery.setError($('listError'),error);else $('listError').textContent=error.message; $('listStatus').textContent = '读取失败，可点击刷新重试'; }
   finally { busy = false; controls(); }
 }
@@ -112,7 +121,7 @@ async function chooseJson(action) {
   try {
     const result = await request(action);
     if (result.cancelled) return;
-    journalPath = result.journalPath; $('jsonPath').textContent = journalPath;
+    showJournalLocation(result);
     records = result.records.slice(0,10); total = result.total; offset = 0; selected.clear();
     $('confirmDelete').hidden = true; render();
   } catch (error) { if(typeof Recovery!=='undefined')Recovery.setError($('listError'),error);else $('listError').textContent=error.message; }

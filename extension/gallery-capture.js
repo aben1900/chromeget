@@ -3,14 +3,48 @@
  function viewport() {
   return {width:innerWidth,height:innerHeight,x:scrollX,y:scrollY,url:location.href,scale:visualViewport?.scale||1};
  }
- async function clearReviewers(token){for(const host of document.querySelectorAll('[data-chromeget-ocr-review]')){if(host.dataset.chromegetOcrReview===token)continue;host.dispatchEvent(new Event('chromeget-ocr-dispose'));host.remove()}await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))}
+ async function clearReviewers(token){for(const host of document.querySelectorAll('[data-chromeget-ocr-review]')){if(host.dataset.chromegetOcrReview===token)continue;host.dispatchEvent(new Event('chromeget-ocr-dispose'));host.remove()}for(const host of document.querySelectorAll('[data-chromeget-screenshot-review]')){host.dispatchEvent(new Event('chromeget-screenshot-dispose'));host.remove()}await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))}
+ async function longSession(action,id,region) {
+  const current=document.querySelector('[data-chromeget-long-capture]');
+  if(action==='begin'){
+   if(current){document.removeEventListener('chromeget-capture-cancel',current.__cancel);document.removeEventListener('pointerdown',current.__pointer,true);document.removeEventListener('pointerup',current.__pointerUp,true);window.removeEventListener('keydown',current.__key,true);current.remove()}const rect=region?.rect;
+   if(!rect||![rect.x,rect.y,rect.width,rect.height].every(Number.isFinite))throw Error('长截图区域无效。');
+   const x=rect.x+rect.width/2,y=rect.y+rect.height/2;let scroller=document.elementFromPoint(x,y);
+   while(scroller&&scroller!==document.documentElement){const style=getComputedStyle(scroller);if(scroller.scrollHeight>scroller.clientHeight+2&&/(auto|scroll|overlay)/.test(style.overflowY))break;scroller=scroller.parentElement}
+   if(!scroller||scroller===document.documentElement)scroller=document.scrollingElement;
+   if(!scroller)throw Error('当前网页没有可滚动内容。');
+   const root=scroller===document.scrollingElement,bounds=root?{left:0,top:0,right:innerWidth,bottom:innerHeight}:scroller.getBoundingClientRect();
+   const left=Math.max(rect.x,bounds.left),top=Math.max(rect.y,bounds.top),right=Math.min(rect.x+rect.width,bounds.right),bottom=Math.min(rect.y+rect.height,bounds.bottom);
+   const clip={x:left,y:top,width:right-left,height:bottom-top};if(clip.width<2||clip.height<40)throw Error('框选范围与可滚动区域交集太小，请重新框选。');
+   if(scroller.scrollHeight-scroller.clientHeight-scroller.scrollTop<2)throw Error('此区域已滚动到底部，请先滚回上方再开始长截图。');
+   const host=document.createElement('div');host.dataset.chromegetLongCapture=id;host.style.cssText='position:fixed;inset:0;z-index:2147483647;pointer-events:none';
+   const shadow=host.attachShadow({mode:'closed'}),sheet=new CSSStyleSheet();sheet.replaceSync('.border{position:fixed;box-sizing:border-box;border:2px solid #3f77cf;box-shadow:0 0 0 2px #fff8;pointer-events:none}.tools{position:fixed;right:12px;bottom:12px;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:7px 9px;border-radius:9px;background:#fff;color:#26364c;box-shadow:0 3px 16px #0005;pointer-events:auto;font:13px system-ui,sans-serif}button{padding:7px 9px;border:1px solid #ccd3df;border-radius:6px;background:#fff;color:#26364c;cursor:pointer;font:inherit;white-space:nowrap}button[aria-pressed=true]{background:#dceafb;color:#174d9b;box-shadow:inset 0 2px 4px #0002}.done{background:#222;border-color:#222;color:#fff}');shadow.adoptedStyleSheets=[sheet];
+   const border=document.createElement('div');border.className='border';Object.assign(border.style,{left:clip.x+'px',top:clip.y+'px',width:clip.width+'px',height:clip.height+'px'});
+   const tools=document.createElement('div');tools.className='tools';const mode=document.createElement('button');mode.textContent='滚动长截图';mode.title='停止自动滚动并完成长截图';mode.setAttribute('aria-pressed','true');mode.setAttribute('aria-label','滚动长截图');const count=document.createElement('span');count.textContent='正在拼接…';const done=document.createElement('button');done.className='done';done.textContent='截图完成';done.title='停止滚动并完成长截图 · Enter';done.setAttribute('aria-label','截图完成');const cancel=document.createElement('button');cancel.textContent='取消';cancel.title='取消长截图 · Esc';cancel.setAttribute('aria-label','取消长截图');tools.append(mode,count,done,cancel);shadow.append(border,tools);host.__capture={scroller,clip,root,finished:false,cancelled:false,count};
+   mode.onclick=()=>{host.__capture.finished=true;mode.setAttribute('aria-pressed','false')};done.onclick=()=>{host.__capture.finished=true};cancel.onclick=()=>{host.__capture.cancelled=true};
+   host.__cancel=event=>{if(event.detail===id)host.__capture.cancelled=true};host.__key=event=>{if(event.key==='Escape'){event.preventDefault();host.__capture.cancelled=true}else if(event.key==='Enter'&&!/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName||'')&&!event.target?.isContentEditable){event.preventDefault();host.__capture.finished=true}};
+   host.__pointer=event=>{if(host.style.visibility!=='hidden')return;for(const [button,action]of[[done,'finish'],[cancel,'cancel'],[mode,'finish']]){const box=button.getBoundingClientRect();if(event.clientX>=box.left&&event.clientX<=box.right&&event.clientY>=box.top&&event.clientY<=box.bottom){event.preventDefault();event.stopImmediatePropagation();if(action==='finish')host.__capture.finished=true;else host.__capture.cancelled=true;host.__pointerHandled=true;return}}};
+   host.__pointerUp=event=>{if(!host.__pointerHandled)return;event.preventDefault();event.stopImmediatePropagation();host.__pointerHandled=false};
+   document.addEventListener('chromeget-capture-cancel',host.__cancel);document.addEventListener('pointerdown',host.__pointer,true);document.addEventListener('pointerup',host.__pointerUp,true);window.addEventListener('keydown',host.__key,true);
+   document.documentElement.append(host);
+   return {clip,scrollTop:scroller.scrollTop,maxTop:scroller.scrollHeight-scroller.clientHeight};
+  }
+  if(!current||current.dataset.chromegetLongCapture!==id)throw Error('长截图已中断，请重新框选。');const state=current.__capture;
+  if(action==='close'){document.removeEventListener('chromeget-capture-cancel',current.__cancel);document.removeEventListener('pointerdown',current.__pointer,true);document.removeEventListener('pointerup',current.__pointerUp,true);window.removeEventListener('keydown',current.__key,true);current.remove();return {ok:true}}
+  if(!state.scroller.isConnected)throw Error('网页滚动区域已变化，请重新截图。');
+  if(action==='hide'){current.style.visibility='hidden';await new Promise(resolve=>setTimeout(resolve,50))}
+  if(action==='show')current.style.visibility='visible';
+  if(action==='step'&&!state.finished&&!state.cancelled){const step=Math.max(30,Math.floor(state.clip.height-80));state.scroller.scrollTop=Math.min(state.scroller.scrollHeight-state.scroller.clientHeight,state.scroller.scrollTop+step);await new Promise(resolve=>setTimeout(resolve,350))}
+  if(action==='count')state.count.textContent='已拼接 '+region+' 段 · 自动滚动中';
+  return {clip:state.clip,scrollTop:state.scroller.scrollTop,maxTop:state.scroller.scrollHeight-state.scroller.clientHeight,finished:state.finished,cancelled:state.cancelled};
+ }
  function selectRegion(png,expected,options={}) {
   return new Promise(resolve=>{
    if(Math.abs((visualViewport?.scale||1)-1)>.001){resolve({error:'请先恢复触控板双指缩放，再重新截图。'});return;}
    if(innerWidth!==expected.width||innerHeight!==expected.height){resolve({cancelled:true});return;}
    const host=document.createElement('div');host.setAttribute('data-chromeget-capture','');
    const shadow=host.attachShadow({mode:'closed'}),style=new CSSStyleSheet();
-   style.replaceSync(`dialog{position:fixed;inset:0;width:100vw;height:100vh;max-width:none;max-height:none;box-sizing:border-box;margin:0;padding:0;border:0;background:transparent;overflow:hidden;cursor:crosshair;touch-action:none;user-select:none;color:#fff;font:14px/1.4 system-ui,sans-serif}dialog::backdrop{background:transparent}img{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.shade{position:absolute;inset:0;background:#0003;pointer-events:none}.selection{position:absolute;box-shadow:0 0 0 100vmax #0003;outline:1px solid #fff;pointer-events:none}.tools{position:absolute;display:flex;align-items:center;gap:8px;box-sizing:border-box;padding:7px;border:1px solid #ddd;border-radius:9px;background:#fff;color:#222;box-shadow:0 3px 16px #0004;cursor:default;max-width:calc(100vw - 16px)}button{font:13px/1.4 system-ui;padding:7px 10px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#222;cursor:pointer;white-space:nowrap}button:disabled{color:#aaa;cursor:default}.confirm{background:#222;color:#fff;border-color:#222}.confirm:disabled{background:#eee;border-color:#ddd}.hint{position:absolute;top:14px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:7px;background:#222;color:#fff;pointer-events:none;text-align:center;max-width:90%;white-space:nowrap}[hidden]{display:none!important}`);shadow.adoptedStyleSheets=[style];
+   style.replaceSync(`dialog{position:fixed;inset:0;width:100vw;height:100vh;max-width:none;max-height:none;box-sizing:border-box;margin:0;padding:0;border:0;background:transparent;overflow:hidden;cursor:crosshair;touch-action:none;user-select:none;color:#fff;font:14px/1.4 system-ui,sans-serif}dialog::backdrop{background:transparent}img{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.shade{position:absolute;inset:0;background:#0003;pointer-events:none}.selection{position:absolute;box-shadow:0 0 0 100vmax #0003;outline:1px solid #fff;pointer-events:none}.tools{position:absolute;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;box-sizing:border-box;padding:7px;border:1px solid #ddd;border-radius:9px;background:#fff;color:#222;box-shadow:0 3px 16px #0004;cursor:default;max-width:calc(100vw - 16px)}button{font:13px/1.4 system-ui;padding:7px 10px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#222;cursor:pointer;white-space:nowrap}button:disabled{color:#aaa;cursor:default}.confirm{background:#222;color:#fff;border-color:#222}.confirm:disabled{background:#eee;border-color:#ddd}.hint{position:absolute;top:14px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:7px;background:#222;color:#fff;pointer-events:none;text-align:center;max-width:90%;white-space:nowrap}[hidden]{display:none!important}`);shadow.adoptedStyleSheets=[style];
    const dialog=document.createElement('dialog');dialog.setAttribute('aria-label','框选截图区域');
    const image=document.createElement('canvas');image.setAttribute('aria-hidden','true');Object.assign(image.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none'});
    const shade=document.createElement('div');shade.className='shade';const selection=document.createElement('div');selection.className='selection';selection.hidden=true;
@@ -18,8 +52,8 @@
    if(oldRect&&oldView&&oldView.width===expected.width&&oldView.height===expected.height&&oldView.x===expected.x&&oldView.y===expected.y&&oldView.url===expected.url){const outline=document.createElement('div');outline.style.zIndex='1';outline.className='previous-region';Object.assign(outline.style,{position:'absolute',left:oldRect.x+'px',top:oldRect.y+'px',width:oldRect.width+'px',height:oldRect.height+'px',border:'2px dashed #4ca6ff',background:'transparent',pointerEvents:'none',boxSizing:'border-box'});const marker=document.createElement('span');marker.textContent='上次范围';Object.assign(marker.style,{position:'absolute',top:'-24px',left:'0',color:'#146ec4',background:'#fff',fontSize:'12px',padding:'2px 5px'});outline.append(marker);dialog.append(outline)}
    const hint=document.createElement('div');hint.className='hint';hint.style.zIndex='2';hint.textContent='拖动选择截图区域 · Esc 取消';
    const tools=document.createElement('div');tools.className='tools';tools.style.zIndex='2';tools.style.right='12px';tools.style.bottom='12px';
-   const size=document.createElement('span'),cancel=document.createElement('button'),confirm=document.createElement('button');
-   cancel.textContent='取消';confirm.textContent=options.confirmLabel||'确认截图';confirm.className='confirm';confirm.disabled=true;if(options.technology){const technology=document.createElement('span');technology.textContent=options.technology;tools.append(technology)}tools.append(size,cancel,confirm);dialog.append(image,shade,selection,hint,tools);shadow.append(dialog);
+   const size=document.createElement('span'),cancel=document.createElement('button'),confirm=document.createElement('button'),longToggle=document.createElement('button');
+   cancel.textContent='取消';confirm.textContent=options.confirmLabel||'确认截图';confirm.className='confirm';confirm.disabled=true;longToggle.textContent='滚动长截图';longToggle.type='button';longToggle.setAttribute('aria-label','滚动长截图');longToggle.setAttribute('aria-pressed','false');longToggle.disabled=true;if(options.technology){const technology=document.createElement('span');technology.textContent=options.technology;tools.append(technology)}tools.append(size,cancel,confirm,longToggle);dialog.append(image,shade,selection,hint,tools);shadow.append(dialog);
    let start=null,rect=null,settled=false;
    const timer=setTimeout(()=>finish({cancelled:true}),120000);
    function finish(result){if(settled)return;settled=true;clearTimeout(timer);window.removeEventListener('resize',abort);window.removeEventListener('pagehide',abort);visualViewport?.removeEventListener('resize',abort);visualViewport?.removeEventListener('scroll',abort);document.removeEventListener('visibilitychange',visibility);document.removeEventListener('chromeget-capture-cancel',externalCancel);host.remove();resolve(result);}
@@ -27,10 +61,10 @@
    function visibility(){if(document.hidden)abort();}
    function externalCancel(event){if(event.detail===options.captureId)abort()}
    function point(e){return {x:Math.max(0,Math.min(innerWidth,e.clientX)),y:Math.max(0,Math.min(innerHeight,e.clientY))};}
-   function draw(e){const p=point(e);rect={x:Math.min(p.x,start.x),y:Math.min(p.y,start.y),width:Math.abs(p.x-start.x),height:Math.abs(p.y-start.y)};selection.hidden=false;shade.hidden=true;Object.assign(selection.style,{left:rect.x+'px',top:rect.y+'px',width:rect.width+'px',height:rect.height+'px'});confirm.disabled=rect.width<2||rect.height<2;size.textContent=Math.round(rect.width)+' × '+Math.round(rect.height);}
+   function draw(e){const p=point(e);rect={x:Math.min(p.x,start.x),y:Math.min(p.y,start.y),width:Math.abs(p.x-start.x),height:Math.abs(p.y-start.y)};selection.hidden=false;shade.hidden=true;Object.assign(selection.style,{left:rect.x+'px',top:rect.y+'px',width:rect.width+'px',height:rect.height+'px'});confirm.disabled=longToggle.disabled=rect.width<2||rect.height<2;size.textContent=Math.round(rect.width)+' × '+Math.round(rect.height);}
    dialog.onpointerdown=e=>{if(e.button!==0||tools.contains(e.target))return;e.preventDefault();start=point(e);dialog.setPointerCapture(e.pointerId);draw(e);};
    dialog.onpointermove=e=>{if(start)draw(e);};dialog.onpointerup=e=>{if(!start)return;draw(e);start=null;dialog.releasePointerCapture(e.pointerId);if(!confirm.disabled)confirm.focus();};dialog.onpointercancel=()=>{start=null;};
-   confirm.onclick=()=>{if(rect&&!confirm.disabled)finish({rect,viewport:{width:expected.width,height:expected.height}});};cancel.onclick=abort;
+   confirm.onclick=()=>{if(rect&&!confirm.disabled)finish({rect,viewport:{width:expected.width,height:expected.height}});};longToggle.onclick=()=>{if(rect&&!longToggle.disabled){longToggle.setAttribute('aria-pressed','true');finish({rect,long:true,viewport:{width:expected.width,height:expected.height}});}};cancel.onclick=abort;
    dialog.oncancel=e=>{e.preventDefault();abort();};dialog.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();abort();}else if(e.key==='Enter'&&!confirm.disabled){e.preventDefault();confirm.click();}};
    window.addEventListener('resize',abort);window.addEventListener('pagehide',abort);visualViewport?.addEventListener('resize',abort);visualViewport?.addEventListener('scroll',abort);document.addEventListener('visibilitychange',visibility);document.addEventListener('chromeget-capture-cancel',externalCancel);
    // Decode bytes without a DOM image URL; strict website img-src policies must not hide the frozen snapshot.
@@ -54,6 +88,20 @@
   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;canvas.getContext('2d').drawImage(image,x,y,width,height,0,0,width,height);
   const result=canvas.toDataURL('image/png');if((result.length-22)*3/4>8*1024*1024)throw Error('截图超过 8 MB，请选择更小的范围。');
   return {png:result,width,height};
+ }
+ async function stitchLong(segments,selection) {
+  const {rect:r,viewport:v}=selection||{};
+  if(!r||!v||!Array.isArray(segments)||!segments.length||![r.x,r.y,r.width,r.height,v.width,v.height].every(Number.isFinite)||r.width<2||r.height<2||r.x<0||r.y<0||r.x+r.width>v.width||r.y+r.height>v.height)throw Error('长截图区域无效，请重新框选。');
+  const images=[];
+  for(const segment of segments){if(typeof segment.png!=='string'||!segment.png.startsWith('data:image/png;base64,')||!Number.isFinite(segment.scrollTop))throw Error('长截图分段无效。');const image=new Image();image.src=segment.png;await image.decode();images.push(image)}
+  const sx=images[0].naturalWidth/v.width,sy=images[0].naturalHeight/v.height;
+  if(images.some(image=>image.naturalWidth!==images[0].naturalWidth||image.naturalHeight!==images[0].naturalHeight))throw Error('截图期间网页尺寸发生变化，请重新框选。');
+  const x=Math.round(r.x*sx),y=Math.round(r.y*sy),width=Math.min(images[0].naturalWidth-x,Math.round(r.width*sx)),clipHeight=Math.min(images[0].naturalHeight-y,Math.round(r.height*sy));
+  const firstTop=segments[0].scrollTop,lastTop=segments.at(-1).scrollTop,height=clipHeight+Math.round((lastTop-firstTop)*sy);
+  if(width<1||height<1||height>30000||width*height>40000000)throw Error('长截图超过尺寸上限，请缩小框选宽度或分段截图。');
+  const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const context=canvas.getContext('2d');context.drawImage(images[0],x,y,width,clipHeight,0,0,width,clipHeight);
+  for(let i=1;i<images.length;i++){const delta=segments[i].scrollTop-segments[i-1].scrollTop;if(delta<=0||delta>r.height+1)throw Error('滚动距离过大，无法无缝拼接，请放慢滚动后重试。');const newHeight=Math.min(clipHeight,Math.round(delta*sy)),destination=clipHeight+Math.round((segments[i-1].scrollTop-firstTop)*sy);context.drawImage(images[i],x,y+clipHeight-newHeight,width,newHeight,0,destination,width,newHeight)}
+  const png=canvas.toDataURL('image/png');if((png.length-22)*3/4>8*1024*1024)throw Error('长截图超过 8 MB，请缩小区域或分段截图。');return {png,width,height};
  }
  async function capture(windowId,options={},beforeCapture=null) {
   const captureId=globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2);options={...options,captureId};let cancelled=false,cancelTarget=null;
@@ -90,10 +138,33 @@
   await sameTab();
   const [current]=await chrome.scripting.executeScript({target,func:viewport});
   if(current?.result.url!==before.result.url)throw Error(changed);
+  if(picked.result.long){
+   const run=async(action,region)=>{const args=[action,captureId];if(region!==undefined)args.push(region);const [response]=await chrome.scripting.executeScript({target,func:longSession,args});return response?.result};
+   const started=await run('begin',picked.result);const selection={rect:started.clip,viewport:before.result},segments=[];
+   try{
+    for(let step=0;step<60;step++){
+     if(cancelled)return {cancelled:true};await sameTab();const hidden=await run('hide');
+     if(hidden.cancelled)return {cancelled:true};
+     try{png=await chrome.tabs.captureVisibleTab(windowId,{format:'png'})}finally{await run('show')}
+     const state=await run('read');if(state.cancelled||cancelled)return {cancelled:true};
+     if(state.scrollTop!==hidden.scrollTop)throw Error('截图时网页仍在滚动，请停止滚轮后重试。');
+     if(segments.length&&hidden.scrollTop<=segments.at(-1).scrollTop)break;
+     segments.push({png,scrollTop:hidden.scrollTop});await run('count',segments.length);
+     const projectedHeight=(started.clip.height+hidden.scrollTop-started.scrollTop)*Math.max(1,devicePixelRatio||1);
+     if(projectedHeight>30000||started.clip.width*Math.max(1,devicePixelRatio||1)*projectedHeight>40000000)throw Error('长截图超过尺寸上限，请缩小框选范围或分段截图。');
+     if(state.finished||state.scrollTop>=state.maxTop-2)break;
+     if(step===59)throw Error('长截图已达到 60 屏上限，请缩小范围或分段截图。');
+     const moved=await run('step');if(moved.cancelled||cancelled)return {cancelled:true};if(moved.scrollTop<=state.scrollTop)break;
+     await new Promise(resolve=>setTimeout(resolve,350));
+    }
+    if(cancelled)return {cancelled:true};const stitched=await stitchLong(segments,selection);
+    return {...stitched,long:true,sourceUrl:tab.url,sourceTitle:tab.title||'',region:{rect:started.clip,viewport:before.result}};
+   }finally{await run('close').catch(()=>{})}
+  }
   const cropped=await crop(png,picked.result);if(cancelled)return {cancelled:true};
   return {...cropped,sourceUrl:tab.url,sourceTitle:tab.title||'',region:{rect:picked.result.rect,viewport:before.result}};
   } catch(error){if(cancelled)return {cancelled:true};throw error;
   } finally {window.removeEventListener('keydown',cancel,true)}
  }
- window.GalleryCapture={capture,selectRegion,crop};
+ window.GalleryCapture={capture,selectRegion,crop,stitchLong};
 })();
